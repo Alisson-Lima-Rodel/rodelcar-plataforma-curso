@@ -102,6 +102,12 @@ def _build_wa_text(msg: MensagemNotificacao) -> str:
 
 async def enviar_email(msg: MensagemNotificacao) -> str | None:
     """Envia e-mail via SMTP. Retorna identificador ou None em falha."""
+    if settings.NOTIFICACOES_FAKE:
+        logger.info(
+            "[FAKE EMAIL] para=%s assunto=%r", msg.aluno_email, _build_email_subject(msg)
+        )
+        return f"fake-email-{uuid.uuid4()}"
+
     if not settings.SMTP_HOST:
         logger.debug("SMTP_HOST não configurado — e-mail ignorado para %s", msg.aluno_email)
         return None
@@ -191,10 +197,19 @@ async def _wa_zapi(telefone: str, texto: str) -> str:
 
 async def enviar_whatsapp(msg: MensagemNotificacao) -> str | None:
     """Envia WhatsApp via provider configurado. Retorna provedor_msg_id ou None."""
-    if not settings.WA_PROVIDER or not msg.aluno_telefone:
-        logger.debug(
-            "WhatsApp não configurado ou telefone ausente para %s", msg.aluno_email
+    if not msg.aluno_telefone:
+        logger.debug("Telefone ausente para %s — WhatsApp ignorado", msg.aluno_email)
+        return None
+
+    if settings.NOTIFICACOES_FAKE:
+        logger.info(
+            "[FAKE WHATSAPP] para=%s texto=%r",
+            msg.aluno_telefone, _build_wa_text(msg)[:80],
         )
+        return f"fake-wa-{uuid.uuid4()}"
+
+    if not settings.WA_PROVIDER:
+        logger.debug("WhatsApp não configurado (WA_PROVIDER) para %s", msg.aluno_email)
         return None
 
     texto = _build_wa_text(msg)

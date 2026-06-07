@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Em produção multi-instância, aponte para Redis: redis://host:6379/0
     RATELIMIT_STORAGE_URI: str = ""
 
+    # Modo fake: renderiza e loga as notificações em vez de enviar (dev/testes).
+    # Não dispara e-mail/WhatsApp real, mas exercita todo o pipeline (status,
+    # idempotência). Mantenha False em produção.
+    NOTIFICACOES_FAKE: bool = False
+
     # ── Notificações — E-mail (SMTP) ──────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

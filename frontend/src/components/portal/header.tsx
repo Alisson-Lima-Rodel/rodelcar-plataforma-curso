@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { usePortal } from "./portal-context";
 
 const NAV: [string, string][] = [
@@ -13,7 +14,7 @@ const NAV: [string, string][] = [
 ];
 
 export function Header() {
-  const { openSchedule, showToast } = usePortal();
+  const { openSchedule } = usePortal();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -69,19 +70,10 @@ export function Header() {
           ))}
         </nav>
         <div className="flex center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon="lock"
-            onClick={() =>
-              showToast({
-                title: "Área do aluno",
-                msg: "Login disponível em breve",
-              })
-            }
-          >
+          <Link href="/login" className="btn btn-ghost btn-sm">
+            <Icon name="lock" size={17} />
             Entrar
-          </Button>
+          </Link>
           <Button
             variant="primary"
             size="sm"

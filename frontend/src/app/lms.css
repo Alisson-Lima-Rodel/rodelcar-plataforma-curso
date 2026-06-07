@@ -1,0 +1,495 @@
+/* ============================================================
+   RödelCar — Área do Aluno (dark pleno) + Login
+   Complementa globals.css. Portado de student.css + auth do protótipo.
+   ============================================================ */
+
+/* ===== Auth / Login ===== */
+.auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+}
+.auth-aside {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(160deg, var(--surface), var(--bg));
+  padding: 56px 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.auth-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+.input-group {
+  position: relative;
+}
+.input-group .input {
+  padding-left: 42px;
+}
+.input-group .ico {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+/* ===== App shell ===== */
+.app-shell {
+  display: grid;
+  grid-template-columns: 256px 1fr;
+  min-height: 100vh;
+}
+
+/* Sidebar ------------------------------------------------------ */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 22px 16px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.94rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  transition: all 150ms ease-out;
+  text-decoration: none;
+}
+.nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.nav-item.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: rgba(229, 55, 43, 0.25);
+}
+.nav-item.active svg {
+  color: var(--primary);
+}
+
+/* Topbar ------------------------------------------------------- */
+.topbar {
+  height: 68px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10, 12, 16, 0.72);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 36px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.content {
+  padding: 36px;
+  max-width: 1180px;
+}
+
+/* KPI (Tremor-style) ------------------------------------------- */
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.kpi-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.1rem;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.kpi-delta {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+.kpi-delta.up {
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.1);
+}
+.kpi-delta.flat {
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+/* sparkline bars */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 34px;
+}
+.spark > span {
+  flex: 1;
+  background: var(--border-strong);
+  border-radius: 2px 2px 0 0;
+  transition: height 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.spark > span.hot {
+  background: var(--primary);
+}
+
+/* Alert / banner ---------------------------------------------- */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+}
+.alert-warning {
+  background: linear-gradient(
+    100deg,
+    rgba(245, 158, 11, 0.1),
+    rgba(245, 158, 11, 0.03)
+  );
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.alert-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+/* Track row (trilha) ------------------------------------------ */
+.track {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 180ms ease-out;
+}
+.track:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.track-ico {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+/* Resume hero card -------------------------------------------- */
+.resume {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: var(--surface);
+  position: relative;
+}
+
+/* Player layout ----------------------------------------------- */
+.player-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
+}
+.video-stage {
+  aspect-ratio: 16/9;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.02) 0 2px,
+      transparent 2px 13px
+    ),
+    radial-gradient(ellipse at center, #1c2128, #0d1014);
+  border: 1px solid var(--border);
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.video-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 18px 14px;
+  background: linear-gradient(transparent, rgba(8, 9, 12, 0.92));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.scrub {
+  height: 5px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  cursor: pointer;
+}
+.scrub > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--primary);
+  border-radius: 9999px;
+}
+.scrub > span::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+
+/* Lesson list item in accordion ------------------------------- */
+.lesson {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 150ms;
+  border: 1px solid transparent;
+}
+.lesson:hover {
+  background: var(--surface-2);
+}
+.lesson.current {
+  background: var(--primary-soft);
+  border-color: rgba(229, 55, 43, 0.25);
+}
+.lesson-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border-strong);
+}
+.lesson-check.done {
+  background: var(--success);
+  border-color: var(--success);
+  color: #06210f;
+}
+.lesson-check.current {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* PDF / material row ------------------------------------------- */
+.material {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  transition: all 160ms ease-out;
+}
+.material:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.file-ico {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* Community thread --------------------------------------------- */
+.qa {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #2a2f3a, #171a21);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Certificate -------------------------------------------------- */
+.cert {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 0%,
+      rgba(229, 55, 43, 0.08),
+      transparent 70%
+    ),
+    var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  padding: 56px 64px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+}
+.cert::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  pointer-events: none;
+}
+.cert-seal {
+  width: 96px;
+  height: 96px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--primary), var(--gold));
+  display: grid;
+  place-items: center;
+  margin: 0 auto 26px;
+  color: var(--primary-fg);
+  box-shadow:
+    0 0 0 8px rgba(229, 55, 43, 0.1),
+    var(--glow-soft);
+  position: relative;
+}
+.cert-code {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  color: var(--primary);
+  background: var(--bg);
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Tabs bar ----------------------------------------------------- */
+.tabs-bar {
+  display: flex;
+  gap: 26px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+.tab-btn {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 12px 2px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.96rem;
+  color: var(--text-subtle);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 150ms;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--primary);
+}
+
+/* Responsivo --------------------------------------------------- */
+@media (max-width: 1000px) {
+  .player-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 900px) {
+  .auth {
+    grid-template-columns: 1fr;
+  }
+  .auth-aside {
+    display: none;
+  }
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+  .resume {
+    grid-template-columns: 1fr;
+  }
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}

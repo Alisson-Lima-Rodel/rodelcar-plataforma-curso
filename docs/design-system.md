@@ -128,7 +128,7 @@ Contraste mínimo AA (texto sobre grafite e sobre vermelho já atende). Foco sem
 1. **Hero / agendamento** — título forte (Archivo), subtítulo de credibilidade,
    1 CTA vermelho "Agendar avaliação", fundo blueprint + glow. Prova de autoridade próxima.
 2. **Prova social** — grade de vídeos do YouTube (thumbnails 16:9) + carrossel de
-   depoimentos com estrelas vermelho.
+   depoimentos com estrelas vermelhas.
 3. **Vitrine e-commerce** — destaque do Pacote Premium Anual (card maior, badge dourado)
    + grade de módulos avulsos com selo de validade.
 4. **Dashboard do aluno** — saudação, alerta de vigência (se houver), card "retomar

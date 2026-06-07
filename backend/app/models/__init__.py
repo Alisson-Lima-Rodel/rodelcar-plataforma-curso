@@ -114,6 +114,7 @@ class Aluno(Base):
     nome: Mapped[str] = mapped_column(String(160))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     cpf: Mapped[str | None] = mapped_column(EncryptedStr(255))
+    telefone: Mapped[str | None] = mapped_column(String(40))
     senha_hash: Mapped[str] = mapped_column(String(255))
     criado_em: Mapped[datetime] = _created_at()
 

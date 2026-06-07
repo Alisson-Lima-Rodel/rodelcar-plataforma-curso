@@ -31,6 +31,32 @@ class Settings(BaseSettings):
     # Em produção multi-instância, aponte para Redis: redis://host:6379/0
     RATELIMIT_STORAGE_URI: str = ""
 
+    # ── Notificações — E-mail (SMTP) ──────────────────────────────────────────
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = "noreply@rodelcar.com.br"
+
+    # ── Notificações — WhatsApp (WA_PROVIDER: meta | twilio | zapi | "") ──────
+    WA_PROVIDER: str = ""
+    # Meta Cloud API
+    WA_META_TOKEN: str = ""
+    WA_META_PHONE_ID: str = ""
+    WA_META_APP_SECRET: str = ""   # assina webhook (X-Hub-Signature-256)
+    WA_META_VERIFY_TOKEN: str = "" # desafio do handshake GET
+    # Twilio
+    WA_TWILIO_ACCOUNT_SID: str = ""
+    WA_TWILIO_AUTH_TOKEN: str = ""
+    WA_TWILIO_FROM: str = "whatsapp:+14155238886"
+    # Z-API
+    WA_ZAPI_INSTANCE_ID: str = ""
+    WA_ZAPI_TOKEN: str = ""
+    WA_ZAPI_CLIENT_TOKEN: str = ""
+
+    # URL de renovação usada nas mensagens de vigência
+    RENOVACAO_URL: str = "https://rodelcar.com.br"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

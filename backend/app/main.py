@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,13 +9,23 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import settings
 from app.core.ratelimit import limiter
-from app.routers import auth, aulas, certificados, cursos, me, progresso
+from app.core.scheduler import iniciar_scheduler, parar_scheduler
+from app.routers import auth, aulas, certificados, cursos, internal, me, progresso, webhooks_wa
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    iniciar_scheduler()
+    yield
+    parar_scheduler()
+
 
 app = FastAPI(
     title="RödelCar API",
     version="0.1.0",
     docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # Rate limiter por IP (slowapi): o limite default da app é aplicado a TODAS as
@@ -100,6 +112,8 @@ app.include_router(me.router, prefix="/api/v1")
 app.include_router(aulas.router, prefix="/api/v1")
 app.include_router(progresso.router, prefix="/api/v1")
 app.include_router(certificados.router, prefix="/api/v1")
+app.include_router(internal.router, prefix="/api/v1")
+app.include_router(webhooks_wa.router, prefix="/api/v1")
 
 
 # ── Infra ─────────────────────────────────────────────────────────────────────

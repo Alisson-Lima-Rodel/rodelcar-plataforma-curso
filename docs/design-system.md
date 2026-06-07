@@ -13,7 +13,7 @@ cruzado com plataforma de educação moderna. Dark mode é o estado natural.
 - **Para o mecânico** (LMS): foco, clareza e sensação de progresso. Estética que
   respeita quem é técnico — precisa, organizada, sem ruído.
 
-Diferencial memorável: o **acento âmbar incandescente** (cor de metal aquecido /
+Diferencial memorável: o **acento vermelho incandescente** (cor de metal aquecido /
 luz de diagnóstico) sobre superfícies grafite quase pretas, com finos traços de
 "blueprint" como textura de fundo.
 
@@ -35,12 +35,12 @@ Texto:
 --text-muted    #98A0AD
 --text-subtle   #6B7280
 ```
-Marca / conversão — âmbar incandescente (energia, calor, ação):
+Marca / conversão — vermelho incandescente (energia, calor, ação):
 ```
---primary        #FF7A18
---primary-hover  #E96A0C
---primary-fg     #0A0C10   /* texto escuro sobre o botão âmbar */
---primary-soft   rgba(255,122,24,0.12)   /* fundos, badges, glow */
+--primary        #E5372B
+--primary-hover  #C72A20
+--primary-fg     #FFFFFF   /* texto branco sobre o botão vermelho */
+--primary-soft   rgba(229,55,43,0.13)   /* fundos, badges, glow */
 ```
 Diagnóstico / dados — ciano frio, usado com parcimônia (links, gráficos, info):
 ```
@@ -51,9 +51,9 @@ Semânticos:
 --success #22C55E   --warning #F59E0B   --danger #EF4444   --info #38BDF8
 ```
 Paleta de dados (Tremor/Recharts, nesta ordem):
-`#FF7A18, #22D3EE, #A78BFA, #34D399, #F472B6, #FBBF24`
+`#E5372B, #22D3EE, #A78BFA, #34D399, #F472B6, #FBBF24`
 
-Regra de ouro: **âmbar é raro e poderoso** — reserve-o para a ação principal de cada
+Regra de ouro: **vermelho é raro e poderoso** — reserve-o para a ação principal de cada
 tela (1 CTA dominante). Tudo o mais vive em grafite + texto. Cor distribuída por igual
 mata a hierarquia.
 
@@ -78,26 +78,26 @@ Corpo com line-height 1.6.
 - **Espaçamento:** escala base 4px → 4,8,12,16,24,32,48,64,96.
 - **Raios:** cards 14px · botões/inputs 10px · badges/pills 9999px.
 - **Profundidade no escuro:** diferenciar por **luminosidade da superfície + borda 1px**,
-  não por sombra preta pesada. No CTA âmbar e em hovers, usar **glow** suave
-  (`box-shadow: 0 0 0 1px var(--primary), 0 8px 30px -8px rgba(255,122,24,.45)`).
+  não por sombra preta pesada. No CTA vermelho e em hovers, usar **glow** suave
+  (`box-shadow: 0 0 0 1px var(--primary), 0 8px 30px -8px rgba(229,55,43,.5)`).
 - **Textura de fundo:** grade fina de blueprint (linhas a ~6% de opacidade) e/ou
-  gradiente radial âmbar muito sutil atrás do Hero. Nada que compita com o conteúdo.
+  gradiente radial vermelho muito sutil atrás do Hero. Nada que compita com o conteúdo.
 
 ---
 
 ## Componentes (mapeados para Shadcn/UI)
-- **Button** — `primary` (âmbar, texto escuro, glow no hover) é a ação única dominante;
+- **Button** — `primary` (vermelho, texto branco, glow no hover) é a ação única dominante;
   `secondary` (surface-2 + border); `ghost`; `link` (ciano). Cantos 10px, peso 600.
 - **Card** — surface + borda 1px + raio 14px; no hover a borda clareia para
   `--border-strong` e sobe 1px. Base de cards de curso e widgets do dashboard.
-- **Card de curso (e-commerce)** — thumbnail, **Badge** de tipo (Premium = âmbar/dourado,
+- **Card de curso (e-commerce)** — thumbnail, **Badge** de tipo (Premium = vermelho/dourado,
   Avulso = neutro), preço em Archivo, selo "1 ano de acesso" em mono, CTA.
-- **Badge** — Premium com leve gradiente âmbar; status com cores semânticas + ícone
+- **Badge** — Premium com leve gradiente vermelho; status com cores semânticas + ícone
   (nunca só cor).
 - **Tabs / Accordion** — navegação entre módulos no player (Accordion lateral).
-- **Progress** — trilha grafite, preenchimento âmbar; usar em curso e gamificação.
+- **Progress** — trilha grafite, preenchimento vermelho; usar em curso e gamificação.
 - **Dialog / Sheet** — formulário de agendamento e login.
-- **Input/Form** — fundo surface-2, borda 1px, **focus ring âmbar** (2px).
+- **Input/Form** — fundo surface-2, borda 1px, **focus ring vermelho** (2px).
 - **Alert** — banner de vigência da assinatura (warning) no topo do dashboard.
 - **Avatar, Tooltip, Skeleton** (loading), **Sonner** (toasts).
 - **Tremor** — KPI cards e gráficos do dashboard de evolução / futuro BI.
@@ -119,16 +119,16 @@ o preenchimento ao montar. Respeitar `prefers-reduced-motion`.
   progresso e conclusão sem infantilizar.
 
 ## Acessibilidade
-Contraste mínimo AA (texto sobre grafite e sobre âmbar já atende). Foco sempre visível
-(ring âmbar). Status nunca só por cor — sempre com ícone/rótulo. Áreas de toque ≥ 44px.
+Contraste mínimo AA (texto sobre grafite e sobre vermelho já atende). Foco sempre visível
+(ring vermelho). Status nunca só por cor — sempre com ícone/rótulo. Áreas de toque ≥ 44px.
 
 ---
 
 ## Diretrizes por tela (para o Claude Design produzir)
 1. **Hero / agendamento** — título forte (Archivo), subtítulo de credibilidade,
-   1 CTA âmbar "Agendar avaliação", fundo blueprint + glow. Prova de autoridade próxima.
+   1 CTA vermelho "Agendar avaliação", fundo blueprint + glow. Prova de autoridade próxima.
 2. **Prova social** — grade de vídeos do YouTube (thumbnails 16:9) + carrossel de
-   depoimentos com estrelas âmbar.
+   depoimentos com estrelas vermelho.
 3. **Vitrine e-commerce** — destaque do Pacote Premium Anual (card maior, badge dourado)
    + grade de módulos avulsos com selo de validade.
 4. **Dashboard do aluno** — saudação, alerta de vigência (se houver), card "retomar

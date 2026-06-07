@@ -29,6 +29,10 @@ Códigos HTTP: 200/201 sucesso, 400 validação, 401 não autenticado,
 403 sem permissão/matrícula, 404 não encontrado, 409 conflito (ex: e-mail já existe),
 422 erro de schema, 429 rate limit, 500 erro interno.
 
+**Rate limiting:** limite por IP aplicado a **todas** as rotas. Ao exceder, retorna
+`429` com `error.code = "RATE_LIMITED"` e header `Retry-After` (segundos). O cliente
+deve respeitar o `Retry-After` antes de tentar de novo.
+
 ---
 
 ## 1. Auth
@@ -51,6 +55,18 @@ Códigos HTTP: 200/201 sucesso, 400 validação, 401 não autenticado,
 // request
 { "refresh_token": "eyJ..." }
 // response 200 -> mesmo formato do login
+```
+- **Rotação:** cada refresh invalida o token usado e emite um novo par. O refresh
+  expira em **7 dias** (`JWT_REFRESH_EXPIRE_DAYS`).
+- **Detecção de reuso:** reapresentar um refresh já rotacionado/revogado retorna
+  `401 REFRESH_REUTILIZADO` e **revoga todas as sessões** do aluno (sinal de roubo).
+- Token inválido/expirado/desconhecido → `401 REFRESH_INVALIDO`.
+
+### `POST /auth/logout`
+```json
+// request
+{ "refresh_token": "eyJ..." }
+// response 204 (idempotente) — revoga o refresh informado
 ```
 
 ### `GET /auth/me` 🔒
@@ -216,23 +232,7 @@ Emite certificado se o curso estiver 100% concluído (senão 409).
 
 ---
 
-## 7. Estoque de carros (público)
-
-### `GET /estoque`
-```json
-// response 200
-{
-  "items": [
-    { "id": "uuid", "modelo": "Jetta TSI", "ano": 2021, "preco": 98000.00,
-      "status": "disponivel", "thumbnail_url": "https://..." }
-  ],
-  "total": 12, "page": 1, "size": 20
-}
-```
-
----
-
-## 8. Webhook de pagamento (servidor a servidor)
+## 7. Webhook de pagamento (servidor a servidor)
 
 ### `POST /webhooks/pagamento/{gateway}`
 `{gateway}` = `mercadopago` | `stripe` | `asaas`.
@@ -259,7 +259,7 @@ Regras obrigatórias:
 
 ---
 
-## 9. Eventos analíticos
+## 8. Eventos analíticos
 
 ### `POST /eventos`
 Recebe os disparos dos atributos `data-event` do frontend.
@@ -276,7 +276,7 @@ Recebe os disparos dos atributos `data-event` do frontend.
 
 ---
 
-## 10. Job de notificações (interno)
+## 9. Job de notificações (interno)
 
 > Acionado pelo scheduler (APScheduler) ou por um cron externo. **Não usa JWT de aluno** —
 > autentica por segredo de serviço no header `X-Internal-Token` (401 se inválido).
@@ -295,7 +295,7 @@ a mesma mensagem. Com `dry_run: true`, apenas conta o que seria enviado, sem dis
 
 ---
 
-## 11. Webhook de status do WhatsApp (servidor a servidor)
+## 10. Webhook de status do WhatsApp (servidor a servidor)
 
 > Recebe os callbacks de entrega do provedor (Meta Cloud API / Twilio / Z-API) e atualiza
 > o status da notificação. Validar a assinatura/token do provedor (401 se inválido).

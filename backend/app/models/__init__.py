@@ -1,19 +1,10 @@
-"""
-RödelCar — Modelo de dados (SQLAlchemy 2.0, estilo async/Mapped).
-
-Coloque em backend/app/models/__init__.py (ou divida por domínio).
-Requer: sqlalchemy>=2.0, cryptography (Fernet), e uma engine async (asyncpg).
-
-A coluna `cpf` usa o TypeDecorator EncryptedStr: o valor é cifrado com Fernet
-antes de ir ao banco e decifrado ao ler. A chave vem de RODELCAR_FERNET_KEY.
-"""
-
 from __future__ import annotations
 
 import enum
 import os
 import uuid
 from datetime import datetime
+from functools import lru_cache
 
 from cryptography.fernet import Fernet
 from sqlalchemy import (
@@ -21,37 +12,34 @@ from sqlalchemy import (
     UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import (
-    DeclarativeBase, Mapped, mapped_column, relationship,
-)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 
-# --------------------------------------------------------------------------- #
-# Criptografia de campo (LGPD): CPF cifrado em repouso
-# --------------------------------------------------------------------------- #
-_fernet = Fernet(os.environ["RODELCAR_FERNET_KEY"].encode())
+@lru_cache(maxsize=1)
+def _get_fernet() -> Fernet:
+    key = os.environ.get("RODELCAR_FERNET_KEY", "")
+    if not key:
+        raise RuntimeError("RODELCAR_FERNET_KEY environment variable is required")
+    return Fernet(key.encode())
 
 
 class EncryptedStr(TypeDecorator):
-    """Cifra/decifra strings com Fernet de forma transparente."""
+    """Cifra/decifra strings com Fernet de forma transparente (CPF — LGPD)."""
     impl = String
     cache_ok = True
 
     def process_bind_param(self, value: str | None, dialect) -> str | None:
         if value is None:
             return None
-        return _fernet.encrypt(value.encode()).decode()
+        return _get_fernet().encrypt(value.encode()).decode()
 
     def process_result_value(self, value: str | None, dialect) -> str | None:
         if value is None:
             return None
-        return _fernet.decrypt(value.encode()).decode()
+        return _get_fernet().decrypt(value.encode()).decode()
 
 
-# --------------------------------------------------------------------------- #
-# Base e mixins
-# --------------------------------------------------------------------------- #
 class Base(DeclarativeBase):
     pass
 
@@ -99,6 +87,23 @@ class StatusCarro(str, enum.Enum):
     vendido = "vendido"
 
 
+class CanalNotificacao(str, enum.Enum):
+    email = "email"
+    whatsapp = "whatsapp"
+
+
+class TipoNotificacao(str, enum.Enum):
+    vigencia_proxima = "vigencia_proxima"
+    vigencia_expirada = "vigencia_expirada"
+    promo_renovacao = "promo_renovacao"
+
+
+class StatusNotificacao(str, enum.Enum):
+    pendente = "pendente"
+    enviada = "enviada"
+    falhou = "falhou"
+
+
 # --------------------------------------------------------------------------- #
 # Entidades
 # --------------------------------------------------------------------------- #
@@ -108,12 +113,32 @@ class Aluno(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     nome: Mapped[str] = mapped_column(String(160))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    cpf: Mapped[str | None] = mapped_column(EncryptedStr(255))  # cifrado (Fernet)
+    cpf: Mapped[str | None] = mapped_column(EncryptedStr(255))
     senha_hash: Mapped[str] = mapped_column(String(255))
     criado_em: Mapped[datetime] = _created_at()
 
     matriculas: Mapped[list[Matricula]] = relationship(back_populates="aluno")
     pagamentos: Mapped[list[Pagamento]] = relationship(back_populates="aluno")
+
+
+class RefreshToken(Base):
+    """Refresh tokens emitidos, p/ rotação e revogação.
+
+    Cada refresh JWT carrega um `jti` que aponta para uma linha aqui. No refresh,
+    o token atual é revogado e um novo é emitido (rotação). Apresentar um token
+    já revogado indica reuso/roubo → revoga toda a família do aluno.
+    """
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    aluno_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("alunos.id", ondelete="CASCADE"), index=True
+    )
+    jti: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, index=True)
+    expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revogado: Mapped[bool] = mapped_column(Boolean, default=False)
+    revogado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = _created_at()
 
 
 class Curso(Base):
@@ -171,6 +196,23 @@ class MaterialApoio(Base):
     url_pdf: Mapped[str] = mapped_column(String(500))
 
     aula: Mapped[Aula] = relationship(back_populates="materiais")
+
+
+class Pagamento(Base):
+    __tablename__ = "pagamentos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    aluno_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("alunos.id"))
+    gateway: Mapped[str] = mapped_column(String(40))
+    gateway_transaction_id: Mapped[str] = mapped_column(
+        String(120), unique=True, index=True
+    )
+    valor: Mapped[float] = mapped_column(Numeric(10, 2))
+    status: Mapped[StatusPagamento] = mapped_column(Enum(StatusPagamento))
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    criado_em: Mapped[datetime] = _created_at()
+
+    aluno: Mapped[Aluno | None] = relationship(back_populates="pagamentos")
 
 
 class Matricula(Base):
@@ -238,23 +280,6 @@ class Lead(Base):
     criado_em: Mapped[datetime] = _created_at()
 
 
-class Pagamento(Base):
-    __tablename__ = "pagamentos"
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    aluno_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("alunos.id"))
-    gateway: Mapped[str] = mapped_column(String(40))
-    gateway_transaction_id: Mapped[str] = mapped_column(
-        String(120), unique=True, index=True  # garante idempotência do webhook
-    )
-    valor: Mapped[float] = mapped_column(Numeric(10, 2))
-    status: Mapped[StatusPagamento] = mapped_column(Enum(StatusPagamento))
-    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
-    criado_em: Mapped[datetime] = _created_at()
-
-    aluno: Mapped[Aluno | None] = relationship(back_populates="pagamentos")
-
-
 class EstoqueCarro(Base):
     __tablename__ = "estoque_carros"
 
@@ -281,29 +306,8 @@ class Evento(Base):
     timestamp: Mapped[datetime] = _created_at()
 
 
-# --------------------------------------------------------------------------- #
-# Notificações de vigência / renovação (job agendado + login)
-# --------------------------------------------------------------------------- #
-class CanalNotificacao(str, enum.Enum):
-    email = "email"
-    whatsapp = "whatsapp"
-
-
-class TipoNotificacao(str, enum.Enum):
-    vigencia_proxima = "vigencia_proxima"     # ex: faltam 15/7/1 dias
-    vigencia_expirada = "vigencia_expirada"
-    promo_renovacao = "promo_renovacao"
-
-
-class StatusNotificacao(str, enum.Enum):
-    pendente = "pendente"
-    enviada = "enviada"
-    falhou = "falhou"
-
-
 class Notificacao(Base):
-    """Log de mensagens de vigência/renovação. Garante auditoria e idempotência:
-    o job não reenvia o mesmo tipo para a mesma matrícula no mesmo marco."""
+    """Log de vigência/renovação. Idempotência por (matricula_id, tipo, canal, marco)."""
     __tablename__ = "notificacoes"
     __table_args__ = (
         UniqueConstraint(
@@ -317,7 +321,7 @@ class Notificacao(Base):
     matricula_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("matriculas.id"))
     canal: Mapped[CanalNotificacao] = mapped_column(Enum(CanalNotificacao))
     tipo: Mapped[TipoNotificacao] = mapped_column(Enum(TipoNotificacao))
-    marco: Mapped[str] = mapped_column(String(20))  # ex: "15d", "1d", "expirado"
+    marco: Mapped[str] = mapped_column(String(20))
     status: Mapped[StatusNotificacao] = mapped_column(
         Enum(StatusNotificacao), default=StatusNotificacao.pendente
     )

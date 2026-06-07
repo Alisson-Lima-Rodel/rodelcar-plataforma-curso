@@ -2,26 +2,43 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: rodelcar
-      POSTGRES_PASSWORD: rodelcar
-      POSTGRES_DB: rodelcar
+      POSTGRES_USER: ${POSTGRES_USER:-rodelcar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rodelcar}
+      POSTGRES_DB: ${POSTGRES_DB:-rodelcar}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rodelcar} -d ${POSTGRES_DB:-rodelcar}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: ./backend
-    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rodelcar}:${POSTGRES_PASSWORD:-rodelcar}@db:5432/${POSTGRES_DB:-rodelcar}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      RODELCAR_FERNET_KEY: ${RODELCAR_FERNET_KEY:-}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_PUBLIC: ${RATE_LIMIT_PUBLIC:-120/minute}
+      RATE_LIMIT_AUTH: ${RATE_LIMIT_AUTH:-5/minute}
+      RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-}
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./backend:/app
 
   frontend:
     build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     ports:
       - "3000:3000"
     depends_on:
@@ -29,6 +46,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/.next
 
 volumes:
   pgdata:

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${DATABASE_URL_MCP:-postgresql://rodelcar:rodelcar@localhost:5432/rodelcar}"
+      ]
+    }
+  }
+}

@@ -1,0 +1,315 @@
+/* ============================================================
+   RödelCar — Painel Administrador (dark pleno)
+   Complementa globals.css + lms.css (app-shell, sidebar, topbar, kpi, avatar)
+   ============================================================ */
+
+/* Data table -------------------------------------------------- */
+.tbl-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--surface);
+}
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+.tbl thead th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tbl tbody td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+  vertical-align: middle;
+}
+.tbl tbody tr {
+  transition: background 130ms;
+}
+.tbl tbody tr:hover {
+  background: var(--surface-2);
+}
+.tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+.tbl .cell-strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.tbl .row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 130ms;
+}
+.tbl tbody tr:hover .row-actions {
+  opacity: 1;
+}
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 140ms ease-out;
+}
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.icon-btn.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* mini avatar in cell */
+.cell-user {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.cell-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #2a2f3a, #171a21);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Toolbar ----------------------------------------------------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  padding: 0 14px;
+  height: 42px;
+  min-width: 280px;
+  color: var(--text-subtle);
+  transition: border-color 150ms;
+}
+.search:focus-within {
+  border-color: var(--primary);
+}
+.search input {
+  background: none;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  width: 100%;
+}
+.seg {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  padding: 3px;
+  gap: 2px;
+}
+.seg button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 7px 13px;
+  border-radius: 7px;
+  transition: all 140ms;
+}
+.seg button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Right-side sheet (drawer) ----------------------------------- */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 9, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  animation: fade 160ms ease-out;
+}
+.sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 94vw;
+  background: var(--surface);
+  border-left: 1px solid var(--border-strong);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -30px 0 80px -30px rgba(0, 0, 0, 0.8);
+  animation: slideSheet 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes slideSheet {
+  from {
+    transform: translateX(100%);
+  }
+}
+.sheet-head {
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sheet-body {
+  padding: 24px 26px;
+  overflow-y: auto;
+  flex: 1;
+}
+.sheet-foot {
+  padding: 18px 26px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* Form grid --------------------------------------------------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
+/* Toggle switch ----------------------------------------------- */
+.switch {
+  position: relative;
+  width: 44px;
+  height: 25px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch input {
+  display: none;
+}
+.switch .track {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 9999px;
+  transition: all 180ms;
+}
+.switch .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 9999px;
+  background: var(--text-muted);
+  transition: all 180ms;
+}
+.switch input:checked + .track {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.switch input:checked + .track + .knob {
+  left: 22px;
+  background: var(--primary);
+}
+
+/* Stat strip -------------------------------------------------- */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+/* star input -------------------------------------------------- */
+.star-input {
+  display: inline-flex;
+  gap: 4px;
+}
+.star-input button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--border-strong);
+  padding: 0;
+  line-height: 0;
+  transition: color 120ms;
+}
+.star-input button.on {
+  color: var(--primary);
+}
+
+/* empty state ------------------------------------------------- */
+.empty {
+  text-align: center;
+  padding: 64px 24px;
+}
+
+/* confirm dialog reusa .overlay/.dialog do globals.css */
+.confirm {
+  max-width: 420px;
+  padding: 26px;
+}
+
+.btn.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Responsivo --------------------------------------------------- */
+@media (max-width: 900px) {
+  .stat-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .admin-overview-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

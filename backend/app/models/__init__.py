@@ -155,6 +155,19 @@ class Curso(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String(500))
     destaque: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # ── Campos de marketing/vitrine (página de venda) ──────────────────────────
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    tagline: Mapped[str | None] = mapped_column(String(300))
+    preco_antigo: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    horas: Mapped[str | None] = mapped_column(String(20))
+    aulas_total: Mapped[int] = mapped_column(Integer, default=0)
+    rating: Mapped[float | None] = mapped_column(Numeric(2, 1))
+    alunos: Mapped[int] = mapped_column(Integer, default=0)
+    nivel: Mapped[str | None] = mapped_column(String(40))
+    icon: Mapped[str | None] = mapped_column(String(40))
+    badge_label: Mapped[str | None] = mapped_column(String(40))
+    aprende: Mapped[list] = mapped_column(JSONB, default=list)
+
     modulos: Mapped[list[Modulo]] = relationship(
         back_populates="curso", order_by="Modulo.ordem"
     )

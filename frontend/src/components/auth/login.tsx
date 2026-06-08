@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
+import { useAuth } from "@/components/providers/auth-provider";
+import { ApiError } from "@/lib/api";
 
 type Mode = "login" | "signup" | "recover";
 
@@ -14,20 +16,61 @@ const TITLES: Record<Mode, { h: string; s: string }> = {
   recover: { h: "Recuperar acesso", s: "Enviaremos um link de redefinição." },
 };
 
+function mensagemErro(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.code === "CREDENCIAIS_INVALIDAS")
+      return "E-mail ou senha incorretos.";
+    if (e.code === "EMAIL_JA_CADASTRADO")
+      return "Já existe uma conta com esse e-mail.";
+    if (e.code === "RATE_LIMITED")
+      return "Muitas tentativas. Aguarde um instante e tente de novo.";
+    if (e.code === "VALIDATION_ERROR") return "Confira os dados informados.";
+    return e.message;
+  }
+  return "Não foi possível concluir. Tente novamente.";
+}
+
 export function Login() {
   const router = useRouter();
+  const { login, register } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  // O nível de acesso é determinado pela conta (não escolhido). Hoje a Área do
-  // Aluno é a única área publicada; o Painel Admin entra numa fase futura.
-  const enter = () => router.push("/painel");
-
-  const recover = () => {
-    setNotice("Link de redefinição enviado. Confira seu e-mail.");
-    setMode("login");
+  const submit = async () => {
+    if (busy) return;
+    setError("");
+    if (mode === "recover") {
+      setNotice(
+        "Se houver uma conta com esse e-mail, enviamos um link de redefinição.",
+      );
+      setMode("login");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "login") await login(email.trim(), senha);
+      else await register(nome.trim(), email.trim(), senha);
+      router.push("/painel");
+    } catch (e) {
+      setError(mensagemErro(e));
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const cta =
+    mode === "login"
+      ? "Entrar"
+      : mode === "signup"
+        ? "Criar conta"
+        : "Enviar link de redefinição";
+  const icon =
+    mode === "login" ? "lock" : mode === "signup" ? "spark" : "arrow";
 
   return (
     <div className="auth">
@@ -109,7 +152,13 @@ export function Login() {
 
       {/* form */}
       <div className="auth-main">
-        <div className="auth-card">
+        <form
+          className="auth-card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: "1.7rem", marginBottom: 6 }}>
               {TITLES[mode].h}
@@ -140,6 +189,27 @@ export function Login() {
               </span>
             </div>
           )}
+          {error && (
+            <div
+              className="flex center gap-3"
+              style={{
+                marginBottom: 16,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "rgba(239,68,68,0.1)",
+                border: "1px solid rgba(239,68,68,0.35)",
+              }}
+            >
+              <Icon
+                name="x"
+                size={18}
+                style={{ color: "var(--danger)", flexShrink: 0 }}
+              />
+              <span style={{ fontSize: "0.88rem", color: "var(--text)" }}>
+                {error}
+              </span>
+            </div>
+          )}
 
           <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
             {mode === "signup" && (
@@ -153,6 +223,8 @@ export function Login() {
                     id="au-nome"
                     className="input"
                     placeholder="Seu nome"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
                   />
                 </div>
               </div>
@@ -185,7 +257,11 @@ export function Login() {
                   <label htmlFor="au-senha">Senha</label>
                   {mode === "login" && (
                     <button
-                      onClick={() => setMode("recover")}
+                      type="button"
+                      onClick={() => {
+                        setMode("recover");
+                        setError("");
+                      }}
                       style={{
                         background: "none",
                         border: 0,
@@ -208,46 +284,25 @@ export function Login() {
                     className="input"
                     type="password"
                     placeholder="••••••••"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
                   />
                 </div>
               </div>
             )}
           </div>
 
-          {/* ação âmbar dominante */}
-          {mode === "login" && (
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              icon="lock"
-              onClick={enter}
-            >
-              Entrar
-            </Button>
-          )}
-          {mode === "signup" && (
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              icon="spark"
-              onClick={enter}
-            >
-              Criar conta
-            </Button>
-          )}
-          {mode === "recover" && (
-            <Button
-              variant="primary"
-              size="lg"
-              block
-              icon="arrow"
-              onClick={recover}
-            >
-              Enviar link de redefinição
-            </Button>
-          )}
+          {/* ação dominante */}
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            block
+            icon={busy ? undefined : icon}
+            disabled={busy}
+          >
+            {busy ? "Aguarde..." : cta}
+          </Button>
 
           <div className="hr" style={{ margin: "22px 0" }} />
           <div style={{ textAlign: "center" }}>
@@ -255,7 +310,12 @@ export function Login() {
               <span className="muted" style={{ fontSize: "0.9rem" }}>
                 Ainda não tem conta?{" "}
                 <button
-                  onClick={() => setMode("signup")}
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setError("");
+                    setNotice("");
+                  }}
                   style={{
                     background: "none",
                     border: 0,
@@ -272,7 +332,11 @@ export function Login() {
               <span className="muted" style={{ fontSize: "0.9rem" }}>
                 Já tem conta?{" "}
                 <button
-                  onClick={() => setMode("login")}
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setError("");
+                  }}
                   style={{
                     background: "none",
                     border: 0,
@@ -287,7 +351,7 @@ export function Login() {
               </span>
             )}
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

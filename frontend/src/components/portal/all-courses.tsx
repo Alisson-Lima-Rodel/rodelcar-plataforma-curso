@@ -4,26 +4,26 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
-import { COURSES } from "@/lib/portal-data";
+import { type Course } from "@/lib/portal-data";
 import { CourseCard } from "./course-card";
 import { usePortal } from "./portal-context";
 
-export function AllCourses() {
+export function AllCourses({ courses }: { courses: Course[] }) {
   const { showToast } = usePortal();
   const [filter, setFilter] = useState("Todos");
 
   const systems = useMemo(() => {
     const counts = new Map<string, number>();
-    counts.set("Todos", COURSES.length);
-    for (const c of COURSES)
+    counts.set("Todos", courses.length);
+    for (const c of courses)
       counts.set(c.badge.label, (counts.get(c.badge.label) ?? 0) + 1);
     return Array.from(counts.entries());
-  }, []);
+  }, [courses]);
 
   const list =
     filter === "Todos"
-      ? COURSES
-      : COURSES.filter((c) => c.badge.label === filter);
+      ? courses
+      : courses.filter((c) => c.badge.label === filter);
 
   return (
     <div>

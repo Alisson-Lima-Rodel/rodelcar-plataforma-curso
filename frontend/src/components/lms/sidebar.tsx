@@ -7,6 +7,8 @@ import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { STUDENT } from "@/lib/student-data";
 import { activeLmsId, lmsHref } from "@/lib/lms-nav";
+import type { Me } from "@/lib/auth-api";
+import { initialsOf } from "./lms-shell";
 
 const ITEMS: { id: string; label: string; icon: string }[] = [
   { id: "dashboard", label: "Painel", icon: "gauge" },
@@ -16,7 +18,7 @@ const ITEMS: { id: string; label: string; icon: string }[] = [
   { id: "community", label: "Comunidade", icon: "users" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ aluno }: { aluno: Me }) {
   const pathname = usePathname();
   const active = activeLmsId(pathname);
 
@@ -80,7 +82,7 @@ export function Sidebar() {
           className="flex center gap-3"
           style={{ padding: "10px 8px", borderTop: "1px solid var(--border)" }}
         >
-          <span className="avatar">{STUDENT.initials}</span>
+          <span className="avatar">{initialsOf(aluno.nome)}</span>
           <div style={{ minWidth: 0 }}>
             <div
               style={{
@@ -91,7 +93,7 @@ export function Sidebar() {
                 textOverflow: "ellipsis",
               }}
             >
-              {STUDENT.name}
+              {aluno.nome}
             </div>
             <div className="tag-mono cyan">{STUDENT.plan}</div>
           </div>

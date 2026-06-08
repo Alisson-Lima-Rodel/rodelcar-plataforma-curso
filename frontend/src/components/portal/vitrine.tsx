@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHead } from "@/components/ui/section-head";
-import { COURSES, PREMIUM } from "@/lib/portal-data";
+import { PREMIUM, type Course } from "@/lib/portal-data";
 import { CourseCarousel } from "./course-carousel";
 import { usePortal } from "./portal-context";
 
-export function Vitrine() {
+export function Vitrine({ courses }: { courses: Course[] }) {
   const { showToast } = usePortal();
 
   return (
@@ -189,7 +189,7 @@ export function Vitrine() {
           <div>
             <h3 style={{ fontSize: "1.375rem" }}>Módulos avulsos</h3>
             <span className="tag-mono">
-              {COURSES.length} módulos · selo de 1 ano em todos
+              {courses.length} módulos · selo de 1 ano em todos
             </span>
           </div>
           <Link href="/cursos" className="btn btn-secondary">
@@ -198,7 +198,7 @@ export function Vitrine() {
           </Link>
         </div>
         <Reveal>
-          <CourseCarousel courses={COURSES} />
+          <CourseCarousel courses={courses} />
         </Reveal>
       </div>
     </section>

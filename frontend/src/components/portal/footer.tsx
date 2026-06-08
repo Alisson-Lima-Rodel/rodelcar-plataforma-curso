@@ -86,9 +86,21 @@ export function Footer() {
       );
     }
     if (it.href) {
-      const external =
-        it.href.startsWith("mailto:") || it.href.startsWith("http");
-      if (external) {
+      if (it.href.startsWith("http")) {
+        return (
+          <a
+            href={it.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={linkStyle}
+            onMouseEnter={onEnter}
+            onMouseLeave={onLeave}
+          >
+            {it.t}
+          </a>
+        );
+      }
+      if (it.href.startsWith("mailto:")) {
         return (
           <a
             href={it.href}

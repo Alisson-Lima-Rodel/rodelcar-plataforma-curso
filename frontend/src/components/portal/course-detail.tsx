@@ -6,29 +6,14 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
-import { Progress } from "@/components/ui/progress";
 import { Reveal } from "@/components/ui/reveal";
 import {
-  COURSES,
   FAQ,
   type Course,
   type CourseModule,
   type Faq,
 } from "@/lib/portal-data";
 import { usePortal } from "./portal-context";
-
-/* Dados ricos (módulos/learn) vivem no curso detalhado; os demais herdam como
-   fallback, preservando título/preço/etc. próprios — igual ao protótipo. */
-function buildRich(c: Course): Course {
-  if (c.modules && c.learn) return c;
-  const source = COURSES.find((x) => x.modules) ?? c;
-  return {
-    ...source,
-    ...c,
-    modules: c.modules ?? source.modules,
-    learn: c.learn ?? source.learn,
-  };
-}
 
 function AccItem({
   m,
@@ -141,10 +126,11 @@ function FaqItem({ f }: { f: Faq }) {
 
 export function CourseDetail({ course }: { course: Course }) {
   const { openSchedule, showToast } = usePortal();
-  const rich = buildRich(course);
+  const rich = course;
   const modules = rich.modules ?? [];
   const learn = rich.learn ?? [];
   const [openMod, setOpenMod] = useState(0);
+  const [tab, setTab] = useState<"conteudo" | "aprende">("conteudo");
   const enroll = () => showToast({ title: "Compra iniciada", msg: rich.title });
   const discount = rich.old ? Math.round((1 - rich.price / rich.old) * 100) : 0;
 
@@ -255,6 +241,92 @@ export function CourseDetail({ course }: { course: Course }) {
                   </div>
                 ))}
               </div>
+
+              {/* tab selector */}
+              <div
+                style={{
+                  marginTop: 36,
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: 28,
+                }}
+              >
+                <div className="flex center gap-2" style={{ marginBottom: 20 }}>
+                  <button
+                    onClick={() => setTab("conteudo")}
+                    className={`btn btn-sm ${tab === "conteudo" ? "btn-secondary" : "btn-ghost"}`}
+                  >
+                    Conteúdo do curso
+                  </button>
+                  <button
+                    onClick={() => setTab("aprende")}
+                    className={`btn btn-sm ${tab === "aprende" ? "btn-secondary" : "btn-ghost"}`}
+                  >
+                    O que você aprende
+                  </button>
+                </div>
+
+                {tab === "conteudo" && (
+                  <div>
+                    <div
+                      className="flex center between"
+                      style={{ marginBottom: 18 }}
+                    >
+                      <span className="tag-mono">
+                        {modules.length} módulos · {rich.lessons} aulas ·{" "}
+                        {rich.hours}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {modules.map((m, i) => (
+                        <AccItem
+                          key={i}
+                          m={m}
+                          idx={i}
+                          open={openMod === i}
+                          onToggle={() => setOpenMod(openMod === i ? -1 : i)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {tab === "aprende" && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 16,
+                    }}
+                  >
+                    {learn.map((l, i) => (
+                      <div
+                        key={i}
+                        className="flex gap-3"
+                        style={{
+                          alignItems: "flex-start",
+                          padding: "16px 18px",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                        }}
+                      >
+                        <Icon
+                          name="checkCircle"
+                          size={20}
+                          style={{
+                            color: "var(--primary)",
+                            flexShrink: 0,
+                            marginTop: 1,
+                          }}
+                        />
+                        <span style={{ fontSize: "0.95rem", lineHeight: 1.4 }}>
+                          {l}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* right — purchase card */}
@@ -344,223 +416,35 @@ export function CourseDetail({ course }: { course: Course }) {
         </div>
       </section>
 
-      {/* body — O que você aprende + Conteúdo */}
-      <section className="section-tight">
-        <div className="wrap" style={{ maxWidth: 820, marginLeft: 0 }}>
-          <div
-            className="detail-grid"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.5fr 1fr",
-              gap: 48,
-            }}
-          >
-            <div style={{ minWidth: 0, display: "grid", gap: 44 }}>
-              {/* O que você aprende */}
-              <div>
-                <h2 style={{ fontSize: "1.6rem", marginBottom: 20 }}>
-                  O que você aprende
-                </h2>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 16,
-                  }}
-                >
-                  {learn.map((l, i) => (
-                    <div
-                      key={i}
-                      className="flex gap-3"
-                      style={{
-                        alignItems: "flex-start",
-                        padding: "16px 18px",
-                        background: "var(--surface)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 10,
-                      }}
-                    >
-                      <Icon
-                        name="checkCircle"
-                        size={20}
-                        style={{
-                          color: "var(--primary)",
-                          flexShrink: 0,
-                          marginTop: 1,
-                        }}
-                      />
-                      <span style={{ fontSize: "0.95rem", lineHeight: 1.4 }}>
-                        {l}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Conteúdo do curso */}
-              <div>
-                <div
-                  className="flex center between"
-                  style={{ marginBottom: 18 }}
-                >
-                  <h2 style={{ fontSize: "1.6rem" }}>Conteúdo do curso</h2>
-                  <span className="tag-mono">
-                    {modules.length} módulos · {rich.lessons} aulas ·{" "}
-                    {rich.hours}
-                  </span>
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {modules.map((m, i) => (
-                    <AccItem
-                      key={i}
-                      m={m}
-                      idx={i}
-                      open={openMod === i}
-                      onToggle={() => setOpenMod(openMod === i ? -1 : i)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* right rail — profundidade / Premium */}
-            <aside style={{ display: "grid", gap: 18, alignContent: "start" }}>
-              <div className="card" style={{ padding: 22 }}>
-                <h4
-                  style={{
-                    fontSize: "0.78rem",
-                    fontFamily: "var(--font-mono)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "var(--text-muted)",
-                    marginBottom: 16,
-                    fontWeight: 500,
-                  }}
-                >
-                  Nível de profundidade
-                </h4>
-                {(
-                  [
-                    ["Diagnóstico", 92],
-                    ["Hidráulica", 78],
-                    ["Eletrônica", 70],
-                    ["Prática de bancada", 88],
-                  ] as [string, number][]
-                ).map(([l, v], i) => (
-                  <div key={i} style={{ marginBottom: 16 }}>
-                    <div
-                      className="flex center between"
-                      style={{ marginBottom: 7 }}
-                    >
-                      <span style={{ fontSize: "0.88rem" }}>{l}</span>
-                      <span className="tag-mono">{v}%</span>
-                    </div>
-                    <Progress value={v} />
-                  </div>
-                ))}
-              </div>
-              <div
-                className="card blueprint"
-                style={{
-                  padding: 22,
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                <Badge variant="premium" icon="award">
-                  Economize no Premium
-                </Badge>
-                <p
-                  style={{
-                    fontSize: "0.95rem",
-                    margin: "14px 0 16px",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  Leve este e os outros 5 módulos na{" "}
-                  <strong>Formação Completa</strong> por uma fração do valor
-                  avulso.
-                </p>
-                <Link href="/#vitrine" className="btn btn-secondary btn-block">
-                  Ver Premium
-                  <Icon name="arrow" size={17} />
-                </Link>
-              </div>
-            </aside>
-          </div>
-        </div>
-      </section>
-
-      {/* Instrutor + FAQ */}
+      {/* Premium + FAQ */}
       <section className="section-tight" style={{ paddingTop: 0 }}>
         <div className="wrap" style={{ maxWidth: 820, marginLeft: 0 }}>
-          <div style={{ marginBottom: 48 }}>
-            <h2 style={{ fontSize: "1.6rem", marginBottom: 20 }}>Instrutor</h2>
-            <div
-              className="flex gap-4"
-              style={{ alignItems: "flex-start", marginBottom: 24 }}
-            >
-              <div
-                style={{
-                  width: 88,
-                  height: 88,
-                  borderRadius: 14,
-                  background: "linear-gradient(135deg,#2a2f3a,#171a21)",
-                  border: "1px solid var(--border-strong)",
-                  display: "grid",
-                  placeItems: "center",
-                  flexShrink: 0,
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 800,
-                  fontSize: "1.4rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                RC
-              </div>
-              <div>
-                <h3 style={{ fontSize: "1.4rem", marginBottom: 4 }}>
-                  Equipe Rödelcar
-                </h3>
-                <p className="tag-mono cyan" style={{ marginBottom: 12 }}>
-                  Especializada em câmbios · Canoas-RS
-                </p>
-                <p
-                  className="muted"
-                  style={{ fontSize: "0.98rem", lineHeight: 1.55 }}
-                >
-                  Uma oficina que vive de câmbio automatizado todo dia —
-                  Dualogic, PowerShift, iMotion, Easytronic e DSG. O mesmo
-                  método de bancada que resolve os carros na Rödelcar virou
-                  curso: direto ao ponto, sem &ldquo;troca e testa&rdquo;,
-                  respeitando o tempo e o bolso do cliente.
-                </p>
-              </div>
-            </div>
-            <div
+          <div
+            className="card blueprint"
+            style={{
+              padding: 22,
+              position: "relative",
+              overflow: "hidden",
+              marginBottom: 48,
+            }}
+          >
+            <Badge variant="premium" icon="award">
+              Economize no Premium
+            </Badge>
+            <p
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3,1fr)",
-                gap: 16,
+                fontSize: "0.95rem",
+                margin: "14px 0 16px",
+                lineHeight: 1.45,
               }}
             >
-              {(
-                [
-                  ["+12", "sistemas dominados"],
-                  ["+2.000", "mecânicos formados"],
-                  ["4.9", "nota média dos cursos"],
-                ] as [string, string][]
-              ).map(([v, l], i) => (
-                <div key={i} className="card" style={{ padding: "18px 20px" }}>
-                  <div className="price amber" style={{ fontSize: "1.8rem" }}>
-                    {v}
-                  </div>
-                  <div className="tag-mono" style={{ marginTop: 4 }}>
-                    {l}
-                  </div>
-                </div>
-              ))}
-            </div>
+              Leve este e os outros 5 módulos na{" "}
+              <strong>Formação Completa</strong> por uma fração do valor avulso.
+            </p>
+            <Link href="/#vitrine" className="btn btn-secondary btn-block">
+              Ver Premium
+              <Icon name="arrow" size={17} />
+            </Link>
           </div>
           <div>
             <h2 style={{ fontSize: "1.6rem", marginBottom: 20 }}>

@@ -13,12 +13,19 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password,
     verify_password,
 )
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
 from app.models import Aluno, Matricula, RefreshToken, StatusMatricula
-from app.schemas.auth import LoginRequest, MeResponse, RefreshRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    MeResponse,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -63,6 +70,19 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     if aluno is None or not verify_password(body.senha, aluno.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     await checar_vigencia_aluno(aluno.id, db)
+    return await _emitir_tokens(str(aluno.id), db)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=201)
+@limiter.limit(auth_limit)
+async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Cria a conta do aluno e já devolve o par de tokens (auto-login)."""
+    existe = await db.scalar(select(Aluno.id).where(Aluno.email == body.email))
+    if existe is not None:
+        raise _err(409, "EMAIL_JA_CADASTRADO", "Já existe uma conta com esse e-mail.")
+    aluno = Aluno(nome=body.nome, email=body.email, senha_hash=hash_password(body.senha))
+    db.add(aluno)
+    await db.flush()  # gera aluno.id
     return await _emitir_tokens(str(aluno.id), db)
 
 

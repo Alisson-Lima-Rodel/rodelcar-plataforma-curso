@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
 from app.models import Aula, Curso, Modulo, TipoCurso
 from app.schemas.cursos import (
+    AulaResumo,
     CursoDetail,
     CursoListItem,
     CursoListResponse,
-    ModuloResumo,
+    ModuloDetalhe,
 )
 
 router = APIRouter(prefix="/cursos", tags=["cursos"])
@@ -26,6 +28,11 @@ def _descricao_curta(descricao: str | None) -> str | None:
     return texto[: _DESCRICAO_CURTA_MAX - 1].rstrip() + "…"
 
 
+def _dur_label(segundos: int | None) -> str:
+    m, s = divmod(int(segundos or 0), 60)
+    return f"{m:02d}:{s:02d}"
+
+
 @router.get("", response_model=CursoListResponse)
 async def listar_cursos(
     tipo: TipoCurso | None = Query(default=None),
@@ -33,7 +40,7 @@ async def listar_cursos(
     size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """Vitrine pública de cursos, com contagem de módulos e aulas."""
+    """Vitrine pública de cursos, com contagem de módulos e aulas + campos de venda."""
     total_modulos = (
         select(func.count(Modulo.id))
         .where(Modulo.curso_id == Curso.id)
@@ -62,7 +69,7 @@ async def listar_cursos(
             total_modulos.label("total_modulos"),
             total_aulas.label("total_aulas"),
         )
-        .order_by(Curso.destaque.desc(), Curso.titulo)
+        .order_by(Curso.ordem, Curso.titulo)
         .offset((page - 1) * size)
         .limit(size)
     )
@@ -76,11 +83,20 @@ async def listar_cursos(
             descricao_curta=_descricao_curta(curso.descricao),
             tipo=curso.tipo,
             preco=curso.preco,
+            preco_antigo=curso.preco_antigo,
             validade_dias=curso.validade_dias,
             thumbnail_url=curso.thumbnail_url,
             total_modulos=n_modulos,
             total_aulas=n_aulas,
             destaque=curso.destaque,
+            tagline=curso.tagline,
+            horas=curso.horas,
+            aulas_total=curso.aulas_total,
+            rating=curso.rating,
+            alunos=curso.alunos,
+            nivel=curso.nivel,
+            icon=curso.icon,
+            badge_label=curso.badge_label,
         )
         for curso, n_modulos, n_aulas in rows
     ]
@@ -89,9 +105,13 @@ async def listar_cursos(
 
 @router.get("/{slug}", response_model=CursoDetail)
 async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
-    """Detalhe da página de venda, com a estrutura de módulos e aulas."""
+    """Detalhe da página de venda, com a estrutura de módulos e suas aulas."""
     curso = (
-        await db.execute(select(Curso).where(Curso.slug == slug))
+        await db.execute(
+            select(Curso)
+            .where(Curso.slug == slug)
+            .options(selectinload(Curso.modulos).selectinload(Modulo.aulas))
+        )
     ).scalar_one_or_none()
 
     if curso is None:
@@ -104,21 +124,19 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
             }},
         )
 
-    # Conta aulas por módulo no banco — não carrega as linhas de aula
-    # (evita exaustão de memória neste endpoint público).
-    total_aulas = (
-        select(func.count(Aula.id))
-        .where(Aula.modulo_id == Modulo.id)
-        .correlate(Modulo)
-        .scalar_subquery()
-    )
-    mod_rows = (
-        await db.execute(
-            select(Modulo, total_aulas.label("total_aulas"))
-            .where(Modulo.curso_id == curso.id)
-            .order_by(Modulo.ordem)
+    modulos = [
+        ModuloDetalhe(
+            id=m.id,
+            titulo=m.titulo,
+            ordem=m.ordem,
+            total_aulas=len(m.aulas),
+            aulas=[
+                AulaResumo(id=a.id, titulo=a.titulo, duracao_label=_dur_label(a.duracao_segundos))
+                for a in m.aulas
+            ],
         )
-    ).all()
+        for m in curso.modulos
+    ]
 
     return CursoDetail(
         id=curso.id,
@@ -127,15 +145,17 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         descricao=curso.descricao,
         tipo=curso.tipo,
         preco=curso.preco,
+        preco_antigo=curso.preco_antigo,
         validade_dias=curso.validade_dias,
         thumbnail_url=curso.thumbnail_url,
-        modulos=[
-            ModuloResumo(
-                id=m.id,
-                titulo=m.titulo,
-                ordem=m.ordem,
-                total_aulas=n_aulas,
-            )
-            for m, n_aulas in mod_rows
-        ],
+        tagline=curso.tagline,
+        horas=curso.horas,
+        aulas_total=curso.aulas_total,
+        rating=curso.rating,
+        alunos=curso.alunos,
+        nivel=curso.nivel,
+        icon=curso.icon,
+        badge_label=curso.badge_label,
+        aprende=curso.aprende or [],
+        modulos=modulos,
     )

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { AuthProvider } from "@/components/providers/auth-provider";
 
 const archivo = Archivo({
   subsets: ["latin"],
@@ -62,7 +63,9 @@ export default function RootLayout({
       className={`${archivo.variable} ${hanken.variable} ${jetbrains.variable}`}
     >
       <body>
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

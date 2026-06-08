@@ -1,11 +1,17 @@
 import uuid
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     senha: str
+
+
+class RegisterRequest(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    email: EmailStr
+    senha: str = Field(min_length=6, max_length=128)
 
 
 class TokenResponse(BaseModel):

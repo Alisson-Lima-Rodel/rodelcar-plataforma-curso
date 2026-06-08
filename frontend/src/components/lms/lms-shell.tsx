@@ -1,11 +1,10 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, type ReactNode } from "react";
 import { Icon } from "@/components/ui/icon";
-import { Badge } from "@/components/ui/badge";
-import { STUDENT } from "@/lib/student-data";
 import { activeLmsId } from "@/lib/lms-nav";
+import { useAuth } from "@/components/providers/auth-provider";
 import { Sidebar } from "./sidebar";
 
 const TITLES: Record<string, { title: string; crumb: string }> = {
@@ -14,13 +13,49 @@ const TITLES: Record<string, { title: string; crumb: string }> = {
   certificate: { title: "Certificado", crumb: "CONQUISTAS" },
 };
 
+export function initialsOf(name: string): string {
+  return (name || "?")
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function LmsShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { status, aluno, logout } = useAuth();
   const t = TITLES[activeLmsId(pathname)] ?? TITLES.dashboard;
+
+  // Guarda de rota: sem sessão → manda pro login.
+  useEffect(() => {
+    if (status === "unauthed") router.replace("/login");
+  }, [status, router]);
+
+  if (status !== "authed" || !aluno) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "var(--bg)",
+        }}
+      >
+        <span className="tag-mono muted">Carregando…</span>
+      </div>
+    );
+  }
+
+  const sair = async () => {
+    await logout();
+    router.replace("/login");
+  };
 
   return (
     <div className="app-shell">
-      <Sidebar />
+      <Sidebar aluno={aluno} />
       <main style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div className="topbar">
           <div>
@@ -32,22 +67,19 @@ export function LmsShell({ children }: { children: ReactNode }) {
             </h3>
           </div>
           <div className="flex center gap-3">
-            <Badge variant="warning" icon="clock">
-              Expira em {STUDENT.daysLeft} dias
-            </Badge>
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ width: 40, padding: 0, height: 40 }}
-              aria-label="Mensagens"
-            >
-              <Icon name="message" size={18} />
-            </button>
             <span className="avatar" style={{ width: 38, height: 38 }}>
-              {STUDENT.initials}
+              {initialsOf(aluno.nome)}
             </span>
+            <button
+              onClick={sair}
+              className="btn btn-secondary btn-sm"
+              aria-label="Sair"
+            >
+              <Icon name="lock" size={16} /> Sair
+            </button>
           </div>
         </div>
-        {children as ReactNode}
+        {children}
       </main>
     </div>
   );

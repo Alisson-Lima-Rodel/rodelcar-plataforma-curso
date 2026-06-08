@@ -1,7 +1,10 @@
 /* Cliente HTTP do backend RödelCar. Centraliza a base URL e o envelope de erro
    padrão do contrato (`{ error: { code, message, details } }`). */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+import type { Course } from "./portal-data";
+
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 export interface ApiErrorEnvelope {
   error: { code: string; message: string; details: unknown };
@@ -28,7 +31,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new ApiError(0, "NETWORK", "Não foi possível conectar ao servidor.", null);
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Não foi possível conectar ao servidor.",
+      null,
+    );
   }
 
   const text = await res.text();
@@ -37,14 +45,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const env = data as ApiErrorEnvelope | null;
     const err = env?.error;
-    throw new ApiError(res.status, err?.code ?? "ERROR", err?.message ?? res.statusText, err?.details ?? null);
+    throw new ApiError(
+      res.status,
+      err?.code ?? "ERROR",
+      err?.message ?? res.statusText,
+      err?.details ?? null,
+    );
   }
   return data as T;
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  post: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body) }),
 };
 
 // ── Leads (agendamento de avaliação) ──────────────────────────────────────────
@@ -64,4 +78,101 @@ export interface LeadCreated {
 
 export function createLead(input: LeadInput): Promise<LeadCreated> {
   return api.post<LeadCreated>("/leads", input);
+}
+
+// ── Cursos (vitrine pública / página de venda) ────────────────────────────────
+// Server-side fetch (SSR). Em dev o localhost funciona no servidor; em Docker,
+// defina API_URL_INTERNAL=http://backend:8000/api/v1.
+const SERVER_API_URL =
+  process.env.API_URL_INTERNAL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:8000/api/v1";
+
+interface ApiCourseBase {
+  slug: string;
+  titulo: string;
+  tipo: string;
+  preco: number;
+  preco_antigo?: number | null;
+  thumbnail_url?: string | null;
+  tagline?: string | null;
+  horas?: string | null;
+  aulas_total: number;
+  rating?: number | null;
+  alunos: number;
+  nivel?: string | null;
+  icon?: string | null;
+  badge_label?: string | null;
+}
+
+interface ApiCourseListItem extends ApiCourseBase {
+  descricao_curta?: string | null;
+  total_modulos: number;
+  total_aulas: number;
+  destaque: boolean;
+}
+
+interface ApiCourseDetail extends ApiCourseBase {
+  descricao?: string | null;
+  aprende?: string[];
+  modulos: {
+    id: string;
+    titulo: string;
+    ordem: number;
+    total_aulas: number;
+    aulas: { id: string; titulo: string; duracao_label: string }[];
+  }[];
+}
+
+function mapBase(
+  c: ApiCourseBase & { descricao_curta?: string | null },
+): Course {
+  return {
+    id: c.slug,
+    title: c.titulo,
+    tagline: c.tagline ?? c.descricao_curta ?? "",
+    price: c.preco,
+    old: c.preco_antigo ?? undefined,
+    hours: c.horas ?? "",
+    lessons: c.aulas_total,
+    rating: c.rating ?? 0,
+    students: c.alunos,
+    level: c.nivel ?? "",
+    icon: c.icon ?? "gauge",
+    badge: { variant: "", label: c.badge_label ?? "" },
+  };
+}
+
+async function serverGet<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${SERVER_API_URL}${path}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCursos(): Promise<Course[]> {
+  const data = await serverGet<{ items: ApiCourseListItem[] }>(
+    "/cursos?size=100",
+  );
+  return (data?.items ?? []).map(mapBase);
+}
+
+export async function getCurso(slug: string): Promise<Course | null> {
+  const d = await serverGet<ApiCourseDetail>(
+    `/cursos/${encodeURIComponent(slug)}`,
+  );
+  if (!d) return null;
+  return {
+    ...mapBase(d),
+    desc: d.descricao ?? undefined,
+    learn: d.aprende ?? [],
+    modules: (d.modulos ?? []).map((m) => ({
+      t: m.titulo,
+      lessons: m.aulas.map((a) => a.titulo),
+      dur: m.aulas.map((a) => a.duracao_label),
+    })),
+  };
 }

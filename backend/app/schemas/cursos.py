@@ -15,11 +15,21 @@ class CursoListItem(BaseModel):
     descricao_curta: str | None = None
     tipo: TipoCurso
     preco: float
+    preco_antigo: float | None = None
     validade_dias: int
     thumbnail_url: str | None = None
     total_modulos: int
     total_aulas: int
     destaque: bool
+    # marketing / vitrine
+    tagline: str | None = None
+    horas: str | None = None
+    aulas_total: int = 0
+    rating: float | None = None
+    alunos: int = 0
+    nivel: str | None = None
+    icon: str | None = None
+    badge_label: str | None = None
 
 
 class CursoListResponse(BaseModel):
@@ -30,13 +40,20 @@ class CursoListResponse(BaseModel):
 
 
 # ── GET /cursos/{slug} ────────────────────────────────────────────────────────
-class ModuloResumo(BaseModel):
+class AulaResumo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     titulo: str
+    duracao_label: str  # "12:40"
+
+
+class ModuloDetalhe(BaseModel):
+    id: uuid.UUID
+    titulo: str
     ordem: int
     total_aulas: int
+    aulas: list[AulaResumo]
 
 
 class CursoDetail(BaseModel):
@@ -48,6 +65,17 @@ class CursoDetail(BaseModel):
     descricao: str | None = None
     tipo: TipoCurso
     preco: float
+    preco_antigo: float | None = None
     validade_dias: int
     thumbnail_url: str | None = None
-    modulos: list[ModuloResumo]
+    # marketing / vitrine
+    tagline: str | None = None
+    horas: str | None = None
+    aulas_total: int = 0
+    rating: float | None = None
+    alunos: int = 0
+    nivel: str | None = None
+    icon: str | None = None
+    badge_label: str | None = None
+    aprende: list[str] = []
+    modulos: list[ModuloDetalhe]

@@ -1,9 +1,12 @@
-"""Popula o banco com cursos de exemplo (1 premium, 1 avulso "i-motion").
+"""Popula o banco com os 6 cursos da vitrine (mesmo conteúdo do portal).
 
 Uso (a partir de backend/):
     python -m scripts.seed
+ou via Docker:
+    docker compose run --rm --entrypoint python backend -m scripts.seed
 
-Idempotente: cursos já existentes (por slug) são ignorados.
+Idempotente: cursos já existentes (por slug) são ignorados. São dados de
+marketing realistas (placeholder) — dá pra editar/excluir depois pelo admin.
 """
 from __future__ import annotations
 
@@ -15,98 +18,80 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.config import settings
 from app.models import Aula, Curso, Modulo, TipoCurso
 
-# --------------------------------------------------------------------------- #
-# Dados de exemplo. Cada aula é (titulo, duracao_segundos).
-# --------------------------------------------------------------------------- #
-CURSOS_SEED: list[dict] = [
-    {
-        "slug": "i-motion",
-        "titulo": "Diagnóstico I-Motion",
-        "descricao": (
-            "Domine o câmbio automatizado I-Motion da Fiat: leitura de scanner, "
-            "atuadores, embreagem e calibração. Da teoria ao reparo prático, com "
-            "esquemas elétricos e casos reais de oficina."
-        ),
-        "tipo": TipoCurso.avulso,
-        "preco": 497.00,
-        "validade_dias": 365,
-        "thumbnail_url": "https://cdn.rodelcar.com.br/cursos/i-motion.jpg",
-        "destaque": False,
-        "modulos": [
-            {
-                "titulo": "Fundamentos do I-Motion",
-                "aulas": [
-                    ("Visão geral do sistema", 540),
-                    ("Componentes e atuadores", 720),
-                    ("Hidráulica e bomba eletro-hidráulica", 660),
-                ],
-            },
-            {
-                "titulo": "Diagnóstico com scanner",
-                "aulas": [
-                    ("Conectando o scanner", 480),
-                    ("Leitura de scanner e parâmetros", 1280),
-                    ("Interpretação de códigos de falha", 900),
-                ],
-            },
-            {
-                "titulo": "Reparo e calibração",
-                "aulas": [
-                    ("Troca de embreagem", 1500),
-                    ("Calibração do ponto de embreagem", 1100),
-                    ("Teste de estrada e validação", 600),
-                ],
-            },
-        ],
-    },
-    {
-        "slug": "premium-mecanico-master",
-        "titulo": "Trilha Premium — Mecânico Master de Câmbios",
-        "descricao": (
-            "Assinatura premium com a trilha completa de câmbios automáticos e "
-            "automatizados: AL4, automáticos convencionais, CVT e dupla embreagem. "
-            "Atualizações contínuas, materiais de apoio e certificado por curso."
-        ),
-        "tipo": TipoCurso.premium,
-        "preco": 1490.00,
-        "validade_dias": 365,
-        "thumbnail_url": "https://cdn.rodelcar.com.br/cursos/premium-master.jpg",
-        "destaque": True,
-        "modulos": [
-            {
-                "titulo": "Câmbio automático convencional",
-                "aulas": [
-                    ("Conversor de torque", 820),
-                    ("Trem de engrenagens planetárias", 980),
-                    ("Corpo de válvulas", 1040),
-                ],
-            },
-            {
-                "titulo": "Transmissão CVT",
-                "aulas": [
-                    ("Princípio de funcionamento do CVT", 700),
-                    ("Polias e correia/corrente", 760),
-                    ("Diagnóstico de patinação", 880),
-                ],
-            },
-            {
-                "titulo": "Dupla embreagem (DCT)",
-                "aulas": [
-                    ("Arquitetura do DCT", 690),
-                    ("Mecatrônica e adaptações", 1150),
-                    ("Falhas comuns e soluções", 940),
-                ],
-            },
-        ],
-    },
+# Conteúdo de detalhe (descrição, "o que aprende" e módulos/aulas) — o mesmo que
+# o portal exibe hoje para todos os cursos. Cada aula é (titulo, "mm:ss").
+DESC = (
+    "O câmbio automatizado mais comum nas oficinas brasileiras — e o que mais gera "
+    "retrabalho quando diagnosticado no chute. Você aprende o método para atacar "
+    "atuador, bomba, sangria e calibração com proxxon/scanner, isolando a falha real "
+    "antes de abrir."
+)
+APRENDE = [
+    "Sangrar e calibrar o sistema corretamente",
+    "Diagnosticar o atuador (motor de embreagem e de marcha)",
+    "Ler parâmetros do scanner que apontam a falha real",
+    "Identificar desgaste de embreagem x falha hidráulica",
+    "Procedimento de autoaprendizagem (PIS) pós-reparo",
+    "Montar laudo técnico e orçamento que o cliente aprova",
+]
+MODULOS = [
+    {"titulo": "Como funciona o sistema", "aulas": [
+        ("Arquitetura do sistema", "12:40"),
+        ("Atuador, bomba e acumulador", "18:05"),
+        ("Ferramentas e bancada mínima", "09:30"),
+    ]},
+    {"titulo": "Diagnóstico na prática", "aulas": [
+        ("Lendo o scanner sem medo", "22:10"),
+        ("Sangria e pressão do sistema", "19:45"),
+        ("Embreagem: desgaste x hidráulica", "16:20"),
+    ]},
+    {"titulo": "Reparo e atuador", "aulas": [
+        ("Desmontagem do atuador", "20:00"),
+        ("Troca de embreagem e volante", "24:15"),
+        ("Vazamentos e selagem", "17:50"),
+    ]},
+    {"titulo": "Calibração e entrega", "aulas": [
+        ("Autoaprendizagem (PIS)", "14:30"),
+        ("Road-test com checklist", "15:10"),
+        ("Apresentando o orçamento certo", "11:25"),
+    ]},
+]
+
+# Cabeçalho próprio de cada curso (vitrine + topo da página de venda).
+CURSOS: list[dict] = [
+    {"slug": "dualogic", "titulo": "Fiat Dualogic — Diagnóstico e Reparo",
+     "tagline": "Punto, Linea, Stilo e Bravo: atuador, sangria e calibração sem chute.",
+     "preco": 397, "preco_antigo": 597, "horas": "8h40", "aulas_total": 42,
+     "rating": 4.9, "alunos": 1840, "nivel": "Intermediário", "icon": "gauge", "badge_label": "Automatizado", "destaque": True},
+    {"slug": "powershift", "titulo": "Ford PowerShift — Embreagem Seca (DCT)",
+     "tagline": "Focus e EcoSport: por que a embreagem seca falha e como reparar.",
+     "preco": 447, "preco_antigo": 647, "horas": "9h05", "aulas_total": 45,
+     "rating": 4.8, "alunos": 1310, "nivel": "Avançado", "icon": "infinity", "badge_label": "Automatizado"},
+    {"slug": "imotion", "titulo": "VW iMotion — Fox e SpaceFox",
+     "tagline": "Atuador, calibração e as falhas que mais aparecem na bancada.",
+     "preco": 347, "preco_antigo": 497, "horas": "6h10", "aulas_total": 31,
+     "rating": 4.9, "alunos": 980, "nivel": "Intermediário", "icon": "bolt", "badge_label": "Automatizado"},
+    {"slug": "easytronic", "titulo": "GM Easytronic — Meriva e Corsa",
+     "tagline": "Domine o automatizado da GM: atuador, sensores e calibração.",
+     "preco": 347, "preco_antigo": 497, "horas": "5h50", "aulas_total": 29,
+     "rating": 4.7, "alunos": 760, "nivel": "Intermediário", "icon": "gauge", "badge_label": "Automatizado"},
+    {"slug": "dsg", "titulo": "DSG DQ200 / DQ250 — VW e Audi",
+     "tagline": "Dupla embreagem: mecatrônica, banho de óleo e seca na prática.",
+     "preco": 497, "preco_antigo": 747, "horas": "11h20", "aulas_total": 53,
+     "rating": 5.0, "alunos": 690, "nivel": "Avançado", "icon": "infinity", "badge_label": "Dupla embreagem"},
+    {"slug": "automatico", "titulo": "Câmbio Automático Convencional",
+     "tagline": "Hidráulico e eletrônico: pressão, conversor e scanner do zero.",
+     "preco": 397, "preco_antigo": 547, "horas": "8h25", "aulas_total": 40,
+     "rating": 4.9, "alunos": 2010, "nivel": "Iniciante", "icon": "wrench", "badge_label": "Automático"},
 ]
 
 
-async def _seed_curso(session, data: dict) -> bool:
-    """Insere um curso (e sua árvore) se o slug ainda não existir.
+def _secs(label: str) -> int:
+    m, s = label.split(":")
+    return int(m) * 60 + int(s)
 
-    Retorna True se inseriu, False se já existia.
-    """
+
+async def _seed_curso(session, data: dict, ordem: int) -> bool:
     existe = await session.scalar(select(Curso.id).where(Curso.slug == data["slug"]))
     if existe is not None:
         return False
@@ -114,19 +99,27 @@ async def _seed_curso(session, data: dict) -> bool:
     curso = Curso(
         slug=data["slug"],
         titulo=data["titulo"],
-        descricao=data["descricao"],
-        tipo=data["tipo"],
+        descricao=DESC,
+        tipo=TipoCurso.avulso,
         preco=data["preco"],
-        validade_dias=data["validade_dias"],
-        thumbnail_url=data["thumbnail_url"],
-        destaque=data["destaque"],
+        preco_antigo=data["preco_antigo"],
+        validade_dias=365,
+        destaque=False,
+        ordem=ordem,
+        tagline=data["tagline"],
+        horas=data["horas"],
+        aulas_total=data["aulas_total"],
+        rating=data["rating"],
+        alunos=data["alunos"],
+        nivel=data["nivel"],
+        icon=data["icon"],
+        badge_label=data["badge_label"],
+        aprende=APRENDE,
     )
-    for m_idx, mod in enumerate(data["modulos"], start=1):
+    for m_idx, mod in enumerate(MODULOS, start=1):
         modulo = Modulo(titulo=mod["titulo"], ordem=m_idx)
-        for a_idx, (titulo, duracao) in enumerate(mod["aulas"], start=1):
-            modulo.aulas.append(
-                Aula(titulo=titulo, duracao_segundos=duracao, ordem=a_idx)
-            )
+        for a_idx, (titulo, dur) in enumerate(mod["aulas"], start=1):
+            modulo.aulas.append(Aula(titulo=titulo, duracao_segundos=_secs(dur), ordem=a_idx))
         curso.modulos.append(modulo)
 
     session.add(curso)
@@ -134,15 +127,15 @@ async def _seed_curso(session, data: dict) -> bool:
 
 
 async def main() -> None:
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_async_engine(settings.DATABASE_URL, connect_args=settings.db_connect_args)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     inseridos = 0
     async with Session() as session:
-        for data in CURSOS_SEED:
-            if await _seed_curso(session, data):
+        for ordem, data in enumerate(CURSOS, start=1):
+            if await _seed_curso(session, data, ordem):
                 inseridos += 1
-                print(f"  + {data['slug']} ({data['tipo'].value})")
+                print(f"  + {data['slug']}")
             else:
                 print(f"  = {data['slug']} já existe, ignorado")
         await session.commit()

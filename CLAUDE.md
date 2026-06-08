@@ -52,5 +52,6 @@ Ecossistema digital da RödelCar Câmbios: portal público de captação/venda +
   `RATELIMIT_STORAGE_URI=redis://...` (sem ele, cada processo conta sozinho).
 
 ## Comandos
-- Subir local: `docker compose up --build` (backend :8000, frontend :3000, db :5432).
+- Subir local: `docker compose up --build` (backend :8000, frontend :3000). O banco
+  é o Supabase (sem serviço `db` local): defina `DATABASE_URL` no `.env`. Ver @docs/supabase.md.
 - Testes backend: `pytest` dentro de backend/.

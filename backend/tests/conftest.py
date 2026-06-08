@@ -27,7 +27,7 @@ TEST_PASSWORD = "TestPass123!"
 
 @pytest_asyncio.fixture(scope="session")
 async def test_aluno():
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_async_engine(settings.DATABASE_URL, connect_args=settings.db_connect_args)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     async with Session() as session:
@@ -53,7 +53,7 @@ async def test_aluno():
 @pytest_asyncio.fixture(scope="session")
 async def test_data(test_aluno):
     """Cria cursos/módulos/aulas/matrículas para todos os testes de integração."""
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_async_engine(settings.DATABASE_URL, connect_args=settings.db_connect_args)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     aluno_uuid = uuid.UUID(test_aluno["id"])

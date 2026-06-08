@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     DATABASE_URL: str = "postgresql+asyncpg://rodelcar:rodelcar@localhost:5432/rodelcar"
+    # Força TLS no driver. Vazio = detecta pelo host (.supabase.co exige SSL).
+    # Defina "require"/"verify-full" para forçar manualmente.
+    DATABASE_SSL: str = ""
     JWT_SECRET: str = "dev-secret"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
@@ -70,6 +73,17 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() in {"production", "prod"}
 
+    @property
+    def db_connect_args(self) -> dict:
+        """connect_args do asyncpg. Supabase/Postgres gerenciado exige TLS e o
+        asyncpg não ativa SSL sozinho — força aqui quando o host é Supabase ou
+        quando DATABASE_SSL pede explicitamente."""
+        forced = self.DATABASE_SSL.strip().lower()
+        if "supabase.co" in self.DATABASE_URL or forced in {"require", "verify-ca", "verify-full", "true", "1"}:
+            mode = forced if forced in {"require", "verify-ca", "verify-full"} else "require"
+            return {"ssl": mode}
+        return {}
+
     @model_validator(mode="after")
     def _fail_fast_em_producao(self) -> "Settings":
         """Em produção, recusa subir com segredo fraco/ausente.
@@ -90,6 +104,8 @@ class Settings(BaseSettings):
             problemas.append("INTERNAL_TOKEN ausente/placeholder")
         if "rodelcar:rodelcar@" in self.DATABASE_URL:
             problemas.append("DATABASE_URL usa credenciais default (rodelcar:rodelcar)")
+        if "://postgres:" in self.DATABASE_URL:
+            problemas.append("DATABASE_URL usa o superusuário 'postgres' (use um papel dedicado, não-root)")
 
         if problemas:
             raise ValueError(

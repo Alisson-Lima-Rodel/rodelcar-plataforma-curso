@@ -1,24 +1,12 @@
 services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-rodelcar}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rodelcar}
-      POSTGRES_DB: ${POSTGRES_DB:-rodelcar}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rodelcar} -d ${POSTGRES_DB:-rodelcar}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
+  # O banco agora é o Supabase (Postgres gerenciado). Não há mais serviço `db`
+  # local — o backend conecta via DATABASE_URL (definida no .env), com TLS.
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rodelcar}:${POSTGRES_PASSWORD:-rodelcar}@db:5432/${POSTGRES_DB:-rodelcar}
+      # Supabase: postgresql+asyncpg://rodelcar_app:SENHA@db.<ref>.supabase.co:5432/postgres
+      DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL no .env (conexão do Supabase)}
+      DATABASE_SSL: ${DATABASE_SSL:-}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       RODELCAR_FERNET_KEY: ${RODELCAR_FERNET_KEY:-}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
@@ -32,9 +20,6 @@ services:
       NOTIFICACOES_FAKE: ${NOTIFICACOES_FAKE:-false}
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./backend:/app
 
@@ -50,6 +35,3 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
-
-volumes:
-  pgdata:

@@ -104,6 +104,12 @@ class StatusNotificacao(str, enum.Enum):
     falhou = "falhou"
 
 
+class PapelAdmin(str, enum.Enum):
+    administrador = "Administrador"
+    editor = "Editor"
+    suporte = "Suporte"
+
+
 # --------------------------------------------------------------------------- #
 # Entidades
 # --------------------------------------------------------------------------- #
@@ -343,3 +349,52 @@ class Notificacao(Base):
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     criado_em: Mapped[datetime] = _created_at()
     enviada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Admin(Base):
+    """Usuário do painel administrador (equipe da Rödelcar). Separado de Aluno."""
+    __tablename__ = "admins"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    nome: Mapped[str] = mapped_column(String(160))
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    senha_hash: Mapped[str] = mapped_column(String(255))
+    papel: Mapped[PapelAdmin] = mapped_column(
+        # values_callable: o tipo Postgres usa os VALORES ("Administrador"…),
+        # não os nomes dos membros — casa com o enum criado na migração.
+        Enum(PapelAdmin, name="papeladmin", values_callable=lambda e: [m.value for m in e]),
+        default=PapelAdmin.suporte,
+    )
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = _created_at()
+
+
+class Depoimento(Base):
+    """Depoimento de aluno exibido na prova social (após aprovação)."""
+    __tablename__ = "depoimentos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    nome: Mapped[str] = mapped_column(String(160))
+    papel: Mapped[str | None] = mapped_column(String(160))
+    estrelas: Mapped[int] = mapped_column(Integer, default=5)
+    texto: Mapped[str] = mapped_column(Text())
+    status: Mapped[str] = mapped_column(String(20), default="Pendente")  # Aprovado | Pendente
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = _created_at()
+
+
+class Pacote(Base):
+    """Pacote/combo comercial (ex.: Formação Completa)."""
+    __tablename__ = "pacotes"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    nome: Mapped[str] = mapped_column(String(200))
+    preco: Mapped[float] = mapped_column(Numeric(10, 2))
+    preco_antigo: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    parcelas: Mapped[str | None] = mapped_column(String(80))
+    cursos: Mapped[int] = mapped_column(Integer, default=1)
+    inclui: Mapped[str | None] = mapped_column(Text())  # um item por linha
+    status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = _created_at()

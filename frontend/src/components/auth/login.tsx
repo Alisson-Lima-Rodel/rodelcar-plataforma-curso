@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/components/providers/auth-provider";
 import { ApiError } from "@/lib/api";
+import { adminLogin } from "@/lib/admin-api";
 
 type Mode = "login" | "signup" | "recover";
 
@@ -53,9 +54,22 @@ export function Login() {
     }
     setBusy(true);
     try {
-      if (mode === "login") await login(email.trim(), senha);
-      else await register(nome.trim(), email.trim(), senha);
-      router.push("/painel");
+      if (mode === "signup") {
+        await register(nome.trim(), email.trim(), senha);
+        router.push("/painel");
+      } else {
+        // Uma única tela de login: tenta admin primeiro; se a conta não for
+        // admin (401), entra como aluno. O nível de acesso é o da conta.
+        try {
+          await adminLogin(email.trim(), senha);
+          router.push("/admin");
+          return;
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.status !== 401) throw e;
+        }
+        await login(email.trim(), senha);
+        router.push("/painel");
+      }
     } catch (e) {
       setError(mensagemErro(e));
     } finally {

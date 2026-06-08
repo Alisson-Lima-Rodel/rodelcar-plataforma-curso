@@ -27,6 +27,14 @@ def create_access_token(sub: str) -> str:
     )
 
 
+def create_admin_token(sub: str) -> str:
+    """Token de acesso do painel admin — `type` distinto p/ não cruzar com aluno."""
+    return _make_token(
+        {"sub": sub, "type": "admin_access"},
+        timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES),
+    )
+
+
 def create_refresh_token(sub: str) -> tuple[str, str]:
     """Retorna (token, jti). O jti referencia a linha em refresh_tokens p/ rotação."""
     jti = str(uuid.uuid4())

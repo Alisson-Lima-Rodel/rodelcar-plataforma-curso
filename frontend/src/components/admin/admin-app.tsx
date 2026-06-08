@@ -1,20 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { Toast } from "@/components/portal/toast";
 import {
-  ADMIN_USER,
   ENTITIES,
   ENTITY_KEYS,
   type AdminItem,
   type EntityKey,
 } from "@/lib/admin-data";
+import { ADMIN_CRUD } from "@/lib/admin-api";
+import { useAdmin } from "@/components/providers/admin-provider";
 import { AdminSidebar } from "./admin-sidebar";
 import { Overview } from "./overview";
 import { EntityManager } from "./entity-manager";
+import { RemoteEntityManager } from "./remote-entity-manager";
 
 type View = "overview" | EntityKey;
+
+// Entidades já ligadas ao backend real (as demais seguem em memória por ora).
+const REMOTE: EntityKey[] = ["courses"];
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
   overview: { title: "Visão geral", crumb: "ADMIN" },
@@ -33,11 +40,26 @@ function seedData(): Record<EntityKey, AdminItem[]> {
   return d;
 }
 
+function initialsOf(name: string): string {
+  return (name || "?")
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function AdminApp() {
+  const router = useRouter();
+  const { status, admin, logout } = useAdmin();
   const [view, setView] = useState<View>("overview");
   const [data, setData] = useState<Record<EntityKey, AdminItem[]>>(seedData);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingNew, setPendingNew] = useState<EntityKey | null>(null);
+
+  useEffect(() => {
+    if (status === "unauthed") router.replace("/login");
+  }, [status, router]);
 
   const nav = (v: string) => {
     setPendingNew(null);
@@ -63,7 +85,26 @@ export function AdminApp() {
   const onDelete = (key: EntityKey, id: string) =>
     setData((d) => ({ ...d, [key]: d[key].filter((x) => x.id !== id) }));
 
+  if (status !== "authed" || !admin) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "var(--bg)",
+        }}
+      >
+        <span className="tag-mono muted">Carregando…</span>
+      </div>
+    );
+  }
+
   const t = TITLES[view];
+  const sair = () => {
+    logout();
+    router.replace("/login");
+  };
 
   return (
     <div className="app-shell">
@@ -80,7 +121,7 @@ export function AdminApp() {
           </div>
           <div className="flex center gap-3">
             <Badge variant="cyan" icon="shield">
-              Modo administrador
+              {admin.papel}
             </Badge>
             <span
               className="avatar"
@@ -91,16 +132,34 @@ export function AdminApp() {
                 color: "var(--primary-fg)",
                 borderColor: "var(--primary)",
               }}
+              title={admin.nome}
             >
-              {ADMIN_USER.initials}
+              {initialsOf(admin.nome)}
             </span>
+            <button
+              onClick={sair}
+              className="btn btn-secondary btn-sm"
+              aria-label="Sair"
+            >
+              <Icon name="lock" size={16} /> Sair
+            </button>
           </div>
         </div>
 
         {view === "overview" && (
           <Overview data={data} onNav={nav} onNew={newIn} />
         )}
-        {view !== "overview" && (
+        {view !== "overview" && REMOTE.includes(view) && (
+          <RemoteEntityManager
+            key={view + (pendingNew === view ? "-new" : "")}
+            ent={ENTITIES[view]}
+            entityKey={view}
+            crud={ADMIN_CRUD[view]}
+            autoNew={pendingNew === view}
+            onToast={setToast}
+          />
+        )}
+        {view !== "overview" && !REMOTE.includes(view) && (
           <EntityManager
             key={view + (pendingNew === view ? "-new" : "")}
             ent={ENTITIES[view]}

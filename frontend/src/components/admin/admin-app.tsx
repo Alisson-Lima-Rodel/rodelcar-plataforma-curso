@@ -21,7 +21,7 @@ import { RemoteEntityManager } from "./remote-entity-manager";
 type View = "overview" | EntityKey;
 
 // Entidades já ligadas ao backend real (as demais seguem em memória por ora).
-const REMOTE: EntityKey[] = ["courses"];
+const REMOTE: EntityKey[] = ["courses", "testimonials", "packages", "admins"];
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
   overview: { title: "Visão geral", crumb: "ADMIN" },

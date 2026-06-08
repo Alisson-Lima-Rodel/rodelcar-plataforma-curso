@@ -116,7 +116,11 @@ function Cell({ col, item }: { col: Column; item: AdminItem }) {
         </Badge>
       );
     case "muted":
-      return <span className="tag-mono">{s}</span>;
+      return <span className="tag-mono">{s || "—"}</span>;
+    case "badgeAtivo":
+      return (
+        <Badge variant={v ? "success" : ""}>{v ? "Ativo" : "Inativo"}</Badge>
+      );
     case "badgeSystem":
       return <Badge variant={SYSTEM_MAP[s] ?? ""}>{s}</Badge>;
     default:
@@ -130,8 +134,8 @@ function Field({
   onChange,
 }: {
   f: FieldDef;
-  value: string | number | undefined;
-  onChange: (v: string | number) => void;
+  value: string | number | boolean | null | undefined;
+  onChange: (v: string | number | boolean) => void;
 }) {
   const wrap = f.col === "full" ? "full" : "";
   if (f.type === "toggle") {
@@ -152,7 +156,7 @@ function Field({
             type="checkbox"
             checked={on}
             onChange={(e) =>
-              onChange(e.target.checked ? (f.on as string) : (f.off as string))
+              onChange(e.target.checked ? (f.on ?? "") : (f.off ?? ""))
             }
           />
           <span className="track" />
@@ -187,7 +191,7 @@ function Field({
       {f.type === "select" ? (
         <select
           className="select"
-          value={value}
+          value={value as string | undefined}
           onChange={(e) => onChange(e.target.value)}
         >
           {f.options?.map((o) => (
@@ -197,7 +201,7 @@ function Field({
       ) : f.type === "textarea" ? (
         <textarea
           className="textarea"
-          value={value}
+          value={value as string | undefined}
           onChange={(e) => onChange(e.target.value)}
         />
       ) : (
@@ -213,7 +217,7 @@ function Field({
                   : "text"
           }
           placeholder={f.type === "password" ? "••••••••" : undefined}
-          value={value ?? ""}
+          value={(value ?? "") as string | number}
           onChange={(e) =>
             onChange(
               f.type === "number" ? Number(e.target.value) : e.target.value,
@@ -253,7 +257,7 @@ function FormSheet({
       window.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
-  const set = (k: string, v: string | number) =>
+  const set = (k: string, v: string | number | boolean) =>
     setDraft((d) => ({ ...d, [k]: v }));
   const isEdit = !!item;
   const valid = ent.fields

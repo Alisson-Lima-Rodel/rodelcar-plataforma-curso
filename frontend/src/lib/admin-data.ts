@@ -2,7 +2,7 @@
    CRUD em memória nesta fase; trocar por chamadas ao backend (TanStack Query +
    mutations) quando os endpoints de gestão existirem. */
 
-export type AdminItem = Record<string, string | number>;
+export type AdminItem = Record<string, string | number | boolean | null>;
 
 export type BadgeVariant =
   | "premium"
@@ -34,8 +34,8 @@ export interface FieldDef {
   type: FieldType;
   col?: "full";
   options?: string[];
-  on?: string;
-  off?: string;
+  on?: string | boolean;
+  off?: string | boolean;
   hint?: string;
 }
 
@@ -470,7 +470,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     fields: [
       { key: "nome", label: "Nome do pacote", type: "text", col: "full" },
       { key: "preco", label: "Preço (R$)", type: "number" },
-      { key: "precoAntigo", label: "Preço antigo (R$)", type: "number" },
+      { key: "preco_antigo", label: "Preço antigo (R$)", type: "number" },
       { key: "parcelas", label: "Parcelamento", type: "text" },
       { key: "cursos", label: "Qtd. de cursos", type: "number" },
       {
@@ -490,7 +490,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     defaults: {
       nome: "",
       preco: 997,
-      precoAntigo: 1297,
+      preco_antigo: 1297,
       parcelas: "12x de R$ 99,70",
       cursos: 3,
       inclui: "",
@@ -504,12 +504,15 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     seed: SEED_ADMINS,
     title: (it) => String(it.nome),
     search: (it) => `${it.nome} ${it.email} ${it.papel}`,
-    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    filter: {
+      key: "papel",
+      options: ["Todos", "Administrador", "Editor", "Suporte"],
+    },
     columns: [
       { key: "nome", label: "Usuário", kind: "user" },
       { key: "papel", label: "Papel", kind: "badgeRole" },
-      { key: "ultimoAcesso", label: "Último acesso", kind: "muted" },
-      { key: "status", label: "Status", kind: "badgeStatus" },
+      { key: "ultimo_acesso", label: "Último acesso", kind: "muted" },
+      { key: "ativo", label: "Status", kind: "badgeAtivo" },
     ],
     fields: [
       { key: "nome", label: "Nome", type: "text" },
@@ -528,11 +531,11 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         hint: "Mín. 8 caracteres. Em edição, deixe em branco para manter a atual.",
       },
       {
-        key: "status",
+        key: "ativo",
         label: "Usuário ativo",
         type: "toggle",
-        on: "Ativo",
-        off: "Inativo",
+        on: true,
+        off: false,
       },
     ],
     defaults: {
@@ -540,8 +543,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       email: "",
       papel: "Suporte",
       senha: "",
-      ultimoAcesso: "nunca acessou",
-      status: "Ativo",
+      ativo: true,
     },
   },
 };

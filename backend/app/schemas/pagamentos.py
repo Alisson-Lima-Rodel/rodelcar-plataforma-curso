@@ -1,3 +1,5 @@
+import uuid
+
 from pydantic import BaseModel, Field
 
 
@@ -5,6 +7,12 @@ class CheckoutAvulsoRequest(BaseModel):
     """Inicia o checkout de um curso avulso (one-time, cartão + Pix)."""
 
     curso_slug: str = Field(..., min_length=1, max_length=120)
+
+
+class CheckoutAssinaturaRequest(BaseModel):
+    """Inicia o checkout de uma assinatura (recorrente). `plano_id` = PlanoAssinatura."""
+
+    plano_id: uuid.UUID
 
 
 class CheckoutCriado(BaseModel):

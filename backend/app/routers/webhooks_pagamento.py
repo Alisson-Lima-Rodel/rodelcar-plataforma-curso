@@ -50,6 +50,7 @@ _EVENTOS_CONCESSAO = {
 _EVENTOS_FALHA = {
     "checkout.session.async_payment_failed",
     "payment_intent.payment_failed",
+    "invoice.payment_failed",
 }
 
 
@@ -132,6 +133,10 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
 
     if tipo in _EVENTOS_CONCESSAO:
         await _conceder_acesso(db, event, obj, tipo)
+    elif tipo == "invoice.paid":
+        await _conceder_assinatura(db, event, obj)
+    elif tipo == "customer.subscription.deleted":
+        await _revogar_assinatura(db, obj)
     elif tipo in _EVENTOS_FALHA:
         await _registrar_falha(db, event, obj)
     else:
@@ -218,12 +223,130 @@ async def _registrar_falha(
             aluno_id=(aluno.id if aluno else None),
             gateway="stripe",
             gateway_transaction_id=pi_id,
-            valor=_valor_em_reais(obj.get("amount_total") or obj.get("amount")),
+            valor=_valor_em_reais(
+                obj.get("amount_total") or obj.get("amount") or obj.get("amount_due")
+            ),
             status=StatusPagamento.recusado,
             payload=event,
         ))
     elif pag.status != StatusPagamento.aprovado:
         pag.status = StatusPagamento.recusado
+
+
+# ── Assinaturas (mode=subscription) ─────────────────────────────────────────────
+
+async def _conceder_assinatura(
+    db: AsyncSession, event: dict[str, Any], invoice: dict[str, Any]
+) -> None:
+    """invoice.paid → libera/renova acesso ao catálogo inteiro até o fim do ciclo."""
+    sub_id = invoice.get("subscription")
+    invoice_id = invoice.get("id")
+    if not sub_id or not invoice_id:
+        logger.warning("invoice.paid sem subscription/id — ignorado (event=%s).", event.get("id"))
+        return
+
+    pag = (
+        await db.execute(select(Pagamento).where(Pagamento.gateway_transaction_id == invoice_id))
+    ).scalar_one_or_none()
+    ja_aprovado = pag is not None and pag.status == StatusPagamento.aprovado
+
+    aluno = await _resolver_aluno_assinatura(db, invoice)
+    valor = _valor_em_reais(invoice.get("amount_paid") or invoice.get("amount_due"))
+
+    if pag is None:
+        pag = Pagamento(
+            aluno_id=(aluno.id if aluno else None),
+            gateway="stripe",
+            gateway_transaction_id=invoice_id,
+            valor=valor,
+            status=StatusPagamento.aprovado,
+            payload=event,
+        )
+        db.add(pag)
+    else:
+        pag.status = StatusPagamento.aprovado
+        if aluno is not None and pag.aluno_id is None:
+            pag.aluno_id = aluno.id
+    await db.flush()
+
+    if aluno is None:
+        logger.warning(
+            "invoice.paid %s sem aluno (customer=%s) — gravado p/ reconciliação.",
+            invoice_id, invoice.get("customer"),
+        )
+        return
+    if ja_aprovado:
+        logger.info("Invoice %s já processada — assinatura não reprocessada.", invoice_id)
+        return
+
+    await _liberar_catalogo(db, aluno.id, sub_id, pag.id, _fim_periodo(invoice))
+
+
+async def _revogar_assinatura(db: AsyncSession, sub: dict[str, Any]) -> None:
+    """customer.subscription.deleted → expira as matrículas concedidas pela assinatura."""
+    sub_id = sub.get("id")
+    if not sub_id:
+        return
+    mats = (
+        await db.execute(
+            select(Matricula).where(Matricula.stripe_subscription_id == sub_id)
+        )
+    ).scalars().all()
+    for m in mats:
+        m.status = StatusMatricula.expirado
+
+
+async def _resolver_aluno_assinatura(
+    db: AsyncSession, invoice: dict[str, Any]
+) -> Aluno | None:
+    detalhes = invoice.get("subscription_details") or {}
+    meta = detalhes.get("metadata") or {}
+    return await _resolver_aluno(db, meta.get("app_user_id"), invoice.get("customer"))
+
+
+def _fim_periodo(invoice: dict[str, Any]) -> datetime:
+    """Fim do ciclo pago = period.end da linha da assinatura (sem chamada extra à API)."""
+    for linha in (invoice.get("lines") or {}).get("data") or []:
+        fim = (linha.get("period") or {}).get("end")
+        if fim:
+            return datetime.fromtimestamp(int(fim), tz=timezone.utc)
+    fim = invoice.get("period_end")
+    if fim:
+        return datetime.fromtimestamp(int(fim), tz=timezone.utc)
+    return datetime.now(timezone.utc) + timedelta(days=30)
+
+
+async def _liberar_catalogo(
+    db: AsyncSession,
+    aluno_id: uuid.UUID,
+    sub_id: str,
+    pagamento_id: uuid.UUID,
+    period_end: datetime,
+) -> None:
+    """Acesso total: cria/renova matrícula ativa em TODOS os cursos até period_end."""
+    curso_ids = (await db.execute(select(Curso.id))).scalars().all()
+    existentes = {
+        m.curso_id: m
+        for m in (
+            await db.execute(select(Matricula).where(Matricula.aluno_id == aluno_id))
+        ).scalars().all()
+    }
+    for curso_id in curso_ids:
+        mat = existentes.get(curso_id)
+        if mat is None:
+            db.add(Matricula(
+                aluno_id=aluno_id,
+                curso_id=curso_id,
+                pagamento_id=pagamento_id,
+                stripe_subscription_id=sub_id,
+                status=StatusMatricula.ativo,
+                data_expiracao=period_end,
+            ))
+        else:
+            mat.status = StatusMatricula.ativo
+            mat.data_expiracao = period_end
+            mat.stripe_subscription_id = sub_id
+            mat.pagamento_id = pagamento_id
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────────

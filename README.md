@@ -46,7 +46,7 @@ docker compose up --build
 - `.claude/settings.json` + `.claude/hooks/` — bloqueia edição de `.env`/segredos
   (PreToolUse) e formata o código após cada edição (PostToolUse).
 
-## Pagamentos — Stripe (Fase A: curso avulso)
+## Pagamentos — Stripe (avulso + assinaturas)
 
 Checkout HOSPEDADO da Stripe (cartão + Pix), com liberação de acesso **somente via webhook**.
 
@@ -74,6 +74,19 @@ Checkout HOSPEDADO da Stripe (cartão + Pix), com liberação de acesso **soment
 
 > **Pix é assíncrono:** o `checkout.session.completed` pode chegar ainda não pago; a
 > confirmação vem em `checkout.session.async_payment_succeeded`. Acesso liberado só no webhook.
+
+### Assinaturas (acesso total ao catálogo)
+
+O `scripts.stripe_setup` também cria os planos **Mensal** e **Anual** (`planos_assinatura`).
+Endpoints (autenticados), corpo `{"plano_id": "<uuid>"}`:
+- `POST /api/v1/checkout/assinatura-cartao` — `mode=subscription`, cartão.
+- `POST /api/v1/checkout/assinatura-pix` — Pix Automático (`mandate_options`: teto `amount_type=maximum`
+  = 2× o valor do plano, `payment_schedule=monthly`). Cobra no ciclo+3 dias (notificação pré-débito),
+  fica em `processing` nesse período; IOF incide por cobrança.
+
+Webhook trata: `invoice.paid` (libera/renova acesso a **todos os cursos** até o fim do ciclo —
+`current_period_end`), `invoice.payment_failed` (registra recusa) e `customer.subscription.deleted`
+(expira as matrículas da assinatura). Acesso sempre liberado **só pelo webhook**.
 
 ## Hospedagem (produção)
 - **Front-end** → Vercel (deploy direto do diretório `frontend/`).

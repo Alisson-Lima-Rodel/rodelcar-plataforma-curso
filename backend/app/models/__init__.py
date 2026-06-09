@@ -259,6 +259,9 @@ class Matricula(Base):
     aluno_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("alunos.id"))
     curso_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cursos.id"))
     pagamento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pagamentos.id"))
+    # Assinatura do Stripe (sub_...) que concede esta matrícula. Permite renovar
+    # (invoice.paid) e revogar (customer.subscription.deleted) em lote.
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), index=True)
     status: Mapped[StatusMatricula] = mapped_column(
         Enum(StatusMatricula), default=StatusMatricula.ativo
     )
@@ -456,3 +459,21 @@ class WebhookEvento(Base):
     gateway: Mapped[str] = mapped_column(String(40))
     tipo: Mapped[str] = mapped_column(String(120))
     processado_em: Mapped[datetime] = _created_at()
+
+
+class PlanoAssinatura(Base):
+    """Plano de assinatura recorrente (acesso total ao catálogo).
+
+    Cada plano referencia um Price recorrente do Stripe (criado uma vez). Cartão e
+    Pix Automático usam o MESMO Price — o método é escolhido no checkout.
+    """
+    __tablename__ = "planos_assinatura"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    nome: Mapped[str] = mapped_column(String(120))
+    intervalo: Mapped[str] = mapped_column(String(20))  # mensal | anual
+    stripe_price_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    preco: Mapped[float] = mapped_column(Numeric(10, 2))
+    status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = _created_at()

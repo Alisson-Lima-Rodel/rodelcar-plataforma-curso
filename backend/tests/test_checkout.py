@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.security import hash_password
-from app.models import Aluno, Curso, TipoCurso
+from app.models import Aluno, Curso, PlanoAssinatura, TipoCurso
 
 URL = "/api/v1/checkout/avulso"
 SENHA = "Checkout123!"
@@ -57,7 +57,14 @@ async def checkout_seed(client: AsyncClient):
             preco=Decimal("100.00"),
             validade_dias=365,
         )
-        db.add_all([curso, curso_sem_price])
+        plano = PlanoAssinatura(
+            nome=f"Mensal {pref}",
+            intervalo="mensal",
+            stripe_price_id=f"price_sub_{pref}",
+            preco=Decimal("49.90"),
+            status="Ativo",
+        )
+        db.add_all([curso, curso_sem_price, plano])
         await db.flush()
         await db.commit()
         data = {
@@ -66,6 +73,8 @@ async def checkout_seed(client: AsyncClient):
             "curso_slug": curso.slug,
             "curso_sem_price_id": str(curso_sem_price.id),
             "curso_sem_price_slug": curso_sem_price.slug,
+            "plano_id": str(plano.id),
+            "plano_preco": plano.preco,
         }
 
     resp = await client.post("/api/v1/auth/login", json={"email": email, "senha": SENHA})
@@ -79,6 +88,9 @@ async def checkout_seed(client: AsyncClient):
             delete(Curso).where(
                 Curso.id.in_([uuid.UUID(data["curso_id"]), uuid.UUID(data["curso_sem_price_id"])])
             )
+        )
+        await db.execute(
+            delete(PlanoAssinatura).where(PlanoAssinatura.id == uuid.UUID(data["plano_id"]))
         )
         await db.execute(delete(Aluno).where(Aluno.id == aid))
         await db.commit()
@@ -127,3 +139,62 @@ class TestCheckoutAvulso:
     async def test_sem_token_401(self, client: AsyncClient):
         resp = await client.post(URL, json={"curso_slug": "qualquer"})
         assert resp.status_code == 401
+
+
+class TestCheckoutAssinatura:
+    async def test_assinatura_cartao_200(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        captura: dict = {}
+
+        def fake(**kwargs):
+            captura.update(kwargs)
+            return _Stub(id="cs_sub_card", url="https://checkout.stripe.test/cs_sub_card")
+
+        monkeypatch.setattr(stripe.checkout.Session, "create", fake)
+        monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+
+        resp = await client.post(
+            "/api/v1/checkout/assinatura-cartao",
+            json={"plano_id": checkout_seed["plano_id"]},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 200
+        assert resp.json()["session_id"] == "cs_sub_card"
+        assert captura["mode"] == "subscription"
+        assert captura["payment_method_types"] == ["card"]
+
+    async def test_assinatura_pix_mandate(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        captura: dict = {}
+
+        def fake(**kwargs):
+            captura.update(kwargs)
+            return _Stub(id="cs_sub_pix", url="https://checkout.stripe.test/cs_sub_pix")
+
+        monkeypatch.setattr(stripe.checkout.Session, "create", fake)
+        monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+
+        resp = await client.post(
+            "/api/v1/checkout/assinatura-pix",
+            json={"plano_id": checkout_seed["plano_id"]},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 200
+        assert captura["mode"] == "subscription"
+        assert captura["payment_method_types"] == ["pix"]
+        mandate = captura["payment_method_options"]["pix"]["mandate_options"]
+        assert mandate["amount_type"] == "maximum"
+        assert mandate["payment_schedule"] == "monthly"
+        # teto = 2× o preço do plano, em centavos
+        esperado = int(Decimal(str(checkout_seed["plano_preco"])) * 100 * 2)
+        assert mandate["amount"] == esperado
+
+    async def test_assinatura_plano_inexistente_404(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        resp = await client.post(
+            "/api/v1/checkout/assinatura-cartao",
+            json={"plano_id": str(uuid.uuid4())},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "PLANO_NAO_ENCONTRADO"

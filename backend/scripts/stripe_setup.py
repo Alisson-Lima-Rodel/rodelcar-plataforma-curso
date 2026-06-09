@@ -19,7 +19,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.models import Curso, TipoCurso
+from app.models import Curso, PlanoAssinatura, TipoCurso
+
+# Planos de assinatura (acesso total ao catálogo). Cartão e Pix usam o MESMO Price.
+PLANOS = [
+    {"nome": "Assinatura Mensal", "intervalo": "mensal", "stripe_interval": "month", "preco": Decimal("49.90")},
+    {"nome": "Assinatura Anual", "intervalo": "anual", "stripe_interval": "year", "preco": Decimal("499.00")},
+]
 
 
 async def main() -> None:
@@ -53,6 +59,35 @@ async def main() -> None:
             curso.stripe_price_id = price.id
             await s.commit()
             print(f"+ {curso.slug}: product={product.id} price={price.id} (R$ {curso.preco})")
+
+        # ── Planos de assinatura (recorrentes) ────────────────────────────────
+        for cfg in PLANOS:
+            existe = (
+                await s.execute(
+                    select(PlanoAssinatura).where(PlanoAssinatura.intervalo == cfg["intervalo"])
+                )
+            ).scalar_one_or_none()
+            if existe:
+                print(f"= plano {cfg['intervalo']}: já existe (price {existe.stripe_price_id}), pulando.")
+                continue
+
+            product = stripe.Product.create(
+                name=cfg["nome"], metadata={"plano_intervalo": cfg["intervalo"]}
+            )
+            price = stripe.Price.create(
+                product=product.id,
+                currency="brl",
+                unit_amount=int((cfg["preco"] * 100).to_integral_value()),
+                recurring={"interval": cfg["stripe_interval"]},
+            )
+            s.add(PlanoAssinatura(
+                nome=cfg["nome"],
+                intervalo=cfg["intervalo"],
+                stripe_price_id=price.id,
+                preco=cfg["preco"],
+            ))
+            await s.commit()
+            print(f"+ plano {cfg['intervalo']}: product={product.id} price={price.id} (R$ {cfg['preco']})")
 
     await engine.dispose()
 

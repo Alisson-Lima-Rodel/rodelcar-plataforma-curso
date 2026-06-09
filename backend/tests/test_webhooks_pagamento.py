@@ -68,6 +68,45 @@ def _session_event(
     }
 
 
+def _invoice_event(
+    tipo: str,
+    *,
+    event_id: str,
+    invoice_id: str,
+    sub_id: str,
+    aluno_id: str,
+    customer: str = "cus_test",
+    amount_paid: int = 4990,
+    period_end: int | None = None,
+) -> dict:
+    if period_end is None:
+        period_end = int(time.time()) + 30 * 86400
+    return {
+        "id": event_id,
+        "type": tipo,
+        "data": {
+            "object": {
+                "id": invoice_id,
+                "object": "invoice",
+                "subscription": sub_id,
+                "customer": customer,
+                "amount_paid": amount_paid,
+                "amount_due": amount_paid,
+                "subscription_details": {"metadata": {"app_user_id": aluno_id}},
+                "lines": {"data": [{"period": {"end": period_end}}]},
+            }
+        },
+    }
+
+
+def _sub_event(tipo: str, *, event_id: str, sub_id: str) -> dict:
+    return {
+        "id": event_id,
+        "type": tipo,
+        "data": {"object": {"id": sub_id, "object": "subscription"}},
+    }
+
+
 async def _post(client: AsyncClient, event: dict, *, assinar: bool = True, sig: str | None = None):
     body = json.dumps(event)
     headers = {"Content-Type": "application/json"}
@@ -316,3 +355,93 @@ class TestWebhookStripe:
         resp = await client.post("/api/v1/webhooks/pagamento/mercadopago", content=b"{}")
         assert resp.status_code == 501
         assert resp.json()["error"]["code"] == "GATEWAY_NAO_IMPLEMENTADO"
+
+
+async def _matricula_do_curso(aluno_id: str, curso_id: str) -> Matricula | None:
+    async with AsyncSessionLocal() as db:
+        return (
+            await db.execute(
+                select(Matricula).where(
+                    Matricula.aluno_id == uuid.UUID(aluno_id),
+                    Matricula.curso_id == uuid.UUID(curso_id),
+                )
+            )
+        ).scalar_one_or_none()
+
+
+class TestWebhookAssinatura:
+    async def test_invoice_paid_libera_catalogo(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}"
+        period_end = int(time.time()) + 30 * 86400
+        ev = _invoice_event(
+            "invoice.paid",
+            event_id=f"evt_{pref}_inv1",
+            invoice_id=f"in_{pref}_1",
+            sub_id=sub,
+            aluno_id=seed["aluno_id"],
+            period_end=period_end,
+        )
+        assert (await _post(client, ev)).status_code == 200
+
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat is not None
+        assert mat.status == StatusMatricula.ativo
+        assert mat.stripe_subscription_id == sub
+        esperado = datetime.fromtimestamp(period_end, tz=timezone.utc)
+        assert abs((mat.data_expiracao - esperado).total_seconds()) < 5
+
+        pags = await _pagamentos(seed["aluno_id"])
+        assert any(
+            p.gateway_transaction_id == f"in_{pref}_1" and p.status == StatusPagamento.aprovado
+            for p in pags
+        )
+
+    async def test_invoice_paid_renova_expiracao(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}"
+        fim1 = int(time.time()) + 30 * 86400
+        fim2 = int(time.time()) + 60 * 86400
+        await _post(client, _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_r1", invoice_id=f"in_{pref}_r1",
+            sub_id=sub, aluno_id=seed["aluno_id"], period_end=fim1,
+        ))
+        await _post(client, _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_r2", invoice_id=f"in_{pref}_r2",
+            sub_id=sub, aluno_id=seed["aluno_id"], period_end=fim2,
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat is not None
+        esperado = datetime.fromtimestamp(fim2, tz=timezone.utc)
+        assert abs((mat.data_expiracao - esperado).total_seconds()) < 5
+
+    async def test_subscription_deleted_revoga(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}"
+        await _post(client, _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_d1", invoice_id=f"in_{pref}_d1",
+            sub_id=sub, aluno_id=seed["aluno_id"],
+        ))
+        assert (await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])).status == StatusMatricula.ativo
+
+        resp = await _post(client, _sub_event(
+            "customer.subscription.deleted", event_id=f"evt_{pref}_del", sub_id=sub,
+        ))
+        assert resp.status_code == 200
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat.status == StatusMatricula.expirado
+
+    async def test_invoice_paid_duplicado(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        ev = _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_dup", invoice_id=f"in_{pref}_dup",
+            sub_id=f"sub_{pref}", aluno_id=seed["aluno_id"],
+        )
+        await _post(client, ev)
+        await _post(client, ev)  # mesmo event.id → no-op
+        pags = await _pagamentos(seed["aluno_id"])
+        assert sum(1 for p in pags if p.gateway_transaction_id == f"in_{pref}_dup") == 1

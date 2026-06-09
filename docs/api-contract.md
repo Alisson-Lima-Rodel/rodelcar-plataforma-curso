@@ -244,6 +244,12 @@ Regras obrigatórias:
 - Em pagamento confirmado → cria/renova `Matricula` (status `ativo`,
   `data_expiracao = agora + curso.validade_dias`).
 
+> **Nota de implementação (Stripe):** o payload abaixo é *ilustrativo/normalizado*. O
+> handler real consome o **evento nativo do Stripe** (`checkout.session.completed`,
+> `checkout.session.async_payment_succeeded` p/ Pix) e resolve o aluno por
+> `metadata.app_user_id` e o curso por `metadata.curso_slug` (mais robusto que `aluno_email`).
+> Validação **fail-closed**: sem `STRIPE_WEBHOOK_SECRET` retorna 503.
+
 ```json
 // exemplo de payload normalizado internamente (varia por gateway)
 {

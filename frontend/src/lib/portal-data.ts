@@ -42,6 +42,7 @@ export interface Video {
   t: string;
   dur: string;
   views: string;
+  url?: string;
 }
 
 export interface Testimonial {
@@ -219,73 +220,9 @@ export const PREMIUM: Premium = {
   ],
 };
 
-export const VIDEOS: Video[] = [
-  {
-    t: "Fiat Dualogic dando trancos: o que checar primeiro",
-    dur: "12:48",
-    views: "84 mil",
-  },
-  {
-    t: "Ford PowerShift: por que a embreagem seca falha",
-    dur: "14:21",
-    views: "127 mil",
-  },
-  {
-    t: "VW iMotion no Fox: atuador e calibração passo a passo",
-    dur: "18:05",
-    views: "61 mil",
-  },
-];
-
-export const TESTIMONIALS: Testimonial[] = [
-  {
-    name: "Rogério Alves",
-    role: "Mecânico · Gravataí/RS",
-    stars: 5,
-    text: "Parei de trocar peça no chute no Dualogic. Com o método fechei 3 câmbios na primeira semana e o cliente confia no laudo. Mudou minha oficina.",
-  },
-  {
-    name: "Daniela Prado",
-    role: "Proprietária de oficina · Curitiba/PR",
-    stars: 5,
-    text: "Coloquei dois funcionários no Premium. O nível técnico em automatizado subiu e os retrabalhos despencaram. O acesso de um ano paga muito mais que o valor.",
-  },
-  {
-    name: "Marcos Tavares",
-    role: "Mecânico autônomo · Canoas/RS",
-    stars: 5,
-    text: "A didática da Rödelcar é de quem está na bancada todo dia. Sem enrolação, direto ao ponto. Os PDFs de calibração eu uso toda semana.",
-  },
-  {
-    name: "Felipe Nunes",
-    role: "Técnico em transmissões · Joinville/SC",
-    stars: 5,
-    text: "O curso de PowerShift clareou tudo sobre a embreagem seca. Hoje leio o scanner com confiança e fecho o orçamento certo de primeira.",
-  },
-];
-
-export const FAQ: Faq[] = [
-  {
-    q: "Por quanto tempo tenho acesso?",
-    a: "Cada compra dá 1 ano de acesso completo ao conteúdo, com todas as atualizações lançadas dentro do período de vigência.",
-  },
-  {
-    q: "Os cursos cobrem câmbio automatizado e automático?",
-    a: "Sim. A especialidade da Rödelcar são os automatizados — Dualogic, PowerShift, iMotion, Easytronic e DSG — além do câmbio automático convencional. A Formação Completa reúne todos.",
-  },
-  {
-    q: "Preciso de ferramentas caras para acompanhar?",
-    a: "Não. Mostramos a bancada mínima viável e como tirar o máximo do scanner e do multímetro que você já tem antes de investir em equipamento dedicado.",
-  },
-  {
-    q: "A avaliação presencial é em Canoas?",
-    a: "Sim. A oficina fica na Rua Esperança, 521 — Estância Velha, Canoas-RS. Você agenda a avaliação e recebe o laudo técnico do seu veículo.",
-  },
-  {
-    q: "Como funciona o certificado?",
-    a: "Ao concluir um curso você recebe um certificado com código único verificável — ideal para comprovar especialização para clientes e empregadores.",
-  },
-];
+// Vídeos (prova social) e FAQ agora vêm do backend (ativos) via getVideos()/
+// getFaq() → props do SocialProof e do CourseDetail. Os tipos `Video`/`Faq`
+// seguem aqui por serem a forma usada na UI.
 
 export function getCourse(id: string): Course | undefined {
   return COURSES.find((c) => c.id === id);

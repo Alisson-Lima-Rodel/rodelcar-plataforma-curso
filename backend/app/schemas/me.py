@@ -51,3 +51,35 @@ class DashboardResponse(BaseModel):
     ultima_aula: UltimaAula | None
     alertas: list[Alerta]
     resumo: ResumoDashboard
+
+
+# ── Player do curso (estrutura + progresso por aula) ──────────────────────────
+class PlayerAula(BaseModel):
+    id: uuid.UUID
+    titulo: str
+    duracao_label: str
+    concluida: bool
+    percentual: float
+
+
+class PlayerModulo(BaseModel):
+    id: uuid.UUID
+    titulo: str
+    ordem: int
+    aulas: list[PlayerAula]
+
+
+class CertificadoResumo(BaseModel):
+    codigo: str
+    emitido_em: datetime
+
+
+class PlayerCursoResponse(BaseModel):
+    matricula_id: uuid.UUID
+    curso: CursoResumo
+    horas: str | None = None
+    status: StatusMatricula
+    progresso_percentual: float
+    concluido: bool
+    certificado: CertificadoResumo | None = None
+    modulos: list[PlayerModulo]

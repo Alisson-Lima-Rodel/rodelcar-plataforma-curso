@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -162,6 +162,62 @@ class PacoteUpdate(BaseModel):
     ordem: int | None = None
 
 
+# ── Vídeos (prova social) ─────────────────────────────────────────────────────
+class VideoAdmin(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    titulo: str
+    youtube_url: str | None = None
+    duracao: str | None = None
+    views: str | None = None
+    status: str
+    ordem: int
+
+
+class VideoCreate(BaseModel):
+    titulo: str = Field(min_length=2, max_length=200)
+    youtube_url: str | None = None
+    duracao: str | None = None
+    views: str | None = None
+    status: str = "Ativo"
+    ordem: int = 0
+
+
+class VideoUpdate(BaseModel):
+    titulo: str | None = None
+    youtube_url: str | None = None
+    duracao: str | None = None
+    views: str | None = None
+    status: str | None = None
+    ordem: int | None = None
+
+
+# ── FAQ (página de venda) ─────────────────────────────────────────────────────
+class FaqAdmin(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    pergunta: str
+    resposta: str
+    status: str
+    ordem: int
+
+
+class FaqCreate(BaseModel):
+    pergunta: str = Field(min_length=2, max_length=300)
+    resposta: str = Field(min_length=2)
+    status: str = "Ativo"
+    ordem: int = 0
+
+
+class FaqUpdate(BaseModel):
+    pergunta: str | None = None
+    resposta: str | None = None
+    status: str | None = None
+    ordem: int | None = None
+
+
 # ── Administradores (usuários do painel) ──────────────────────────────────────
 class AdminUserItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -188,3 +244,32 @@ class AdminUserUpdate(BaseModel):
     senha: str | None = None
     papel: PapelAdmin | None = None
     ativo: bool | None = None
+
+
+# ── Alunos (gestão pelo painel) ───────────────────────────────────────────────
+# Campos de matrícula (cursos/vigência/status) são derivados e somente-leitura;
+# o cadastro edita só os dados reais do aluno. CPF fica fora do painel (LGPD).
+class AlunoAdminItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+    email: str
+    telefone: str | None = None
+    matriculas: int = 0
+    vigencia: date | None = None
+    status: str = "Inativo"
+
+
+class AlunoCreate(BaseModel):
+    nome: str = Field(min_length=2, max_length=160)
+    email: EmailStr
+    senha: str = Field(min_length=6, max_length=128)
+    telefone: str | None = None
+
+
+class AlunoUpdate(BaseModel):
+    nome: str | None = None
+    email: EmailStr | None = None
+    senha: str | None = None
+    telefone: str | None = None

@@ -1,7 +1,7 @@
 /* Cliente HTTP do backend RödelCar. Centraliza a base URL e o envelope de erro
    padrão do contrato (`{ error: { code, message, details } }`). */
 
-import type { Course } from "./portal-data";
+import type { Course, Faq, Testimonial, Video } from "./portal-data";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -158,6 +158,53 @@ export async function getCursos(): Promise<Course[]> {
     "/cursos?size=100",
   );
   return (data?.items ?? []).map(mapBase);
+}
+
+// ── Depoimentos (prova social pública) ────────────────────────────────────────
+interface ApiDepoimento {
+  nome: string;
+  papel?: string | null;
+  estrelas: number;
+  texto: string;
+}
+
+export async function getDepoimentos(): Promise<Testimonial[]> {
+  const data = await serverGet<ApiDepoimento[]>("/depoimentos");
+  return (data ?? []).map((d) => ({
+    name: d.nome,
+    role: d.papel ?? "",
+    stars: d.estrelas,
+    text: d.texto,
+  }));
+}
+
+// ── Vídeos (prova social) ─────────────────────────────────────────────────────
+interface ApiVideo {
+  titulo: string;
+  youtube_url?: string | null;
+  duracao?: string | null;
+  views?: string | null;
+}
+
+export async function getVideos(): Promise<Video[]> {
+  const data = await serverGet<ApiVideo[]>("/videos");
+  return (data ?? []).map((v) => ({
+    t: v.titulo,
+    dur: v.duracao ?? "",
+    views: v.views ?? "",
+    url: v.youtube_url ?? undefined,
+  }));
+}
+
+// ── FAQ (página de venda) ─────────────────────────────────────────────────────
+interface ApiFaq {
+  pergunta: string;
+  resposta: string;
+}
+
+export async function getFaq(): Promise<Faq[]> {
+  const data = await serverGet<ApiFaq[]>("/faq");
+  return (data ?? []).map((f) => ({ q: f.pergunta, a: f.resposta }));
 }
 
 export async function getCurso(slug: string): Promise<Course | null> {

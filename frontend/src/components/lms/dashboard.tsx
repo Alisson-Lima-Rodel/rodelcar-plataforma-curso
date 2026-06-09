@@ -24,7 +24,8 @@ function greeting() {
 export function Dashboard() {
   const router = useRouter();
   const { aluno } = useAuth();
-  const nav = (id: string) => router.push(lmsHref(id));
+  const goCurso = (id: string, slug: string) =>
+    router.push(`${lmsHref(id)}?slug=${encodeURIComponent(slug)}`);
   const [hello, setHello] = useState("Olá");
   useEffect(() => setHello(greeting()), []);
 
@@ -201,7 +202,9 @@ export function Dashboard() {
                 variant="primary"
                 size="lg"
                 icon="play"
-                onClick={() => nav("player")}
+                onClick={() =>
+                  goCurso("player", dash?.ultima_aula?.curso_slug ?? "")
+                }
               >
                 Retomar aula
               </Button>
@@ -258,7 +261,9 @@ export function Dashboard() {
               <div
                 key={m.id}
                 className="track"
-                onClick={() => nav(complete ? "certificate" : "player")}
+                onClick={() =>
+                  goCurso(complete ? "certificate" : "player", m.curso.slug)
+                }
               >
                 <span
                   className="track-ico"

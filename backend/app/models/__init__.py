@@ -398,3 +398,29 @@ class Pacote(Base):
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = _created_at()
+
+
+class Video(Base):
+    """Vídeo do YouTube exibido na prova social do portal."""
+    __tablename__ = "videos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    titulo: Mapped[str] = mapped_column(String(200))
+    youtube_url: Mapped[str | None] = mapped_column(String(500))
+    duracao: Mapped[str | None] = mapped_column(String(20))
+    views: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = _created_at()
+
+
+class Faq(Base):
+    """Pergunta frequente exibida na página de venda do curso."""
+    __tablename__ = "faqs"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    pergunta: Mapped[str] = mapped_column(String(300))
+    resposta: Mapped[str] = mapped_column(Text())
+    status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = _created_at()

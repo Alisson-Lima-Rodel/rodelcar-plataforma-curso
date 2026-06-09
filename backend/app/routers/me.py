@@ -20,10 +20,14 @@ from app.models import (
 )
 from app.schemas.me import (
     Alerta,
+    CertificadoResumo,
     CursoResumo,
     DashboardResponse,
     MatriculaItem,
     MatriculaListResponse,
+    PlayerAula,
+    PlayerCursoResponse,
+    PlayerModulo,
     ResumoDashboard,
     UltimaAula,
 )
@@ -33,6 +37,11 @@ router = APIRouter(prefix="/me", tags=["me"])
 
 def _exp_aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _dur_label(segundos: int | None) -> str:
+    m, s = divmod(int(segundos or 0), 60)
+    return f"{m:02d}:{s:02d}"
 
 
 @router.get("/matriculas", response_model=MatriculaListResponse)
@@ -177,4 +186,107 @@ async def dashboard(
             aulas_concluidas=aulas_concluidas,
             certificados=certificados,
         ),
+    )
+
+
+@router.get("/cursos/{slug}", response_model=PlayerCursoResponse)
+async def player_curso(
+    slug: str,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Estrutura do curso + progresso por aula do aluno (alimenta o player e o
+    certificado). Exige matrícula no curso (qualquer status)."""
+    await checar_vigencia_aluno(aluno.id, db)
+
+    curso = (
+        await db.execute(
+            select(Curso)
+            .where(Curso.slug == slug)
+            .options(selectinload(Curso.modulos).selectinload(Modulo.aulas))
+        )
+    ).scalar_one_or_none()
+    if curso is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {
+                "code": "CURSO_NAO_ENCONTRADO",
+                "message": "Curso não encontrado.",
+                "details": None,
+            }},
+        )
+
+    matricula = (
+        await db.execute(
+            select(Matricula).where(
+                Matricula.aluno_id == aluno.id,
+                Matricula.curso_id == curso.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if matricula is None:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": {
+                "code": "ACESSO_NEGADO",
+                "message": "Você não possui matrícula neste curso.",
+                "details": None,
+            }},
+        )
+
+    progs = (
+        await db.execute(
+            select(Progresso).where(Progresso.matricula_id == matricula.id)
+        )
+    ).scalars().all()
+    pmap = {p.aula_id: p for p in progs}
+
+    modulos: list[PlayerModulo] = []
+    total = 0
+    concluidas = 0
+    soma_pct = 0.0
+    for m in sorted(curso.modulos, key=lambda x: x.ordem):
+        aulas = []
+        for a in sorted(m.aulas, key=lambda x: x.ordem):
+            p = pmap.get(a.id)
+            feita = bool(p.concluida) if p else False
+            pct = float(p.percentual) if p else 0.0
+            total += 1
+            concluidas += 1 if feita else 0
+            soma_pct += pct
+            aulas.append(
+                PlayerAula(
+                    id=a.id,
+                    titulo=a.titulo,
+                    duracao_label=_dur_label(a.duracao_segundos),
+                    concluida=feita,
+                    percentual=pct,
+                )
+            )
+        modulos.append(
+            PlayerModulo(id=m.id, titulo=m.titulo, ordem=m.ordem, aulas=aulas)
+        )
+
+    pct_curso = round(soma_pct / total, 1) if total else 0.0
+    concluido = total > 0 and concluidas == total
+
+    cert = (
+        await db.execute(
+            select(Certificado).where(Certificado.matricula_id == matricula.id)
+        )
+    ).scalar_one_or_none()
+
+    return PlayerCursoResponse(
+        matricula_id=matricula.id,
+        curso=CursoResumo(id=curso.id, slug=curso.slug, titulo=curso.titulo),
+        horas=curso.horas,
+        status=matricula.status,
+        progresso_percentual=pct_curso,
+        concluido=concluido,
+        certificado=(
+            CertificadoResumo(codigo=cert.codigo_verificacao, emitido_em=cert.emitido_em)
+            if cert
+            else None
+        ),
+        modulos=modulos,
     )

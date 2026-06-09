@@ -11,6 +11,8 @@ const NAV: { id: string; label: string; icon: string }[] = [
   { id: "courses", label: "Cursos", icon: "book" },
   { id: "testimonials", label: "Depoimentos", icon: "message" },
   { id: "packages", label: "Pacotes", icon: "award" },
+  { id: "videos", label: "Vídeos", icon: "play" },
+  { id: "faq", label: "FAQ", icon: "book" },
   { id: "admins", label: "Administradores", icon: "shield" },
 ];
 

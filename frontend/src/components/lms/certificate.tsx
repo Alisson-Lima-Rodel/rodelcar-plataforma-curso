@@ -1,24 +1,200 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/reveal";
-import { CERT } from "@/lib/student-data";
+import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/components/providers/auth-provider";
+import {
+  emitirCertificado,
+  getCursoPlayer,
+  getMatriculas,
+  type PlayerCurso,
+} from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
+
+function fmtDate(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 
 export function Certificate() {
   const router = useRouter();
+  const qc = useQueryClient();
+  const { aluno } = useAuth();
+  const [querySlug, setQuerySlug] = useState<string | null | undefined>(
+    undefined,
+  );
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setQuerySlug(new URLSearchParams(window.location.search).get("slug"));
+  }, []);
+
+  const matQ = useQuery({
+    queryKey: ["me", "matriculas"],
+    queryFn: getMatriculas,
+    enabled: querySlug === null,
+  });
+  const slug = querySlug || matQ.data?.items?.[0]?.curso.slug || null;
+
+  const cursoQ = useQuery<PlayerCurso>({
+    queryKey: ["me", "player", slug],
+    queryFn: () => getCursoPlayer(slug as string),
+    enabled: !!slug,
+  });
+  const data = cursoQ.data;
+
+  const emitM = useMutation({
+    mutationFn: (matriculaId: string) => emitirCertificado(matriculaId),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["me", "player", slug] }),
+        qc.invalidateQueries({ queryKey: ["me", "dashboard"] }),
+      ]);
+    },
+  });
+
+  const cert = data?.certificado ?? null;
   const copy = () => {
-    if (navigator.clipboard)
-      navigator.clipboard.writeText(CERT.code).catch(() => {});
+    if (cert && navigator.clipboard)
+      navigator.clipboard.writeText(cert.codigo).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
 
+  const back = (
+    <button
+      className="btn btn-ghost btn-sm"
+      style={{ paddingLeft: 0, marginBottom: 18 }}
+      onClick={() => router.push(lmsHref("dashboard"))}
+    >
+      <Icon name="arrowLeft" size={16} /> Painel
+    </button>
+  );
+
+  if ((querySlug === null && matQ.isLoading) || cursoQ.isLoading) {
+    return (
+      <div className="content">
+        <span className="tag-mono muted">Carregando certificado…</span>
+      </div>
+    );
+  }
+  if (!slug || cursoQ.isError || !data) {
+    return (
+      <div className="content" style={{ maxWidth: 720 }}>
+        {back}
+        <div className="card" style={{ padding: 28, textAlign: "center" }}>
+          <h3 style={{ fontSize: "1.15rem", marginBottom: 8 }}>
+            Certificado indisponível
+          </h3>
+          <p className="muted" style={{ fontSize: "0.93rem" }}>
+            Não foi possível carregar este curso.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Curso ainda não concluído → não há certificado a emitir ────────────────
+  if (!cert && !data.concluido) {
+    return (
+      <div className="content" style={{ maxWidth: 720 }}>
+        {back}
+        <div className="card" style={{ padding: 32, textAlign: "center" }}>
+          <div className="cert-seal" style={{ opacity: 0.5 }}>
+            <Icon name="award" size={40} stroke={2.2} />
+          </div>
+          <h3 style={{ fontSize: "1.3rem", margin: "16px 0 8px" }}>
+            {data.curso.titulo}
+          </h3>
+          <p
+            className="muted"
+            style={{ fontSize: "0.95rem", marginBottom: 18 }}
+          >
+            Conclua todas as aulas para liberar seu certificado.
+          </p>
+          <div style={{ maxWidth: 360, margin: "0 auto 22px" }}>
+            <div className="flex between" style={{ marginBottom: 7 }}>
+              <span className="tag-mono">
+                {Math.round(data.progresso_percentual)}% concluído
+              </span>
+            </div>
+            <Progress value={data.progresso_percentual} />
+          </div>
+          <Button
+            variant="primary"
+            icon="play"
+            onClick={() =>
+              router.push(`${lmsHref("player")}?slug=${data.curso.slug}`)
+            }
+          >
+            Retomar curso
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Concluído, mas sem certificado emitido → emitir ────────────────────────
+  if (!cert && data.concluido) {
+    return (
+      <div className="content" style={{ maxWidth: 720 }}>
+        {back}
+        <div
+          className="card blueprint"
+          style={{ padding: 36, textAlign: "center" }}
+        >
+          <div className="cert-seal">
+            <Icon name="award" size={42} stroke={2.2} />
+          </div>
+          <Badge variant="success" icon="check">
+            Curso concluído
+          </Badge>
+          <h3 style={{ fontSize: "1.5rem", margin: "16px 0 8px" }}>
+            {data.curso.titulo}
+          </h3>
+          <p
+            className="muted"
+            style={{ fontSize: "0.95rem", marginBottom: 22 }}
+          >
+            Você concluiu todas as aulas. Emita seu certificado verificável.
+          </p>
+          {emitM.isError && (
+            <p
+              className="tag-mono"
+              style={{ color: "var(--danger)", marginBottom: 14 }}
+            >
+              Não foi possível emitir agora. Tente novamente.
+            </p>
+          )}
+          <Button
+            variant="primary"
+            size="lg"
+            icon="award"
+            onClick={() => emitM.mutate(data.matricula_id)}
+            className={emitM.isPending ? "is-disabled" : ""}
+          >
+            {emitM.isPending ? "Emitindo…" : "Emitir certificado"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Certificado emitido ─────────────────────────────────────────────────────
+  const studentName = aluno?.nome ?? "Aluno(a)";
   return (
     <div className="content" style={{ maxWidth: 880 }}>
       <div
@@ -32,12 +208,11 @@ export function Certificate() {
         >
           <Icon name="arrowLeft" size={16} /> Painel
         </button>
-        <span className="tag-mono">Certificado · {CERT.code}</span>
+        <span className="tag-mono">Certificado · {cert!.codigo}</span>
       </div>
 
       <Reveal className="cert blueprint">
         <div style={{ position: "relative", zIndex: 1 }}>
-          {/* seal */}
           <div className="cert-seal">
             <Icon name="award" size={46} stroke={2.2} />
           </div>
@@ -60,19 +235,23 @@ export function Certificate() {
               lineHeight: 1.1,
             }}
           >
-            {CERT.course}
+            {data.curso.titulo}
           </h1>
           <p
             className="muted"
             style={{ fontSize: "1.02rem", marginBottom: 30 }}
           >
             concedido a{" "}
-            <strong style={{ color: "var(--text)" }}>{CERT.student}</strong> por
-            concluir a carga horária de{" "}
-            <strong style={{ color: "var(--text)" }}>{CERT.hours}</strong>
+            <strong style={{ color: "var(--text)" }}>{studentName}</strong>
+            {data.horas ? (
+              <>
+                {" "}
+                por concluir a carga horária de{" "}
+                <strong style={{ color: "var(--text)" }}>{data.horas}</strong>
+              </>
+            ) : null}
           </p>
 
-          {/* meta row */}
           <div
             style={{
               display: "flex",
@@ -84,9 +263,9 @@ export function Certificate() {
           >
             {(
               [
-                ["Emitido em", CERT.date],
-                ["Instrutor", CERT.instructor],
-                ["Carga horária", CERT.hours],
+                ["Emitido em", fmtDate(cert!.emitido_em)],
+                ["Instrutor", "Equipe Rödelcar"],
+                ["Carga horária", data.horas ?? "—"],
               ] as [string, string][]
             ).map(([l, v], i) => (
               <div key={i} style={{ textAlign: "center" }}>
@@ -98,7 +277,6 @@ export function Certificate() {
             ))}
           </div>
 
-          {/* código de verificação em mono */}
           <div style={{ marginBottom: 8 }}>
             <div className="tag-mono subtle" style={{ marginBottom: 10 }}>
               CÓDIGO DE VERIFICAÇÃO
@@ -109,7 +287,7 @@ export function Certificate() {
               style={{ cursor: "pointer" }}
               title="Copiar código"
             >
-              {CERT.code}
+              {cert!.codigo}
               <Icon
                 name={copied ? "check" : "file"}
                 size={16}
@@ -124,7 +302,6 @@ export function Certificate() {
         </div>
       </Reveal>
 
-      {/* ações — uma única dominante */}
       <div
         className="flex center"
         style={{
@@ -134,12 +311,6 @@ export function Certificate() {
           flexWrap: "wrap",
         }}
       >
-        <Button variant="primary" size="lg" icon="download">
-          Baixar certificado (PDF)
-        </Button>
-        <Button variant="secondary" size="lg" icon="users">
-          Compartilhar no LinkedIn
-        </Button>
         <Button
           variant="ghost"
           size="lg"
@@ -148,47 +319,6 @@ export function Certificate() {
           Voltar ao painel
         </Button>
       </div>
-
-      {/* próximo passo */}
-      <Reveal
-        className="card blueprint"
-        style={{
-          marginTop: 36,
-          padding: "28px 32px",
-          position: "relative",
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          className="glow-amber"
-          style={{ width: 300, height: 200, top: -80, right: -40 }}
-        />
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <Badge variant="cyan" icon="bolt">
-            Próximo passo
-          </Badge>
-          <h3 style={{ fontSize: "1.3rem", margin: "12px 0 6px" }}>
-            Continue para o Câmbio Automático Convencional
-          </h3>
-          <p className="muted" style={{ fontSize: "0.94rem" }}>
-            Você está a 4 aulas de mais um certificado.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          size="lg"
-          iconRight="arrow"
-          onClick={() => router.push(lmsHref("player"))}
-          style={{ position: "relative", zIndex: 1, flexShrink: 0 }}
-        >
-          Retomar curso
-        </Button>
-      </Reveal>
     </div>
   );
 }

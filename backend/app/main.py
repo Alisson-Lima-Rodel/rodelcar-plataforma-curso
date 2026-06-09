@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.core.scheduler import iniciar_scheduler, parar_scheduler
-from app.routers import admin, auth, aulas, certificados, cursos, internal, leads, me, progresso, webhooks_wa
+from app.routers import admin, auth, aulas, certificados, conteudo, cursos, depoimentos, internal, leads, me, progresso, webhooks_wa
 
 
 @asynccontextmanager
@@ -108,6 +108,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(cursos.router, prefix="/api/v1")
+app.include_router(depoimentos.router, prefix="/api/v1")
+app.include_router(conteudo.router, prefix="/api/v1")
 app.include_router(leads.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(me.router, prefix="/api/v1")

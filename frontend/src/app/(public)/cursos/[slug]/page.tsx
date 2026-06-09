@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CourseDetail } from "@/components/portal/course-detail";
-import { getCurso } from "@/lib/api";
+import { getCurso, getFaq } from "@/lib/api";
 
 interface Params {
   params: { slug: string };
@@ -18,11 +18,11 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 export default async function CoursePage({ params }: Params) {
-  const course = await getCurso(params.slug);
+  const [course, faqs] = await Promise.all([getCurso(params.slug), getFaq()]);
   if (!course) notFound();
   return (
     <main>
-      <CourseDetail course={course} />
+      <CourseDetail course={course} faqs={faqs} />
     </main>
   );
 }

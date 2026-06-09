@@ -1,9 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { AdminItem, EntityKey } from "@/lib/admin-data";
+import { ADMIN_CRUD } from "@/lib/admin-api";
 
 function StatCard({
   icon,
@@ -40,23 +42,40 @@ function StatCard({
   );
 }
 
+// Mesma queryKey do RemoteEntityManager → cache compartilhado e atualizado
+// automaticamente quando um cadastro é criado/editado/excluído.
+function useAdminList(key: EntityKey): AdminItem[] {
+  const { data } = useQuery({
+    queryKey: ["admin", key],
+    queryFn: ADMIN_CRUD[key].list,
+  });
+  return (data ?? []) as AdminItem[];
+}
+
+function initials(name: string) {
+  return (name || "?")
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function Overview({
-  data,
   onNav,
   onNew,
 }: {
-  data: Record<EntityKey, AdminItem[]>;
   onNav: (v: string) => void;
   onNew: (key: EntityKey) => void;
 }) {
-  const activeStudents = data.students.filter(
-    (s) => s.status === "Ativo",
-  ).length;
-  const publishedCourses = data.courses.filter(
-    (c) => c.status === "Publicado",
-  ).length;
-  const pending = data.testimonials.filter((t) => t.status === "Pendente");
-  const activePkgs = data.packages.filter((p) => p.status === "Ativo").length;
+  const students = useAdminList("students");
+  const courses = useAdminList("courses");
+  const testimonials = useAdminList("testimonials");
+  const packages = useAdminList("packages");
+
+  const activeStudents = students.filter((s) => s.status === "Ativo").length;
+  const pending = testimonials.filter((t) => t.status === "Pendente");
+  const activePkgs = packages.filter((p) => p.status === "Ativo").length;
 
   return (
     <div
@@ -78,13 +97,13 @@ export function Overview({
           icon="users"
           value={activeStudents}
           label="Alunos ativos"
-          hint={`${data.students.length} no total`}
+          hint={`${students.length} no total`}
         />
         <StatCard
           icon="book"
-          value={publishedCourses}
-          label="Cursos publicados"
-          hint={`${data.courses.length} cadastrados`}
+          value={courses.length}
+          label="Cursos"
+          hint="no catálogo"
         />
         <StatCard
           icon="message"
@@ -124,7 +143,15 @@ export function Overview({
             </Button>
           </div>
           <div>
-            {data.students.slice(0, 5).map((s, i) => (
+            {students.length === 0 && (
+              <div
+                className="muted"
+                style={{ padding: "22px 20px", fontSize: "0.92rem" }}
+              >
+                Nenhum aluno cadastrado ainda.
+              </div>
+            )}
+            {students.slice(0, 5).map((s, i) => (
               <div
                 key={String(s.id)}
                 className="flex center between"
@@ -135,11 +162,7 @@ export function Overview({
               >
                 <div className="cell-user">
                   <span className="cell-avatar">
-                    {String(s.nome)
-                      .split(" ")
-                      .map((n) => n[0])
-                      .slice(0, 2)
-                      .join("")}
+                    {initials(String(s.nome))}
                   </span>
                   <div>
                     <div
@@ -148,15 +171,13 @@ export function Overview({
                     >
                       {s.nome}
                     </div>
-                    <div className="tag-mono">{s.cidade}</div>
+                    <div className="tag-mono">{s.email}</div>
                   </div>
                 </div>
                 <div className="flex center gap-3">
-                  <Badge variant={s.plano === "Premium Anual" ? "premium" : ""}>
-                    {s.plano}
-                  </Badge>
+                  <Badge variant="">{Number(s.matriculas) || 0} cursos</Badge>
                   <Badge variant={s.status === "Ativo" ? "success" : ""}>
-                    {s.status}
+                    {String(s.status)}
                   </Badge>
                 </div>
               </div>

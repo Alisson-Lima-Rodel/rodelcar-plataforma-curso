@@ -98,8 +98,11 @@ export function adminCrud(path: string) {
 export type AdminCrud = ReturnType<typeof adminCrud>;
 
 export const ADMIN_CRUD: Record<string, AdminCrud> = {
+  students: adminCrud("/admin/alunos"),
   courses: adminCrud("/admin/cursos"),
   testimonials: adminCrud("/admin/depoimentos"),
   packages: adminCrud("/admin/pacotes"),
+  videos: adminCrud("/admin/videos"),
+  faq: adminCrud("/admin/faqs"),
   admins: adminCrud("/admin/administradores"),
 };

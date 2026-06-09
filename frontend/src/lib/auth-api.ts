@@ -127,6 +127,49 @@ async function authGet<T>(path: string, retry = true): Promise<T> {
   return data as T;
 }
 
+/** POST autenticado (mutação), com 1 retry após renovar o access no 401. */
+async function authPost<T>(
+  path: string,
+  body?: unknown,
+  retry = true,
+): Promise<T> {
+  const token = getAccessToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Não foi possível conectar ao servidor.",
+      null,
+    );
+  }
+  if (res.status === 401 && retry && (await tryRefresh())) {
+    return authPost<T>(path, body, false);
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  const data = text ? (JSON.parse(text) as unknown) : null;
+  if (!res.ok) {
+    const err = (data as ApiErrorEnvelope | null)?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? "ERROR",
+      err?.message ?? res.statusText,
+      err?.details ?? null,
+    );
+  }
+  return data as T;
+}
+
 // ── Tipos das respostas ───────────────────────────────────────────────────────
 export interface Me {
   id: string;
@@ -160,7 +203,74 @@ export interface MatriculaItem {
   progresso_percentual: number;
 }
 
+export interface AulaMaterial {
+  id: string;
+  nome: string;
+  url_pdf: string;
+}
+
+export interface AulaDetail {
+  id: string;
+  titulo: string;
+  modulo_id: string;
+  panda_video_id: string | null;
+  duracao_segundos: number;
+  materiais: AulaMaterial[];
+  progresso: { concluida: boolean; percentual: number };
+}
+
+export interface PlayerAula {
+  id: string;
+  titulo: string;
+  duracao_label: string;
+  concluida: boolean;
+  percentual: number;
+}
+
+export interface PlayerModulo {
+  id: string;
+  titulo: string;
+  ordem: number;
+  aulas: PlayerAula[];
+}
+
+export interface PlayerCurso {
+  matricula_id: string;
+  curso: { id: string; slug: string; titulo: string };
+  horas: string | null;
+  status: string;
+  progresso_percentual: number;
+  concluido: boolean;
+  certificado: { codigo: string; emitido_em: string } | null;
+  modulos: PlayerModulo[];
+}
+
+export interface CertificadoEmitido {
+  id: string;
+  codigo_verificacao: string;
+  emitido_em: string;
+}
+
 export const getMe = () => authGet<Me>("/auth/me");
 export const getDashboard = () => authGet<DashboardData>("/me/dashboard");
 export const getMatriculas = () =>
   authGet<{ items: MatriculaItem[] }>("/me/matriculas");
+
+export const getCursoPlayer = (slug: string) =>
+  authGet<PlayerCurso>(`/me/cursos/${encodeURIComponent(slug)}`);
+export const getAula = (aulaId: string) =>
+  authGet<AulaDetail>(`/aulas/${aulaId}`);
+
+export const salvarProgresso = (
+  aula_id: string,
+  percentual: number,
+  concluida: boolean,
+) =>
+  authPost<{ curso_percentual: number }>("/progresso", {
+    aula_id,
+    percentual,
+    concluida,
+  });
+
+export const emitirCertificado = (matriculaId: string) =>
+  authPost<CertificadoEmitido>(`/certificados/${matriculaId}`);

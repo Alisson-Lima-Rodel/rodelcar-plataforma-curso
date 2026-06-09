@@ -1,35 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  PLAYER_MODULES,
-  MATERIALS,
-  QA,
-  type PlayerModule,
-} from "@/lib/student-data";
+  getAula,
+  getCursoPlayer,
+  getMatriculas,
+  salvarProgresso,
+  type AulaDetail,
+  type PlayerCurso,
+  type PlayerModulo,
+} from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
 
 function ModuleNav({
   modules,
-  current,
+  currentId,
+  initialOpen,
   onPick,
 }: {
-  modules: PlayerModule[];
-  current: string;
-  onPick: (k: string) => void;
+  modules: PlayerModulo[];
+  currentId: string | null;
+  initialOpen: number;
+  onPick: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(2);
+  const [open, setOpen] = useState(initialOpen);
+  useEffect(() => setOpen(initialOpen), [initialOpen]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {modules.map((m, mi) => {
         const isOpen = open === mi;
-        const doneCount = m.lessons.filter((l) => l.state === "done").length;
+        const doneCount = m.aulas.filter((a) => a.concluida).length;
         return (
-          <div key={mi} className="acc-item">
+          <div key={m.id} className="acc-item">
             <button
               className="acc-head"
               onClick={() => setOpen(isOpen ? -1 : mi)}
@@ -40,7 +47,7 @@ function ModuleNav({
                 style={{
                   fontSize: "0.78rem",
                   color:
-                    doneCount === m.lessons.length
+                    doneCount === m.aulas.length && m.aulas.length
                       ? "var(--success)"
                       : "var(--primary)",
                   width: 24,
@@ -56,10 +63,10 @@ function ModuleNav({
                   lineHeight: 1.2,
                 }}
               >
-                {m.t}
+                {m.titulo}
               </span>
               <span className="tag-mono" style={{ marginRight: 8 }}>
-                {doneCount}/{m.lessons.length}
+                {doneCount}/{m.aulas.length}
               </span>
               <Icon
                 name="chevron"
@@ -73,34 +80,23 @@ function ModuleNav({
             </button>
             <div
               className="acc-body"
-              style={{ maxHeight: isOpen ? m.lessons.length * 56 + 8 : 0 }}
+              style={{ maxHeight: isOpen ? m.aulas.length * 56 + 8 : 0 }}
             >
               <div style={{ padding: "4px 8px 8px" }}>
-                {m.lessons.map((l, li) => {
-                  const key = `${mi}-${li}`;
-                  const isCurrent = current === key;
+                {m.aulas.map((a) => {
+                  const isCurrent = currentId === a.id;
                   return (
                     <div
-                      key={li}
+                      key={a.id}
                       className={`lesson ${isCurrent ? "current" : ""}`.trim()}
-                      onClick={() => l.state !== "locked" && onPick(key)}
-                      style={{
-                        cursor:
-                          l.state === "locked" ? "not-allowed" : "pointer",
-                        opacity: l.state === "locked" ? 0.55 : 1,
-                      }}
+                      onClick={() => onPick(a.id)}
+                      style={{ cursor: "pointer" }}
                     >
                       <span
-                        className={`lesson-check ${l.state === "done" ? "done" : ""} ${isCurrent ? "current" : ""}`.trim()}
+                        className={`lesson-check ${a.concluida ? "done" : ""} ${isCurrent ? "current" : ""}`.trim()}
                       >
-                        {l.state === "done" ? (
+                        {a.concluida ? (
                           <Icon name="check" size={13} stroke={3} />
-                        ) : l.state === "locked" ? (
-                          <Icon
-                            name="lock"
-                            size={11}
-                            style={{ color: "var(--text-subtle)" }}
-                          />
                         ) : (
                           <Icon name="play" size={10} />
                         )}
@@ -116,9 +112,9 @@ function ModuleNav({
                           lineHeight: 1.25,
                         }}
                       >
-                        {l.t}
+                        {a.titulo}
                       </span>
-                      <span className="tag-mono">{l.dur}</span>
+                      <span className="tag-mono">{a.duracao_label}</span>
                     </div>
                   );
                 })}
@@ -131,23 +127,37 @@ function ModuleNav({
   );
 }
 
-function Materials() {
+function Materials({ aula }: { aula: AulaDetail | undefined }) {
+  const mats = aula?.materiais ?? [];
+  if (!mats.length) {
+    return (
+      <div
+        className="muted"
+        style={{ fontSize: "0.92rem", padding: "8px 2px" }}
+      >
+        Nenhum material de apoio nesta aula.
+      </div>
+    );
+  }
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {MATERIALS.map((m, i) => (
-        <div key={i} className="material">
+      {mats.map((m) => (
+        <div key={m.id} className="material">
           <span className="file-ico">
             <Icon name="file" size={20} />
           </span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: "0.94rem" }}>{m.t}</div>
-            <span className="tag-mono">
-              {m.type} · {m.size} · {m.pages} pág.
-            </span>
+            <div style={{ fontWeight: 600, fontSize: "0.94rem" }}>{m.nome}</div>
+            <span className="tag-mono">PDF</span>
           </div>
-          <Button variant="ghost" size="sm" icon="download">
-            Baixar
-          </Button>
+          <a
+            href={m.url_pdf}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost btn-sm"
+          >
+            <Icon name="download" size={16} /> Baixar
+          </a>
         </div>
       ))}
       <div
@@ -171,79 +181,45 @@ function Materials() {
 }
 
 function Community() {
-  const [text, setText] = useState("");
   return (
-    <div>
-      <div className="flex gap-3" style={{ marginBottom: 8 }}>
-        <textarea
-          className="textarea"
-          placeholder="Tem uma dúvida sobre esta aula? Pergunte à comunidade e à equipe Rödelcar..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          style={{ minHeight: 70 }}
-        />
-      </div>
-      <div className="flex between center" style={{ marginBottom: 4 }}>
-        <span className="tag-mono">{QA.length} perguntas nesta aula</span>
-        <Button variant="primary" size="sm" icon="message">
-          Publicar pergunta
-        </Button>
-      </div>
-      <div>
-        {QA.map((q, i) => (
-          <div key={i} className="qa">
-            <span
-              className="avatar"
-              style={{
-                background: q.instructor ? "var(--primary)" : undefined,
-                color: q.instructor ? "var(--primary-fg)" : undefined,
-                borderColor: q.instructor ? "var(--primary)" : undefined,
-              }}
-            >
-              {q.initials}
-            </span>
-            <div>
-              <div
-                className="flex center gap-3"
-                style={{ marginBottom: 5, flexWrap: "wrap" }}
-              >
-                <span style={{ fontWeight: 600, fontSize: "0.92rem" }}>
-                  {q.name}
-                </span>
-                {q.instructor && (
-                  <Badge variant="amber" icon="shield">
-                    Instrutor
-                  </Badge>
-                )}
-                <span className="tag-mono subtle">{q.time}</span>
-              </div>
-              <p
-                style={{
-                  fontSize: "0.93rem",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.5,
-                  marginBottom: 10,
-                }}
-              >
-                {q.text}
-              </p>
-              <div className="flex center gap-6">
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ padding: "4px 6px", color: "var(--text-subtle)" }}
-                >
-                  <Icon name="spark" size={14} /> {q.likes}
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ padding: "4px 6px", color: "var(--text-subtle)" }}
-                >
-                  <Icon name="message" size={14} /> {q.replies} respostas
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+    <div
+      className="flex center gap-3"
+      style={{
+        padding: "18px 20px",
+        borderRadius: 12,
+        background: "var(--surface-2)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <Icon name="message" size={20} style={{ color: "var(--accent)" }} />
+      <span className="muted" style={{ fontSize: "0.92rem" }}>
+        Dúvidas e comunidade por aula chegam em breve. Por enquanto, fale com a
+        equipe Rödelcar pelos canais de suporte.
+      </span>
+    </div>
+  );
+}
+
+function StateMessage({
+  title,
+  children,
+}: {
+  title: string;
+  children?: React.ReactNode;
+}) {
+  const router = useRouter();
+  return (
+    <div className="content" style={{ maxWidth: 720 }}>
+      <button
+        className="btn btn-ghost btn-sm"
+        style={{ paddingLeft: 0, marginBottom: 18 }}
+        onClick={() => router.push(lmsHref("dashboard"))}
+      >
+        <Icon name="arrowLeft" size={16} /> Painel
+      </button>
+      <div className="card" style={{ padding: 28, textAlign: "center" }}>
+        <h3 style={{ fontSize: "1.15rem", marginBottom: 8 }}>{title}</h3>
+        {children}
       </div>
     </div>
   );
@@ -251,34 +227,113 @@ function Community() {
 
 export function Player() {
   const router = useRouter();
-  const [current, setCurrent] = useState("2-1");
+  const qc = useQueryClient();
+  const [querySlug, setQuerySlug] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [currentId, setCurrentId] = useState<string | null>(null);
   const [tab, setTab] = useState("materiais");
 
-  const [mi, li] = current.split("-").map(Number);
-  const lesson = {
-    ...PLAYER_MODULES[mi].lessons[li],
-    module: PLAYER_MODULES[mi].t,
-  };
+  // slug vem de ?slug= ; na falta, usa a primeira matrícula do aluno.
+  useEffect(() => {
+    setQuerySlug(new URLSearchParams(window.location.search).get("slug"));
+  }, []);
 
+  const matQ = useQuery({
+    queryKey: ["me", "matriculas"],
+    queryFn: getMatriculas,
+    enabled: querySlug === null,
+  });
+  const slug = querySlug || matQ.data?.items?.[0]?.curso.slug || null;
+
+  const playerQ = useQuery<PlayerCurso>({
+    queryKey: ["me", "player", slug],
+    queryFn: () => getCursoPlayer(slug as string),
+    enabled: !!slug,
+  });
+  const data = playerQ.data;
+
+  const flat = useMemo(
+    () =>
+      data
+        ? data.modulos.flatMap((m, mi) =>
+            m.aulas.map((a) => ({ ...a, moduloTitulo: m.titulo, mi })),
+          )
+        : [],
+    [data],
+  );
+
+  // aula atual: a selecionada, ou a primeira não concluída, ou a primeira.
+  useEffect(() => {
+    if (data && flat.length && !flat.some((a) => a.id === currentId)) {
+      const firstUndone = flat.find((a) => !a.concluida) ?? flat[0];
+      setCurrentId(firstUndone.id);
+    }
+  }, [data, flat, currentId]);
+
+  const currentLesson = flat.find((a) => a.id === currentId) ?? null;
+  const aulaQ = useQuery<AulaDetail>({
+    queryKey: ["aula", currentId],
+    queryFn: () => getAula(currentId as string),
+    enabled: !!currentId,
+  });
+
+  const concludeM = useMutation({
+    mutationFn: (aulaId: string) => salvarProgresso(aulaId, 100, true),
+    onSuccess: async () => {
+      const idx = flat.findIndex((a) => a.id === currentId);
+      const next = flat[idx + 1];
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["me", "player", slug] }),
+        qc.invalidateQueries({ queryKey: ["me", "dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["me", "matriculas"] }),
+      ]);
+      if (next) setCurrentId(next.id);
+    },
+  });
+
+  // ── Estados de carga / vazio / erro ─────────────────────────────────────────
+  if (querySlug === null && matQ.isLoading) {
+    return (
+      <div className="content">
+        <span className="tag-mono muted">Carregando seu curso…</span>
+      </div>
+    );
+  }
+  if (!slug) {
+    return (
+      <StateMessage title="Você ainda não está matriculado em nenhum curso.">
+        <Button
+          variant="secondary"
+          icon="book"
+          onClick={() => router.push("/cursos")}
+        >
+          Ver cursos
+        </Button>
+      </StateMessage>
+    );
+  }
+  if (playerQ.isLoading) {
+    return (
+      <div className="content">
+        <span className="tag-mono muted">Carregando seu curso…</span>
+      </div>
+    );
+  }
+  if (playerQ.isError || !data) {
+    return (
+      <StateMessage title="Não foi possível abrir este curso.">
+        <p className="muted" style={{ fontSize: "0.93rem" }}>
+          Sua matrícula pode ter expirado. Volte ao painel e tente novamente.
+        </p>
+      </StateMessage>
+    );
+  }
+
+  const doneTotal = flat.filter((a) => a.concluida).length;
   const tabs = [
-    {
-      id: "materiais",
-      label: "Materiais",
-      icon: "file",
-      count: MATERIALS.length,
-    },
-    {
-      id: "duvidas",
-      label: "Dúvidas & Comunidade",
-      icon: "message",
-      count: QA.length,
-    },
-    {
-      id: "sobre",
-      label: "Sobre a aula",
-      icon: "book",
-      count: null as number | null,
-    },
+    { id: "materiais", label: "Materiais", icon: "file" },
+    { id: "duvidas", label: "Dúvidas & Comunidade", icon: "message" },
   ];
 
   return (
@@ -296,7 +351,8 @@ export function Player() {
           <Icon name="arrowLeft" size={16} /> Painel
         </button>
         <span className="tag-mono">
-          Câmbio Automático Convencional · {lesson.module}
+          {data.curso.titulo}
+          {currentLesson ? ` · ${currentLesson.moduloTitulo}` : ""}
         </span>
       </div>
 
@@ -323,7 +379,9 @@ export function Player() {
             </div>
             <div className="video-controls">
               <div className="scrub">
-                <span style={{ width: "42%" }} />
+                <span
+                  style={{ width: currentLesson?.concluida ? "100%" : "0%" }}
+                />
               </div>
               <div className="flex center between">
                 <div className="flex center gap-3">
@@ -332,29 +390,7 @@ export function Player() {
                     className="tag-mono"
                     style={{ color: "rgba(255,255,255,0.8)" }}
                   >
-                    10:18 / 24:15
-                  </span>
-                </div>
-                <div className="flex center gap-3">
-                  <span
-                    className="badge"
-                    style={{
-                      background: "rgba(0,0,0,0.4)",
-                      borderColor: "rgba(255,255,255,0.2)",
-                      color: "#fff",
-                    }}
-                  >
-                    1.0x
-                  </span>
-                  <span
-                    className="badge"
-                    style={{
-                      background: "rgba(0,0,0,0.4)",
-                      borderColor: "rgba(255,255,255,0.2)",
-                      color: "#fff",
-                    }}
-                  >
-                    1080p
+                    {currentLesson?.duracao_label ?? "00:00"}
                   </span>
                 </div>
               </div>
@@ -373,28 +409,89 @@ export function Player() {
           >
             <div>
               <div className="tag-mono amber" style={{ marginBottom: 8 }}>
-                AULA 08 · {lesson.module.toUpperCase()}
+                {(currentLesson?.moduloTitulo ?? "").toUpperCase()}
               </div>
               <h1 style={{ fontSize: "1.85rem", marginBottom: 6 }}>
-                {lesson.t}
+                {currentLesson?.titulo ?? "—"}
               </h1>
               <div className="flex center gap-3">
-                <Badge icon="clock">{lesson.dur}</Badge>
-                <Badge variant="cyan" icon="users">
-                  {QA.length} dúvidas
+                <Badge icon="clock">
+                  {currentLesson?.duracao_label ?? "—"}
                 </Badge>
+                {currentLesson?.concluida && (
+                  <Badge variant="success" icon="check">
+                    Concluída
+                  </Badge>
+                )}
               </div>
             </div>
-            <Button
-              variant="primary"
-              size="lg"
-              icon="check"
-              onClick={() => setCurrent("2-2")}
-              style={{ flexShrink: 0 }}
-            >
-              Concluir e avançar
-            </Button>
+            {currentLesson &&
+              (currentLesson.concluida ? (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  iconRight="arrow"
+                  onClick={() => {
+                    const idx = flat.findIndex((a) => a.id === currentId);
+                    const next = flat[idx + 1];
+                    if (next) setCurrentId(next.id);
+                  }}
+                  style={{ flexShrink: 0 }}
+                >
+                  Próxima aula
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon="check"
+                  onClick={() => concludeM.mutate(currentLesson.id)}
+                  className={concludeM.isPending ? "is-disabled" : ""}
+                  style={{ flexShrink: 0 }}
+                >
+                  {concludeM.isPending ? "Salvando…" : "Concluir e avançar"}
+                </Button>
+              ))}
           </div>
+
+          {/* faixa de conclusão do curso */}
+          {data.concluido && (
+            <div
+              className="flex center between"
+              style={{
+                margin: "18px 0",
+                padding: "14px 18px",
+                borderRadius: 12,
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <div className="flex center gap-3">
+                <Icon
+                  name="award"
+                  size={20}
+                  style={{ color: "var(--success)" }}
+                />
+                <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                  Curso concluído — seu certificado está disponível.
+                </span>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                iconRight="arrow"
+                onClick={() =>
+                  router.push(
+                    `${lmsHref("certificate")}?slug=${data.curso.slug}`,
+                  )
+                }
+              >
+                Ver certificado
+              </Button>
+            </div>
+          )}
 
           {/* tabs */}
           <div className="tabs-bar" style={{ marginTop: 24 }}>
@@ -406,64 +503,12 @@ export function Player() {
               >
                 <Icon name={t.icon} size={16} />
                 {t.label}
-                {t.count != null && (
-                  <span
-                    className="tag-mono"
-                    style={{ color: "inherit", opacity: 0.6 }}
-                  >
-                    ({t.count})
-                  </span>
-                )}
               </button>
             ))}
           </div>
 
-          {tab === "materiais" && <Materials />}
+          {tab === "materiais" && <Materials aula={aulaQ.data} />}
           {tab === "duvidas" && <Community />}
-          {tab === "sobre" && (
-            <div style={{ maxWidth: 640 }}>
-              <p
-                style={{
-                  color: "var(--text-muted)",
-                  lineHeight: 1.65,
-                  marginBottom: 18,
-                }}
-              >
-                Nesta aula você vai ver, na prática, quais parâmetros de dados
-                em tempo real realmente importam no diagnóstico: pressão, duty
-                cycle dos solenoides, temperatura do fluido e rotação de
-                entrada/saída. O objetivo é separar o sinal do ruído — olhar só
-                o que aponta para a falha real.
-              </p>
-              <h4 style={{ fontSize: "1rem", marginBottom: 12 }}>
-                Você vai praticar
-              </h4>
-              <ul style={{ listStyle: "none", display: "grid", gap: 10 }}>
-                {[
-                  "Montar um dashboard de PIDs essenciais no scanner",
-                  "Interpretar duty cycle do solenoide EPC",
-                  "Correlacionar rotação de entrada e saída para detectar patinação",
-                ].map((t, i) => (
-                  <li
-                    key={i}
-                    className="flex gap-3"
-                    style={{ alignItems: "flex-start" }}
-                  >
-                    <Icon
-                      name="checkCircle"
-                      size={18}
-                      style={{
-                        color: "var(--primary)",
-                        flexShrink: 0,
-                        marginTop: 1,
-                      }}
-                    />
-                    <span style={{ fontSize: "0.93rem" }}>{t}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         {/* SIDEBAR — accordion de módulos */}
@@ -474,15 +519,18 @@ export function Player() {
               style={{ marginBottom: 6, padding: "0 4px" }}
             >
               <h4 style={{ fontSize: "0.96rem" }}>Conteúdo do curso</h4>
-              <span className="tag-mono">8/12</span>
+              <span className="tag-mono">
+                {doneTotal}/{flat.length}
+              </span>
             </div>
             <div className="progress" style={{ margin: "10px 4px 16px" }}>
-              <span style={{ width: "67%" }} />
+              <span style={{ width: `${data.progresso_percentual}%` }} />
             </div>
             <ModuleNav
-              modules={PLAYER_MODULES}
-              current={current}
-              onPick={setCurrent}
+              modules={data.modulos}
+              currentId={currentId}
+              initialOpen={currentLesson?.mi ?? 0}
+              onPick={setCurrentId}
             />
           </div>
         </aside>

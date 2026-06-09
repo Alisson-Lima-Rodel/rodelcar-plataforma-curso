@@ -1,6 +1,6 @@
-/* Admin — seed data + esquemas de entidade (colunas + campos do formulário).
-   CRUD em memória nesta fase; trocar por chamadas ao backend (TanStack Query +
-   mutations) quando os endpoints de gestão existirem. */
+/* Admin — esquemas de entidade (colunas da tabela + campos do formulário).
+   Os dados vêm do backend via TanStack Query (ver lib/admin-api.ts +
+   components/admin/remote-entity-manager.tsx). Aqui só a forma de cada cadastro. */
 
 export type AdminItem = Record<string, string | number | boolean | null>;
 
@@ -43,7 +43,6 @@ export interface EntitySchema {
   label: string;
   singular: string;
   icon: string;
-  seed: AdminItem[];
   title: (it: AdminItem) => string;
   search: (it: AdminItem) => string;
   filter: { key: string; options: string[] };
@@ -57,6 +56,8 @@ export type EntityKey =
   | "courses"
   | "testimonials"
   | "packages"
+  | "videos"
+  | "faq"
   | "admins";
 
 export const ADMIN_USER = {
@@ -68,263 +69,18 @@ export const ADMIN_USER = {
 let _id = 100;
 export const uid = () => "id" + ++_id;
 
-const SEED_STUDENTS: AdminItem[] = [
-  {
-    id: "s1",
-    nome: "Rogério Alves",
-    email: "rogerio.alves@oficina.com",
-    cidade: "Gravataí/RS",
-    plano: "Premium Anual",
-    matriculas: 4,
-    vigencia: "2026-07-23",
-    status: "Ativo",
-  },
-  {
-    id: "s2",
-    nome: "Daniela Prado",
-    email: "daniela@prado.com.br",
-    cidade: "Curitiba/PR",
-    plano: "Premium Anual",
-    matriculas: 6,
-    vigencia: "2026-09-10",
-    status: "Ativo",
-  },
-  {
-    id: "s3",
-    nome: "Marcos Tavares",
-    email: "marcos.tavares@gmail.com",
-    cidade: "Canoas/RS",
-    plano: "Avulso",
-    matriculas: 2,
-    vigencia: "2026-05-02",
-    status: "Ativo",
-  },
-  {
-    id: "s4",
-    nome: "Felipe Nunes",
-    email: "felipe.nunes@transmail.com",
-    cidade: "Joinville/SC",
-    plano: "Avulso",
-    matriculas: 1,
-    vigencia: "2026-04-18",
-    status: "Inativo",
-  },
-  {
-    id: "s5",
-    nome: "Carla Menezes",
-    email: "carla.menezes@oficinasul.com",
-    cidade: "Porto Alegre/RS",
-    plano: "Premium Anual",
-    matriculas: 6,
-    vigencia: "2027-01-05",
-    status: "Ativo",
-  },
-  {
-    id: "s6",
-    nome: "Vagner Lima",
-    email: "vagner@autolima.com.br",
-    cidade: "Sapucaia/RS",
-    plano: "Avulso",
-    matriculas: 3,
-    vigencia: "2026-06-30",
-    status: "Ativo",
-  },
-];
-
-const SEED_COURSES: AdminItem[] = [
-  {
-    id: "c1",
-    titulo: "Fiat Dualogic — Diagnóstico e Reparo",
-    sistema: "Automatizado",
-    nivel: "Intermediário",
-    preco: 397,
-    precoAntigo: 597,
-    horas: "8h40",
-    aulas: 42,
-    status: "Publicado",
-  },
-  {
-    id: "c2",
-    titulo: "Ford PowerShift — Embreagem Seca (DCT)",
-    sistema: "Automatizado",
-    nivel: "Avançado",
-    preco: 447,
-    precoAntigo: 647,
-    horas: "9h05",
-    aulas: 45,
-    status: "Publicado",
-  },
-  {
-    id: "c3",
-    titulo: "VW iMotion — Fox e SpaceFox",
-    sistema: "Automatizado",
-    nivel: "Intermediário",
-    preco: 347,
-    precoAntigo: 497,
-    horas: "6h10",
-    aulas: 31,
-    status: "Publicado",
-  },
-  {
-    id: "c4",
-    titulo: "GM Easytronic — Meriva e Corsa",
-    sistema: "Automatizado",
-    nivel: "Intermediário",
-    preco: 347,
-    precoAntigo: 497,
-    horas: "5h50",
-    aulas: 29,
-    status: "Publicado",
-  },
-  {
-    id: "c5",
-    titulo: "DSG DQ200 / DQ250 — VW e Audi",
-    sistema: "Dupla embreagem",
-    nivel: "Avançado",
-    preco: 497,
-    precoAntigo: 747,
-    horas: "11h20",
-    aulas: 53,
-    status: "Rascunho",
-  },
-  {
-    id: "c6",
-    titulo: "Câmbio Automático Convencional",
-    sistema: "Automático",
-    nivel: "Iniciante",
-    preco: 397,
-    precoAntigo: 547,
-    horas: "8h25",
-    aulas: 40,
-    status: "Publicado",
-  },
-];
-
-const SEED_TESTIMONIALS: AdminItem[] = [
-  {
-    id: "t1",
-    nome: "Rogério Alves",
-    papel: "Mecânico · Gravataí/RS",
-    estrelas: 5,
-    texto:
-      "Parei de trocar peça no chute no Dualogic. Com o método fechei 3 câmbios na primeira semana e o cliente confia no laudo.",
-    status: "Aprovado",
-  },
-  {
-    id: "t2",
-    nome: "Daniela Prado",
-    papel: "Proprietária de oficina · Curitiba/PR",
-    estrelas: 5,
-    texto:
-      "Coloquei dois funcionários no Premium. O nível técnico em automatizado subiu e os retrabalhos despencaram.",
-    status: "Aprovado",
-  },
-  {
-    id: "t3",
-    nome: "Marcos Tavares",
-    papel: "Mecânico autônomo · Canoas/RS",
-    estrelas: 5,
-    texto:
-      "A didática da Rödelcar é de quem está na bancada todo dia. Os PDFs de calibração eu uso toda semana.",
-    status: "Aprovado",
-  },
-  {
-    id: "t4",
-    nome: "Anderson Reis",
-    papel: "Mecânico · Esteio/RS",
-    estrelas: 4,
-    texto:
-      "Conteúdo muito bom de PowerShift. Senti falta de mais exemplos de EcoSport, mas o método resolve.",
-    status: "Pendente",
-  },
-];
-
-const SEED_PACKAGES: AdminItem[] = [
-  {
-    id: "p1",
-    nome: "Formação Completa (Premium Anual)",
-    preco: 1997,
-    precoAntigo: 2929,
-    parcelas: "12x de R$ 199,90",
-    cursos: 6,
-    status: "Ativo",
-    inclui:
-      "Todos os 6 cursos\nAtualizações na vigência\nComunidade fechada\nCertificado verificável\nBiblioteca de PDFs",
-  },
-  {
-    id: "p2",
-    nome: "Trilha Automatizados (Dualogic + iMotion + Easytronic)",
-    preco: 897,
-    precoAntigo: 1191,
-    parcelas: "10x de R$ 89,70",
-    cursos: 3,
-    status: "Ativo",
-    inclui:
-      "3 cursos de automatizado\n1 ano de acesso\nComunidade fechada\nCertificado por curso",
-  },
-  {
-    id: "p3",
-    nome: "Curso Avulso (qualquer módulo)",
-    preco: 397,
-    precoAntigo: 597,
-    parcelas: "12x de R$ 39,70",
-    cursos: 1,
-    status: "Ativo",
-    inclui: "1 curso à escolha\n1 ano de acesso\nCertificado verificável",
-  },
-];
-
-const SEED_ADMINS: AdminItem[] = [
-  {
-    id: "a1",
-    nome: "Rödel",
-    email: "rodel@rodelcar.com.br",
-    papel: "Administrador",
-    senha: "",
-    ultimoAcesso: "hoje, 09:12",
-    status: "Ativo",
-  },
-  {
-    id: "a2",
-    nome: "Patrícia Rödel",
-    email: "patricia@rodelcar.com.br",
-    papel: "Editor",
-    senha: "",
-    ultimoAcesso: "ontem, 17:40",
-    status: "Ativo",
-  },
-  {
-    id: "a3",
-    nome: "Diego Souza",
-    email: "diego.suporte@rodelcar.com.br",
-    papel: "Suporte",
-    senha: "",
-    ultimoAcesso: "02/06, 11:05",
-    status: "Ativo",
-  },
-];
-
-export const ENTITY_KEYS: EntityKey[] = [
-  "students",
-  "courses",
-  "testimonials",
-  "packages",
-  "admins",
-];
-
 export const ENTITIES: Record<EntityKey, EntitySchema> = {
   students: {
     label: "Alunos",
     singular: "aluno",
     icon: "users",
-    seed: SEED_STUDENTS,
     title: (it) => String(it.nome),
-    search: (it) => `${it.nome} ${it.email} ${it.cidade}`,
+    search: (it) => `${it.nome} ${it.email} ${it.telefone ?? ""}`,
     filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    // Cursos/Vigência/Status vêm derivados da matrícula (somente-leitura).
     columns: [
       { key: "nome", label: "Aluno", kind: "user" },
-      { key: "cidade", label: "Cidade" },
-      { key: "plano", label: "Plano", kind: "badgePlan" },
+      { key: "telefone", label: "Telefone", kind: "muted" },
       { key: "matriculas", label: "Cursos", kind: "center" },
       { key: "vigencia", label: "Vigência", kind: "date" },
       { key: "status", label: "Status", kind: "badgeStatus" },
@@ -332,38 +88,26 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     fields: [
       { key: "nome", label: "Nome completo", type: "text", col: "full" },
       { key: "email", label: "E-mail", type: "text" },
-      { key: "cidade", label: "Cidade/UF", type: "text" },
+      { key: "telefone", label: "Telefone", type: "text" },
       {
-        key: "plano",
-        label: "Plano",
-        type: "select",
-        options: ["Premium Anual", "Avulso"],
-      },
-      { key: "matriculas", label: "Cursos matriculados", type: "number" },
-      { key: "vigencia", label: "Vigência até", type: "date" },
-      {
-        key: "status",
-        label: "Aluno ativo",
-        type: "toggle",
-        on: "Ativo",
-        off: "Inativo",
+        key: "senha",
+        label: "Senha",
+        type: "password",
+        col: "full",
+        hint: "Mín. 6 caracteres. Em edição, deixe em branco para manter a atual.",
       },
     ],
     defaults: {
       nome: "",
       email: "",
-      cidade: "",
-      plano: "Avulso",
-      matriculas: 1,
-      vigencia: "2027-01-01",
-      status: "Ativo",
+      telefone: "",
+      senha: "",
     },
   },
   courses: {
     label: "Cursos",
     singular: "curso",
     icon: "book",
-    seed: SEED_COURSES,
     title: (it) => String(it.titulo),
     search: (it) => `${it.titulo} ${it.badge_label}`,
     filter: {
@@ -420,7 +164,6 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     label: "Depoimentos",
     singular: "depoimento",
     icon: "message",
-    seed: SEED_TESTIMONIALS,
     title: (it) => String(it.nome),
     search: (it) => `${it.nome} ${it.papel} ${it.texto}`,
     filter: { key: "status", options: ["Todos", "Aprovado", "Pendente"] },
@@ -456,7 +199,6 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     label: "Pacotes",
     singular: "pacote",
     icon: "award",
-    seed: SEED_PACKAGES,
     title: (it) => String(it.nome),
     search: (it) => String(it.nome),
     filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
@@ -497,11 +239,83 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       status: "Ativo",
     },
   },
+  videos: {
+    label: "Vídeos",
+    singular: "vídeo",
+    icon: "play",
+    title: (it) => String(it.titulo),
+    search: (it) => `${it.titulo} ${it.views ?? ""}`,
+    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    columns: [
+      { key: "titulo", label: "Vídeo", kind: "strong" },
+      { key: "duracao", label: "Duração", kind: "muted" },
+      { key: "views", label: "Views", kind: "muted" },
+      { key: "status", label: "Status", kind: "badgeStatus" },
+    ],
+    fields: [
+      { key: "titulo", label: "Título do vídeo", type: "text", col: "full" },
+      {
+        key: "youtube_url",
+        label: "Link do YouTube",
+        type: "text",
+        col: "full",
+        hint: "Cole a URL do vídeo. Em branco, o card leva ao canal.",
+      },
+      { key: "duracao", label: "Duração (ex.: 12:48)", type: "text" },
+      { key: "views", label: "Views (ex.: 84 mil)", type: "text" },
+      { key: "ordem", label: "Ordem na vitrine", type: "number" },
+      {
+        key: "status",
+        label: "Exibir no site",
+        type: "toggle",
+        on: "Ativo",
+        off: "Inativo",
+      },
+    ],
+    defaults: {
+      titulo: "",
+      youtube_url: "",
+      duracao: "",
+      views: "",
+      ordem: 0,
+      status: "Ativo",
+    },
+  },
+  faq: {
+    label: "FAQ",
+    singular: "pergunta",
+    icon: "book",
+    title: (it) => String(it.pergunta),
+    search: (it) => `${it.pergunta} ${it.resposta}`,
+    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    columns: [
+      { key: "pergunta", label: "Pergunta", kind: "strong" },
+      { key: "resposta", label: "Resposta", kind: "truncate" },
+      { key: "status", label: "Status", kind: "badgeStatus" },
+    ],
+    fields: [
+      { key: "pergunta", label: "Pergunta", type: "text", col: "full" },
+      { key: "resposta", label: "Resposta", type: "textarea", col: "full" },
+      { key: "ordem", label: "Ordem", type: "number" },
+      {
+        key: "status",
+        label: "Exibir no site",
+        type: "toggle",
+        on: "Ativo",
+        off: "Inativo",
+      },
+    ],
+    defaults: {
+      pergunta: "",
+      resposta: "",
+      ordem: 0,
+      status: "Ativo",
+    },
+  },
   admins: {
     label: "Administradores",
     singular: "administrador",
     icon: "shield",
-    seed: SEED_ADMINS,
     title: (it) => String(it.nome),
     search: (it) => `${it.nome} ${it.email} ${it.papel}`,
     filter: {

@@ -5,23 +5,14 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { Toast } from "@/components/portal/toast";
-import {
-  ENTITIES,
-  ENTITY_KEYS,
-  type AdminItem,
-  type EntityKey,
-} from "@/lib/admin-data";
+import { ENTITIES, type EntityKey } from "@/lib/admin-data";
 import { ADMIN_CRUD } from "@/lib/admin-api";
 import { useAdmin } from "@/components/providers/admin-provider";
 import { AdminSidebar } from "./admin-sidebar";
 import { Overview } from "./overview";
-import { EntityManager } from "./entity-manager";
 import { RemoteEntityManager } from "./remote-entity-manager";
 
 type View = "overview" | EntityKey;
-
-// Entidades já ligadas ao backend real (as demais seguem em memória por ora).
-const REMOTE: EntityKey[] = ["courses", "testimonials", "packages", "admins"];
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
   overview: { title: "Visão geral", crumb: "ADMIN" },
@@ -29,16 +20,10 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   courses: { title: "Cursos", crumb: "ADMIN · CADASTROS" },
   testimonials: { title: "Depoimentos", crumb: "ADMIN · CADASTROS" },
   packages: { title: "Pacotes", crumb: "ADMIN · CADASTROS" },
+  videos: { title: "Vídeos", crumb: "ADMIN · PORTAL" },
+  faq: { title: "FAQ", crumb: "ADMIN · PORTAL" },
   admins: { title: "Administradores", crumb: "ADMIN · EQUIPE" },
 };
-
-function seedData(): Record<EntityKey, AdminItem[]> {
-  const d = {} as Record<EntityKey, AdminItem[]>;
-  ENTITY_KEYS.forEach((k) => {
-    d[k] = ENTITIES[k].seed.map((x) => ({ ...x }));
-  });
-  return d;
-}
 
 function initialsOf(name: string): string {
   return (name || "?")
@@ -53,7 +38,6 @@ export function AdminApp() {
   const router = useRouter();
   const { status, admin, logout } = useAdmin();
   const [view, setView] = useState<View>("overview");
-  const [data, setData] = useState<Record<EntityKey, AdminItem[]>>(seedData);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingNew, setPendingNew] = useState<EntityKey | null>(null);
 
@@ -71,19 +55,6 @@ export function AdminApp() {
     setPendingNew(key);
     window.scrollTo(0, 0);
   };
-
-  const onSave = (key: EntityKey, item: AdminItem) =>
-    setData((d) => {
-      const exists = d[key].some((x) => x.id === item.id);
-      return {
-        ...d,
-        [key]: exists
-          ? d[key].map((x) => (x.id === item.id ? item : x))
-          : [item, ...d[key]],
-      };
-    });
-  const onDelete = (key: EntityKey, id: string) =>
-    setData((d) => ({ ...d, [key]: d[key].filter((x) => x.id !== id) }));
 
   if (status !== "authed" || !admin) {
     return (
@@ -146,10 +117,9 @@ export function AdminApp() {
           </div>
         </div>
 
-        {view === "overview" && (
-          <Overview data={data} onNav={nav} onNew={newIn} />
-        )}
-        {view !== "overview" && REMOTE.includes(view) && (
+        {view === "overview" ? (
+          <Overview onNav={nav} onNew={newIn} />
+        ) : (
           <RemoteEntityManager
             key={view + (pendingNew === view ? "-new" : "")}
             ent={ENTITIES[view]}
@@ -157,17 +127,6 @@ export function AdminApp() {
             crud={ADMIN_CRUD[view]}
             autoNew={pendingNew === view}
             onToast={setToast}
-          />
-        )}
-        {view !== "overview" && !REMOTE.includes(view) && (
-          <EntityManager
-            key={view + (pendingNew === view ? "-new" : "")}
-            ent={ENTITIES[view]}
-            items={data[view]}
-            onSave={(item) => onSave(view, item)}
-            onDelete={(id) => onDelete(view, id)}
-            onToast={setToast}
-            autoNew={pendingNew === view}
           />
         )}
       </main>

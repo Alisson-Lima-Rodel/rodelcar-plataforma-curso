@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -10,7 +10,19 @@ from app.core.db import get_db
 from app.core.ratelimit import auth_limit, limiter
 from app.core.security import create_admin_token, hash_password, verify_password
 from app.dependencies import get_current_admin
-from app.models import Admin, Aula, Curso, Depoimento, Matricula, Modulo, Pacote
+from app.models import (
+    Admin,
+    Aluno,
+    Aula,
+    Curso,
+    Depoimento,
+    Faq,
+    Matricula,
+    Modulo,
+    Pacote,
+    StatusMatricula,
+    Video,
+)
 from app.schemas.admin import (
     AdminLoginRequest,
     AdminMe,
@@ -18,15 +30,24 @@ from app.schemas.admin import (
     AdminUserCreate,
     AdminUserItem,
     AdminUserUpdate,
+    AlunoAdminItem,
+    AlunoCreate,
+    AlunoUpdate,
     CursoAdmin,
     CursoCreate,
     CursoUpdate,
     DepoimentoAdmin,
     DepoimentoCreate,
     DepoimentoUpdate,
+    FaqAdmin,
+    FaqCreate,
+    FaqUpdate,
     PacoteAdmin,
     PacoteCreate,
     PacoteUpdate,
+    VideoAdmin,
+    VideoCreate,
+    VideoUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -114,6 +135,97 @@ async def excluir_curso(curso_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 router.include_router(cursos)
 
 
+# ── Alunos (gestão) — cursos/vigência/status são derivados de matrícula ───────
+alunos = APIRouter(prefix="/alunos", dependencies=[Depends(get_current_admin)])
+
+
+async def _alunos_agg(db: AsyncSession) -> dict:
+    """Por aluno: (nº de matrículas, maior data_expiracao, tem matrícula ativa?)."""
+    rows = (
+        await db.execute(
+            select(
+                Matricula.aluno_id,
+                func.count(Matricula.id),
+                func.max(Matricula.data_expiracao),
+                func.max(case((Matricula.status == StatusMatricula.ativo, 1), else_=0)),
+            ).group_by(Matricula.aluno_id)
+        )
+    ).all()
+    return {r[0]: (r[1], r[2], bool(r[3])) for r in rows}
+
+
+def _aluno_item(a: Aluno, agg: tuple) -> AlunoAdminItem:
+    count, vig, ativo = agg
+    return AlunoAdminItem(
+        id=a.id,
+        nome=a.nome,
+        email=a.email,
+        telefone=a.telefone,
+        matriculas=count,
+        vigencia=vig.date() if vig else None,
+        status="Ativo" if ativo else "Inativo",
+    )
+
+
+@alunos.get("", response_model=list[AlunoAdminItem])
+async def listar_alunos(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(Aluno).order_by(Aluno.criado_em.desc()))).scalars().all()
+    agg = await _alunos_agg(db)
+    return [_aluno_item(a, agg.get(a.id, (0, None, False))) for a in rows]
+
+
+@alunos.post("", response_model=AlunoAdminItem, status_code=201)
+async def criar_aluno(body: AlunoCreate, db: AsyncSession = Depends(get_db)):
+    if await db.scalar(select(Aluno.id).where(Aluno.email == body.email)):
+        raise _err(409, "EMAIL_EM_USO", "Já existe um aluno com esse e-mail.")
+    obj = Aluno(
+        nome=body.nome,
+        email=body.email,
+        telefone=body.telefone,
+        senha_hash=hash_password(body.senha),
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return _aluno_item(obj, (0, None, False))
+
+
+@alunos.patch("/{aluno_id}", response_model=AlunoAdminItem)
+async def atualizar_aluno(aluno_id: uuid.UUID, body: AlunoUpdate, db: AsyncSession = Depends(get_db)):
+    obj = await db.get(Aluno, aluno_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aluno não encontrado.")
+    data = body.model_dump(exclude_unset=True)
+    if "email" in data and data["email"] != obj.email:
+        if await db.scalar(select(Aluno.id).where(Aluno.email == data["email"])):
+            raise _err(409, "EMAIL_EM_USO", "E-mail já em uso.")
+    if "senha" in data:
+        senha = data.pop("senha")
+        if senha:
+            obj.senha_hash = hash_password(senha)
+    for k, v in data.items():
+        setattr(obj, k, v)
+    await db.commit()
+    await db.refresh(obj)
+    agg = await _alunos_agg(db)
+    return _aluno_item(obj, agg.get(obj.id, (0, None, False)))
+
+
+@alunos.delete("/{aluno_id}", status_code=204)
+async def excluir_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    obj = await db.get(Aluno, aluno_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aluno não encontrado.")
+    if await db.scalar(select(Matricula.id).where(Matricula.aluno_id == aluno_id)):
+        raise _err(409, "ALUNO_COM_MATRICULA", "Aluno possui matrículas — não é possível excluir.")
+    await db.delete(obj)
+    await db.commit()
+    return Response(status_code=204)
+
+
+router.include_router(alunos)
+
+
 # ── CRUD genérico p/ cadastros simples (Depoimentos, Pacotes) ─────────────────
 def _crud_router(prefix, model, read_schema, create_schema, update_schema):
     r = APIRouter(prefix=prefix, dependencies=[Depends(get_current_admin)])
@@ -155,6 +267,8 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema):
 
 router.include_router(_crud_router("/depoimentos", Depoimento, DepoimentoAdmin, DepoimentoCreate, DepoimentoUpdate))
 router.include_router(_crud_router("/pacotes", Pacote, PacoteAdmin, PacoteCreate, PacoteUpdate))
+router.include_router(_crud_router("/videos", Video, VideoAdmin, VideoCreate, VideoUpdate))
+router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
 
 
 # ── Administradores (equipe) — create/patch tratam senha ──────────────────────

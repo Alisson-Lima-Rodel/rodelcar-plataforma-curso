@@ -7,12 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
-import {
-  FAQ,
-  type Course,
-  type CourseModule,
-  type Faq,
-} from "@/lib/portal-data";
+import { type Course, type CourseModule, type Faq } from "@/lib/portal-data";
 import { usePortal } from "./portal-context";
 
 function AccItem({
@@ -124,7 +119,13 @@ function FaqItem({ f }: { f: Faq }) {
   );
 }
 
-export function CourseDetail({ course }: { course: Course }) {
+export function CourseDetail({
+  course,
+  faqs = [],
+}: {
+  course: Course;
+  faqs?: Faq[];
+}) {
   const { openSchedule, showToast } = usePortal();
   const rich = course;
   const modules = rich.modules ?? [];
@@ -446,16 +447,18 @@ export function CourseDetail({ course }: { course: Course }) {
               <Icon name="arrow" size={17} />
             </Link>
           </div>
-          <div>
-            <h2 style={{ fontSize: "1.6rem", marginBottom: 20 }}>
-              Perguntas frequentes
-            </h2>
-            <div style={{ display: "grid", gap: 10 }}>
-              {FAQ.map((f, i) => (
-                <FaqItem key={i} f={f} />
-              ))}
+          {faqs.length > 0 && (
+            <div>
+              <h2 style={{ fontSize: "1.6rem", marginBottom: 20 }}>
+                Perguntas frequentes
+              </h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                {faqs.map((f, i) => (
+                  <FaqItem key={i} f={f} />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

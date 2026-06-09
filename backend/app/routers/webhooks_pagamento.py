@@ -121,15 +121,19 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
     event_id = event.get("id", "")
     obj: dict[str, Any] = (event.get("data") or {}).get("object") or {}
 
+    # Evento sem id não pode ser deduplicado pela 1ª camada — recusa (defesa em
+    # profundidade; eventos reais do Stripe sempre têm id).
+    if not event_id:
+        raise _err(400, "EVENTO_SEM_ID", "Evento Stripe sem id — recusado.")
+
     # 1) Idempotência por event.id — grava (flush, sem commit). Reentrega → no-op.
-    if event_id:
-        db.add(WebhookEvento(event_id=event_id, gateway="stripe", tipo=tipo))
-        try:
-            await db.flush()
-        except IntegrityError:
-            await db.rollback()
-            logger.info("Evento Stripe duplicado ignorado: %s", event_id)
-            return
+    db.add(WebhookEvento(event_id=event_id, gateway="stripe", tipo=tipo))
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info("Evento Stripe duplicado ignorado: %s", event_id)
+        return
 
     if tipo in _EVENTOS_CONCESSAO:
         await _conceder_acesso(db, event, obj, tipo)
@@ -181,7 +185,7 @@ async def _conceder_acesso(
             gateway_transaction_id=pi_id,
             valor=valor,
             status=StatusPagamento.aprovado,
-            payload=event,
+            payload=_payload_reconciliacao(event),
         )
         db.add(pag)
     else:
@@ -227,7 +231,7 @@ async def _registrar_falha(
                 obj.get("amount_total") or obj.get("amount") or obj.get("amount_due")
             ),
             status=StatusPagamento.recusado,
-            payload=event,
+            payload=_payload_reconciliacao(event),
         ))
     elif pag.status != StatusPagamento.aprovado:
         pag.status = StatusPagamento.recusado
@@ -260,7 +264,7 @@ async def _conceder_assinatura(
             gateway_transaction_id=invoice_id,
             valor=valor,
             status=StatusPagamento.aprovado,
-            payload=event,
+            payload=_payload_reconciliacao(event),
         )
         db.add(pag)
     else:
@@ -378,6 +382,28 @@ async def _resolver_curso(db: AsyncSession, slug: str | None) -> Curso | None:
     return (
         await db.execute(select(Curso).where(Curso.slug == slug))
     ).scalar_one_or_none()
+
+
+def _payload_reconciliacao(event: dict[str, Any]) -> dict[str, Any]:
+    """Guarda só o necessário para reconciliação, SEM PII do cliente (LGPD).
+
+    O evento Stripe cru traz `customer_details`/`customer_email`/`billing_details`
+    (nome, e-mail). Aqui mantemos apenas ids, valores e a metadata (que é nossa).
+    """
+    obj = (event.get("data") or {}).get("object") or {}
+    campos = (
+        "id", "object", "mode", "status", "payment_status",
+        "payment_intent", "subscription", "invoice",
+        "amount_total", "amount_paid", "amount_due", "currency",
+        "customer", "metadata",
+    )
+    return {
+        "id": event.get("id"),
+        "type": event.get("type"),
+        "created": event.get("created"),
+        "livemode": event.get("livemode"),
+        "object": {k: obj.get(k) for k in campos if obj.get(k) is not None},
+    }
 
 
 def _valor_em_reais(amount: int | None) -> Decimal:

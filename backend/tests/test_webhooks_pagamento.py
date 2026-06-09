@@ -356,6 +356,70 @@ class TestWebhookStripe:
         assert resp.status_code == 501
         assert resp.json()["error"]["code"] == "GATEWAY_NAO_IMPLEMENTADO"
 
+    async def test_pagamento_falho_grava_recusado_sem_matricula(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        ev = _session_event(
+            "checkout.session.async_payment_failed",
+            event_id=f"evt_{pref}_fail", pi_id=f"pi_{pref}_fail",
+            aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"],
+            payment_status="unpaid",
+        )
+        assert (await _post(client, ev)).status_code == 200
+        pags = await _pagamentos(seed["aluno_id"])
+        assert len(pags) == 1 and pags[0].status == StatusPagamento.recusado
+        assert len(await _matriculas(seed["aluno_id"])) == 0
+
+    async def test_falha_nao_rebaixa_aprovado(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        pi = f"pi_{pref}_keep"
+        ok = _session_event(
+            "checkout.session.completed", event_id=f"evt_{pref}_ok", pi_id=pi,
+            aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"],
+        )
+        assert (await _post(client, ok)).status_code == 200
+        # falha tardia do MESMO PaymentIntent não pode rebaixar o aprovado
+        fail = _session_event(
+            "checkout.session.async_payment_failed", event_id=f"evt_{pref}_late", pi_id=pi,
+            aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"], payment_status="unpaid",
+        )
+        assert (await _post(client, fail)).status_code == 200
+        pags = [p for p in await _pagamentos(seed["aluno_id"]) if p.gateway_transaction_id == pi]
+        assert len(pags) == 1 and pags[0].status == StatusPagamento.aprovado
+        assert len(await _matriculas(seed["aluno_id"])) == 1
+
+    async def test_evento_sem_id_recusado_400(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        ev = _session_event(
+            "checkout.session.completed", event_id="", pi_id=f"pi_{seed['pref']}_noid",
+            aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"],
+        )
+        resp = await _post(client, ev)
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "EVENTO_SEM_ID"
+        assert len(await _matriculas(seed["aluno_id"])) == 0
+
+    async def test_payload_nao_guarda_pii(self, client: AsyncClient, seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        ev = _session_event(
+            "checkout.session.completed", event_id=f"evt_{pref}_pii", pi_id=f"pi_{pref}_pii",
+            aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"],
+        )
+        # Stripe manda nome/e-mail do cliente — não devem ser persistidos (LGPD).
+        ev["data"]["object"]["customer_details"] = {
+            "email": "vitima@exemplo.com", "name": "Fulano de Tal",
+        }
+        ev["data"]["object"]["customer_email"] = "vitima@exemplo.com"
+        assert (await _post(client, ev)).status_code == 200
+        blob = json.dumps((await _pagamentos(seed["aluno_id"]))[0].payload)
+        assert "vitima@exemplo.com" not in blob
+        assert "customer_details" not in blob
+        assert "Fulano" not in blob
+
 
 async def _matricula_do_curso(aluno_id: str, curso_id: str) -> Matricula | None:
     async with AsyncSessionLocal() as db:

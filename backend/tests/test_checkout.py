@@ -198,3 +198,29 @@ class TestCheckoutAssinatura:
         )
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "PLANO_NAO_ENCONTRADO"
+
+    async def test_assinatura_sem_token_401(self, client: AsyncClient):
+        resp = await client.post(
+            "/api/v1/checkout/assinatura-cartao", json={"plano_id": str(uuid.uuid4())}
+        )
+        assert resp.status_code == 401
+
+    async def test_assinatura_plano_inativo_404(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        async with AsyncSessionLocal() as db:
+            plano = (
+                await db.execute(
+                    select(PlanoAssinatura).where(
+                        PlanoAssinatura.id == uuid.UUID(checkout_seed["plano_id"])
+                    )
+                )
+            ).scalar_one()
+            plano.status = "Inativo"
+            await db.commit()
+        resp = await client.post(
+            "/api/v1/checkout/assinatura-cartao",
+            json={"plano_id": checkout_seed["plano_id"]},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "PLANO_NAO_ENCONTRADO"

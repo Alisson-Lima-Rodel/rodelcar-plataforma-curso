@@ -9,13 +9,14 @@ import logging
 from decimal import Decimal
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
 from app.models import Aluno, Curso, PlanoAssinatura
 from app.schemas.pagamentos import (
@@ -26,6 +27,13 @@ from app.schemas.pagamentos import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/checkout", tags=["checkout"])
+
+# Timeout de 15s nas chamadas ao Stripe (o default do SDK é 80s). Evita segurar
+# threads do pool de `run_in_threadpool` sob degradação da API. Cliente síncrono.
+try:  # pragma: no cover - depende do http client disponível no ambiente
+    stripe.default_http_client = stripe.http_client.new_default_http_client(timeout=15)
+except Exception:
+    logger.warning("Não foi possível configurar timeout do http client do Stripe.")
 
 # Teto do mandato do Pix Automático = 2× o valor do plano (cobre IOF e upgrades).
 _PIX_MANDATE_MULT = 2
@@ -79,7 +87,9 @@ def _tratar_erro_stripe(exc: Exception) -> HTTPException:
 
 
 @router.post("/avulso", response_model=CheckoutCriado)
+@limiter.limit("10/minute")
 async def checkout_avulso(
+    request: Request,
     body: CheckoutAvulsoRequest,
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),
@@ -123,7 +133,9 @@ async def _resolver_plano(db: AsyncSession, plano_id) -> PlanoAssinatura:
 
 
 @router.post("/assinatura-cartao", response_model=CheckoutCriado)
+@limiter.limit("10/minute")
 async def checkout_assinatura_cartao(
+    request: Request,
     body: CheckoutAssinaturaRequest,
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),
@@ -150,7 +162,9 @@ async def checkout_assinatura_cartao(
 
 
 @router.post("/assinatura-pix", response_model=CheckoutCriado)
+@limiter.limit("10/minute")
 async def checkout_assinatura_pix(
+    request: Request,
     body: CheckoutAssinaturaRequest,
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),

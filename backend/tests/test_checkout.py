@@ -1,0 +1,129 @@
+"""Testes do checkout avulso (POST /api/v1/checkout/avulso).
+
+Mocka as chamadas de saída do Stripe (Session.create / Customer.create) — não toca
+a API real. Verifica criação da sessão, persistência do customer e os erros.
+"""
+import uuid
+from decimal import Decimal
+
+import pytest_asyncio
+import stripe
+from httpx import AsyncClient
+from sqlalchemy import delete, select
+
+from app.core.config import settings
+from app.core.db import AsyncSessionLocal
+from app.core.security import hash_password
+from app.models import Aluno, Curso, TipoCurso
+
+URL = "/api/v1/checkout/avulso"
+SENHA = "Checkout123!"
+
+
+class _Stub:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _fake_session_create(**kwargs):
+    return _Stub(id="cs_test_123", url="https://checkout.stripe.test/cs_test_123")
+
+
+def _fake_customer_create(**kwargs):
+    return _Stub(id="cus_test_123")
+
+
+@pytest_asyncio.fixture
+async def checkout_seed(client: AsyncClient):
+    """Aluno (logado) + curso com price_id. Retorna headers, slug e aluno_id."""
+    pref = uuid.uuid4().hex[:8]
+    email = f"checkout_{pref}@rodelcar.dev"
+    async with AsyncSessionLocal() as db:
+        aluno = Aluno(nome="Checkout Tester", email=email, senha_hash=hash_password(SENHA))
+        db.add(aluno)
+        await db.flush()
+        curso = Curso(
+            slug=f"checkout-{pref}",
+            titulo="Curso Checkout",
+            tipo=TipoCurso.avulso,
+            preco=Decimal("497.00"),
+            validade_dias=365,
+            stripe_price_id=f"price_{pref}",
+        )
+        curso_sem_price = Curso(
+            slug=f"semprice-{pref}",
+            titulo="Curso Sem Price",
+            tipo=TipoCurso.avulso,
+            preco=Decimal("100.00"),
+            validade_dias=365,
+        )
+        db.add_all([curso, curso_sem_price])
+        await db.flush()
+        await db.commit()
+        data = {
+            "aluno_id": str(aluno.id),
+            "curso_id": str(curso.id),
+            "curso_slug": curso.slug,
+            "curso_sem_price_id": str(curso_sem_price.id),
+            "curso_sem_price_slug": curso_sem_price.slug,
+        }
+
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "senha": SENHA})
+    data["headers"] = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    yield data
+
+    aid = uuid.UUID(data["aluno_id"])
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            delete(Curso).where(
+                Curso.id.in_([uuid.UUID(data["curso_id"]), uuid.UUID(data["curso_sem_price_id"])])
+            )
+        )
+        await db.execute(delete(Aluno).where(Aluno.id == aid))
+        await db.commit()
+
+
+class TestCheckoutAvulso:
+    async def test_cria_sessao_e_persiste_customer(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        monkeypatch.setattr(stripe.checkout.Session, "create", _fake_session_create)
+        monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+
+        resp = await client.post(
+            URL, json={"curso_slug": checkout_seed["curso_slug"]}, headers=checkout_seed["headers"]
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["checkout_url"] == "https://checkout.stripe.test/cs_test_123"
+        assert body["session_id"] == "cs_test_123"
+
+        async with AsyncSessionLocal() as db:
+            aluno = (
+                await db.execute(
+                    select(Aluno).where(Aluno.id == uuid.UUID(checkout_seed["aluno_id"]))
+                )
+            ).scalar_one()
+            assert aluno.stripe_customer_id == "cus_test_123"
+
+    async def test_curso_sem_price_404(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        resp = await client.post(
+            URL,
+            json={"curso_slug": checkout_seed["curso_sem_price_slug"]},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "PRECO_NAO_CONFIGURADO"
+
+    async def test_curso_inexistente_404(self, client, checkout_seed, monkeypatch):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        resp = await client.post(
+            URL, json={"curso_slug": "nao-existe-xyz"}, headers=checkout_seed["headers"]
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "CURSO_NAO_ENCONTRADO"
+
+    async def test_sem_token_401(self, client: AsyncClient):
+        resp = await client.post(URL, json={"curso_slug": "qualquer"})
+        assert resp.status_code == 401

@@ -11,7 +11,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.core.scheduler import iniciar_scheduler, parar_scheduler
-from app.routers import admin, auth, aulas, certificados, conteudo, cursos, depoimentos, internal, leads, me, progresso, webhooks_wa
+from app.routers import admin, auth, aulas, certificados, checkout, conteudo, cursos, depoimentos, internal, leads, me, progresso, webhooks_pagamento, webhooks_wa
 
 
 @asynccontextmanager
@@ -96,14 +96,17 @@ def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Remove a chave `input` de cada erro: não ecoa o valor enviado pelo usuário
+    # (evita devolver senha/e-mail digitados no corpo da resposta de erro).
+    detalhes = [
+        {k: v for k, v in err.items() if k != "input"} for err in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
         content={"error": {
             "code": "VALIDATION_ERROR",
             "message": "Dados de entrada inválidos.",
-            # include_input=False: não devolve o valor enviado (evita ecoar dados
-            # sensíveis como senha/e-mail digitados no corpo do erro).
-            "details": jsonable_encoder(exc.errors(include_input=False)),
+            "details": jsonable_encoder(detalhes),
         }},
     )
 
@@ -121,6 +124,8 @@ app.include_router(progresso.router, prefix="/api/v1")
 app.include_router(certificados.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
 app.include_router(webhooks_wa.router, prefix="/api/v1")
+app.include_router(checkout.router, prefix="/api/v1")
+app.include_router(webhooks_pagamento.router, prefix="/api/v1")
 
 
 # ── Infra ─────────────────────────────────────────────────────────────────────

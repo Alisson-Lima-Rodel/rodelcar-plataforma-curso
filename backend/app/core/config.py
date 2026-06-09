@@ -116,6 +116,8 @@ class Settings(BaseSettings):
             problemas.append("DATABASE_URL usa credenciais default (rodelcar:rodelcar)")
         if "://postgres:" in self.DATABASE_URL:
             problemas.append("DATABASE_URL usa o superusuário 'postgres' (use um papel dedicado, não-root)")
+        if self.STRIPE_SECRET_KEY and not self.STRIPE_WEBHOOK_SECRET:
+            problemas.append("STRIPE_WEBHOOK_SECRET ausente (Stripe ativo → webhook ficaria fail-open)")
         if "*" in self.cors_origins_list:
             problemas.append("CORS_ORIGINS contém '*' (use os domínios explícitos do front)")
         if self.WA_PROVIDER == "meta" and not self.WA_META_APP_SECRET:

@@ -46,6 +46,35 @@ docker compose up --build
 - `.claude/settings.json` + `.claude/hooks/` — bloqueia edição de `.env`/segredos
   (PreToolUse) e formata o código após cada edição (PostToolUse).
 
+## Pagamentos — Stripe (Fase A: curso avulso)
+
+Checkout HOSPEDADO da Stripe (cartão + Pix), com liberação de acesso **somente via webhook**.
+
+1. **Variáveis** (no `.env`, à mão): `STRIPE_SECRET_KEY` (sk_test_...),
+   `STRIPE_WEBHOOK_SECRET` (whsec_..., vem do `stripe listen` ou do Dashboard),
+   `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`.
+2. **Criar Products/Prices em BRL** (uma vez) e gravar o `price_id` em cada curso:
+   ```bash
+   docker compose run --rm --entrypoint python backend -m scripts.stripe_setup
+   ```
+   (ou crie no Dashboard e cole o `price_id` em `cursos.stripe_price_id`).
+3. **Migrar o schema** (colunas `stripe_customer_id`/`stripe_price_id` + tabela `webhook_eventos`):
+   ```bash
+   docker compose run --rm --entrypoint alembic backend upgrade head
+   ```
+4. **Webhook em dev** — encaminhe os eventos da Stripe para o backend local:
+   ```bash
+   stripe listen --forward-to localhost:8000/api/v1/webhooks/pagamento/stripe
+   ```
+   O `stripe listen` imprime o `whsec_...` → coloque em `STRIPE_WEBHOOK_SECRET`.
+5. **Testar** — autenticado, `POST /api/v1/checkout/avulso {"curso_slug": "..."}`,
+   abra o `checkout_url` e pague com o cartão de teste **`4242 4242 4242 4242`**
+   (qualquer data futura/CVC). Pix em teste confirma em ~3 min via
+   `checkout.session.async_payment_succeeded`. A `Matricula` é criada/renovada pelo webhook.
+
+> **Pix é assíncrono:** o `checkout.session.completed` pode chegar ainda não pago; a
+> confirmação vem em `checkout.session.async_payment_succeeded`. Acesso liberado só no webhook.
+
 ## Hospedagem (produção)
 - **Front-end** → Vercel (deploy direto do diretório `frontend/`).
 - **Banco** → Supabase. Use a connection string com `postgresql+asyncpg://...` no

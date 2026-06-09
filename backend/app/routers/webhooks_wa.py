@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 
 
+def _err(status: int, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status,
+        detail={"error": {"code": code, "message": message, "details": None}},
+    )
+
+
 # ── Handshake GET (Meta Cloud API) ────────────────────────────────────────────
 
 @router.get("/status")
@@ -30,24 +37,18 @@ async def wa_verify(
     hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
     hub_challenge: str | None = Query(None, alias="hub.challenge"),
 ):
+    # Handshake é exclusivo da Meta Cloud API. Fail-closed: sem provider=meta ou
+    # sem WA_META_VERIFY_TOKEN configurado, recusa (não devolve o challenge).
     if (
-        hub_mode == "subscribe"
+        settings.WA_PROVIDER.strip().lower() == "meta"
+        and hub_mode == "subscribe"
         and hub_verify_token
         and settings.WA_META_VERIFY_TOKEN
         and hmac.compare_digest(hub_verify_token, settings.WA_META_VERIFY_TOKEN)
         and hub_challenge
     ):
         return Response(content=hub_challenge, media_type="text/plain")
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": {
-                "code": "FORBIDDEN",
-                "message": "Verify token inválido.",
-                "details": None,
-            }
-        },
-    )
+    raise _err(403, "FORBIDDEN", "Verify token inválido.")
 
 
 # ── Payload normalizado (usado internamente e em testes) ──────────────────────
@@ -106,6 +107,52 @@ async def _atualizar_notificacao(
     await db.commit()
 
 
+# ── Validação de assinatura ─────────────────────────────────────────────────────
+
+def _verificar_assinatura(body_bytes: bytes, x_hub_signature_256: str | None) -> None:
+    """Valida a assinatura do webhook conforme o `WA_PROVIDER`.
+
+    Fail-CLOSED, igual ao webhook Stripe (`webhooks_pagamento._verificar_stripe`):
+    NUNCA processa payload não verificado. Só a Meta Cloud API tem validação
+    implementada (HMAC-SHA256 sobre o corpo cru, header X-Hub-Signature-256).
+    Twilio/Z-API usam esquemas próprios ainda não implementados → recusados.
+    Provider ausente/desconhecido também é recusado.
+    """
+    provider = settings.WA_PROVIDER.strip().lower()
+
+    if provider == "meta":
+        secret = settings.WA_META_APP_SECRET
+        if not secret:
+            logger.error("WA_META_APP_SECRET ausente — webhook recusado (fail-closed).")
+            raise _err(
+                503, "WEBHOOK_NAO_CONFIGURADO",
+                "Webhook de WhatsApp não configurado (sem segredo de assinatura).",
+            )
+        if not x_hub_signature_256:
+            raise _err(401, "ASSINATURA_AUSENTE", "Header X-Hub-Signature-256 obrigatório.")
+        computed = "sha256=" + hmac.new(
+            secret.encode(), body_bytes, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(computed, x_hub_signature_256):
+            raise _err(401, "ASSINATURA_INVALIDA", "Assinatura HMAC-SHA256 inválida.")
+        return
+
+    if provider in {"twilio", "zapi"}:
+        logger.error(
+            "WA_PROVIDER=%s sem validação de assinatura implementada — recusado.", provider
+        )
+        raise _err(
+            501, "PROVEDOR_NAO_IMPLEMENTADO",
+            f"Validação de webhook do provedor '{provider}' ainda não implementada.",
+        )
+
+    logger.error("WA_PROVIDER ausente/desconhecido (%r) — webhook recusado (fail-closed).", provider)
+    raise _err(
+        503, "WEBHOOK_NAO_CONFIGURADO",
+        "Webhook de WhatsApp não configurado (defina WA_PROVIDER).",
+    )
+
+
 # ── POST de status ─────────────────────────────────────────────────────────────
 
 @router.post("/status")
@@ -116,61 +163,12 @@ async def wa_status_webhook(
     x_hub_signature_256: str | None = Header(None),
 ):
     body_bytes = await request.body()
-
-    # Valida assinatura HMAC-SHA256 quando WA_META_APP_SECRET está configurado.
-    # Fail-closed: em produção sem segredo, recusa (não aceita webhook sem assinar).
-    if settings.WA_META_APP_SECRET:
-        if not x_hub_signature_256:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "code": "ASSINATURA_AUSENTE",
-                        "message": "Header X-Hub-Signature-256 obrigatório.",
-                        "details": None,
-                    }
-                },
-            )
-        computed = "sha256=" + hmac.new(
-            settings.WA_META_APP_SECRET.encode(), body_bytes, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(computed, x_hub_signature_256):
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "code": "ASSINATURA_INVALIDA",
-                        "message": "Assinatura HMAC-SHA256 inválida.",
-                        "details": None,
-                    }
-                },
-            )
-    elif settings.is_production:
-        # Sem segredo configurado em produção: não aceita webhook não autenticado.
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": {
-                    "code": "WEBHOOK_NAO_CONFIGURADO",
-                    "message": "Webhook de WhatsApp não configurado (assinatura obrigatória).",
-                    "details": None,
-                }
-            },
-        )
+    _verificar_assinatura(body_bytes, x_hub_signature_256)
 
     try:
         payload: dict[str, Any] = json.loads(body_bytes)
     except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": {
-                    "code": "PAYLOAD_INVALIDO",
-                    "message": "Corpo da requisição não é JSON válido.",
-                    "details": None,
-                }
-            },
-        )
+        raise _err(400, "PAYLOAD_INVALIDO", "Corpo da requisição não é JSON válido.")
 
     # Auto-detecção de formato
     if "provedor_msg_id" in payload:

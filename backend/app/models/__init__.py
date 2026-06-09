@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from functools import lru_cache
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from sqlalchemy import (
     Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text, Integer,
     UniqueConstraint, func,
@@ -17,11 +17,20 @@ from sqlalchemy.types import TypeDecorator
 
 
 @lru_cache(maxsize=1)
-def _get_fernet() -> Fernet:
-    key = os.environ.get("RODELCAR_FERNET_KEY", "")
-    if not key:
+def _get_fernet() -> MultiFernet:
+    """MultiFernet para permitir ROTAÇÃO de chave sem perder CPFs já cifrados.
+
+    Cifra sempre com a 1ª chave (primária); decifra tentando todas. Para rotacionar:
+    gere uma nova chave, coloque-a em `RODELCAR_FERNET_KEY` e mova a antiga para
+    `RODELCAR_FERNET_KEYS` (lista por vírgula). Dados antigos continuam legíveis e
+    novos registros usam a chave nova; depois de recifrar tudo, remova a antiga.
+    """
+    primary = os.environ.get("RODELCAR_FERNET_KEY", "")
+    extras = os.environ.get("RODELCAR_FERNET_KEYS", "")
+    raw = [k.strip() for k in [primary, *extras.split(",")] if k.strip()]
+    if not raw:
         raise RuntimeError("RODELCAR_FERNET_KEY environment variable is required")
-    return Fernet(key.encode())
+    return MultiFernet([Fernet(k.encode()) for k in raw])
 
 
 class EncryptedStr(TypeDecorator):
@@ -122,6 +131,10 @@ class Aluno(Base):
     cpf: Mapped[str | None] = mapped_column(EncryptedStr(255))
     telefone: Mapped[str | None] = mapped_column(String(40))
     senha_hash: Mapped[str] = mapped_column(String(255))
+    # Customer do Stripe (cus_...); criado no 1º checkout e reaproveitado depois.
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True
+    )
     criado_em: Mapped[datetime] = _created_at()
 
     matriculas: Mapped[list[Matricula]] = relationship(back_populates="aluno")
@@ -160,6 +173,9 @@ class Curso(Base):
     validade_dias: Mapped[int] = mapped_column(Integer, default=365)
     thumbnail_url: Mapped[str | None] = mapped_column(String(500))
     destaque: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Price do Stripe (price_...) p/ a compra avulsa (one-time). Criado uma vez
+    # no Dashboard/script e referenciado aqui — não fixar valor no checkout.
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255))
 
     # ── Campos de marketing/vitrine (página de venda) ──────────────────────────
     ordem: Mapped[int] = mapped_column(Integer, default=0)
@@ -424,3 +440,19 @@ class Faq(Base):
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = _created_at()
+
+
+class WebhookEvento(Base):
+    """Log de eventos de webhook já processados (idempotência por event.id).
+
+    O gateway reentrega o mesmo evento em retries; gravar o `event_id` único
+    impede reprocessá-lo. Complementa o `gateway_transaction_id` único em
+    `Pagamento` (que deduplica eventos DIFERENTES sobre o mesmo pagamento).
+    """
+    __tablename__ = "webhook_eventos"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    gateway: Mapped[str] = mapped_column(String(40))
+    tipo: Mapped[str] = mapped_column(String(120))
+    processado_em: Mapped[datetime] = _created_at()

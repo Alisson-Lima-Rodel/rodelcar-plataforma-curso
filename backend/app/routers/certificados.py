@@ -2,12 +2,13 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
+from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
 from app.models import Aluno, Aula, Certificado, Matricula, Modulo, Progresso
 from app.schemas.certificados import CertificadoResponse, CertificadoVerificacao
@@ -95,7 +96,10 @@ async def emitir_certificado(
 
 
 @router.get("/{codigo}/verificar", response_model=CertificadoVerificacao)
-async def verificar_certificado(codigo: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def verificar_certificado(
+    request: Request, codigo: str, db: AsyncSession = Depends(get_db)
+):
     cert = (
         await db.execute(
             select(Certificado)

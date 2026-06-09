@@ -1,5 +1,7 @@
 """Endpoints internos — autenticados por X-Internal-Token (servidor a servidor)."""
 
+import hmac
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
@@ -11,7 +13,10 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 
 def _verificar_token(x_internal_token: str | None = Header(None)) -> None:
-    if not x_internal_token or x_internal_token != settings.INTERNAL_TOKEN:
+    # compare_digest: comparação em tempo constante evita timing attack no token.
+    if not x_internal_token or not hmac.compare_digest(
+        x_internal_token, settings.INTERNAL_TOKEN
+    ):
         raise HTTPException(
             status_code=401,
             detail={

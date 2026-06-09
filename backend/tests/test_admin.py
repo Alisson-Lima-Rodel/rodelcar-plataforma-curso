@@ -179,3 +179,70 @@ class TestAdminAlunos:
             json={"nome": "X", "email": "x@y.dev", "senha": "123"},
         )
         assert resp.status_code == 422
+
+
+# ── RBAC: papéis Editor/Suporte têm escopo restrito ───────────────────────────
+@pytest_asyncio.fixture
+async def suporte_headers(client: AsyncClient) -> dict:
+    email = f"suporte_{uuid.uuid4().hex[:8]}@rodelcar.dev"
+    senha = "SuporteTest123!"
+    engine = create_async_engine(
+        settings.DATABASE_URL, connect_args=settings.db_connect_args
+    )
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        adm = Admin(
+            nome="Suporte Teste",
+            email=email,
+            senha_hash=hash_password(senha),
+            papel=PapelAdmin.suporte,
+            ativo=True,
+        )
+        s.add(adm)
+        await s.commit()
+        adm_id = adm.id
+    resp = await client.post(
+        "/api/v1/admin/auth/login", json={"email": email, "senha": senha}
+    )
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    yield headers
+    async with Session() as s:
+        obj = await s.get(Admin, adm_id)
+        if obj:
+            await s.delete(obj)
+            await s.commit()
+    await engine.dispose()
+
+
+class TestAdminRBAC:
+    async def test_suporte_bloqueado_em_cursos(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        resp = await client.get("/api/v1/admin/cursos", headers=suporte_headers)
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "PERMISSAO_NEGADA"
+
+    async def test_suporte_bloqueado_em_administradores(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        resp = await client.get(
+            "/api/v1/admin/administradores", headers=suporte_headers
+        )
+        assert resp.status_code == 403
+
+    async def test_suporte_acessa_alunos(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        resp = await client.get("/api/v1/admin/alunos", headers=suporte_headers)
+        assert resp.status_code == 200
+
+    async def test_admin_nao_altera_proprio_papel(
+        self, client: AsyncClient, admin_headers: dict, admin_user: dict
+    ):
+        resp = await client.patch(
+            f"/api/v1/admin/administradores/{admin_user['id']}",
+            headers=admin_headers,
+            json={"papel": "Editor"},
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "AUTO_ALTERACAO_PAPEL"

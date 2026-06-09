@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # URL de renovação usada nas mensagens de vigência
     RENOVACAO_URL: str = "https://rodelcar.com.br"
 
+    # ── Pagamentos — Stripe ───────────────────────────────────────────────────
+    # Chave secreta da API (sk_test_... / sk_live_...). Usada só no checkout.
+    STRIPE_SECRET_KEY: str = ""
+    # Segredo de assinatura do endpoint de webhook (whsec_...). A validação da
+    # assinatura só é exigida quando setado (igual ao WA_META_APP_SECRET).
+    STRIPE_WEBHOOK_SECRET: str = ""
+    # Para onde a Stripe redireciona após o checkout hospedado.
+    STRIPE_SUCCESS_URL: str = "http://localhost:3000/sucesso"
+    STRIPE_CANCEL_URL: str = "http://localhost:3000/checkout"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -106,6 +116,10 @@ class Settings(BaseSettings):
             problemas.append("DATABASE_URL usa credenciais default (rodelcar:rodelcar)")
         if "://postgres:" in self.DATABASE_URL:
             problemas.append("DATABASE_URL usa o superusuário 'postgres' (use um papel dedicado, não-root)")
+        if "*" in self.cors_origins_list:
+            problemas.append("CORS_ORIGINS contém '*' (use os domínios explícitos do front)")
+        if self.WA_PROVIDER == "meta" and not self.WA_META_APP_SECRET:
+            problemas.append("WA_META_APP_SECRET ausente (webhook do WhatsApp ficaria sem assinatura)")
 
         if problemas:
             raise ValueError(

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -100,7 +101,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"error": {
             "code": "VALIDATION_ERROR",
             "message": "Dados de entrada inválidos.",
-            "details": exc.errors(),
+            # include_input=False: não devolve o valor enviado (evita ecoar dados
+            # sensíveis como senha/e-mail digitados no corpo do erro).
+            "details": jsonable_encoder(exc.errors(include_input=False)),
         }},
     )
 

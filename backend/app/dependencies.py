@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models import Admin, Aluno
+from app.models import Admin, Aluno, PapelAdmin
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -68,3 +68,25 @@ async def get_current_admin(
     if admin is None or not admin.ativo:
         raise _unauth("ADMIN_NAO_ENCONTRADO", "Administrador não encontrado ou inativo.")
     return admin
+
+
+def require_papel(*papeis: PapelAdmin):
+    """Dependência de RBAC: exige admin autenticado com um dos papéis informados.
+
+    Uso: `dependencies=[Depends(require_papel(PapelAdmin.administrador, ...))]`.
+    Administrador tem acesso a tudo; Editor cuida de conteúdo; Suporte de alunos.
+    """
+
+    async def _dep(admin: Admin = Depends(get_current_admin)) -> Admin:
+        if admin.papel not in papeis:
+            raise HTTPException(
+                status_code=403,
+                detail={"error": {
+                    "code": "PERMISSAO_NEGADA",
+                    "message": "Seu papel não permite esta ação.",
+                    "details": None,
+                }},
+            )
+        return admin
+
+    return _dep

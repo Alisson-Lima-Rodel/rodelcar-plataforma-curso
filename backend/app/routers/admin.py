@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import auth_limit, limiter
 from app.core.security import create_admin_token, hash_password, verify_password
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_admin, require_papel
 from app.models import (
     Admin,
     Aluno,
@@ -20,9 +20,16 @@ from app.models import (
     Matricula,
     Modulo,
     Pacote,
+    PapelAdmin,
     StatusMatricula,
     Video,
 )
+
+# Escopos de papel (RBAC). Administrador faz tudo; Editor cuida de conteúdo
+# (cursos/pacotes/depoimentos/vídeos/FAQ); Suporte cuida de alunos.
+_CONTEUDO = (PapelAdmin.administrador, PapelAdmin.editor)
+_ALUNOS = (PapelAdmin.administrador, PapelAdmin.suporte)
+_SO_ADMIN = (PapelAdmin.administrador,)
 from app.schemas.admin import (
     AdminLoginRequest,
     AdminMe,
@@ -81,7 +88,7 @@ async def admin_me(admin: Admin = Depends(get_current_admin)):
 
 
 # ── Cursos (CRUD) — protegido por admin ───────────────────────────────────────
-cursos = APIRouter(prefix="/cursos", dependencies=[Depends(get_current_admin)])
+cursos = APIRouter(prefix="/cursos", dependencies=[Depends(require_papel(*_CONTEUDO))])
 
 
 @cursos.get("", response_model=list[CursoAdmin])
@@ -136,7 +143,7 @@ router.include_router(cursos)
 
 
 # ── Alunos (gestão) — cursos/vigência/status são derivados de matrícula ───────
-alunos = APIRouter(prefix="/alunos", dependencies=[Depends(get_current_admin)])
+alunos = APIRouter(prefix="/alunos", dependencies=[Depends(require_papel(*_ALUNOS))])
 
 
 async def _alunos_agg(db: AsyncSession) -> dict:
@@ -227,8 +234,8 @@ router.include_router(alunos)
 
 
 # ── CRUD genérico p/ cadastros simples (Depoimentos, Pacotes) ─────────────────
-def _crud_router(prefix, model, read_schema, create_schema, update_schema):
-    r = APIRouter(prefix=prefix, dependencies=[Depends(get_current_admin)])
+def _crud_router(prefix, model, read_schema, create_schema, update_schema, papeis=_CONTEUDO):
+    r = APIRouter(prefix=prefix, dependencies=[Depends(require_papel(*papeis))])
 
     @r.get("", response_model=list[read_schema])
     async def listar(db: AsyncSession = Depends(get_db)):
@@ -272,7 +279,7 @@ router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate)
 
 
 # ── Administradores (equipe) — create/patch tratam senha ──────────────────────
-admins = APIRouter(prefix="/administradores", dependencies=[Depends(get_current_admin)])
+admins = APIRouter(prefix="/administradores", dependencies=[Depends(require_papel(*_SO_ADMIN))])
 
 
 @admins.get("", response_model=list[AdminUserItem])
@@ -298,11 +305,19 @@ async def criar_admin(body: AdminUserCreate, db: AsyncSession = Depends(get_db))
 
 
 @admins.patch("/{admin_id}", response_model=AdminUserItem)
-async def atualizar_admin(admin_id: uuid.UUID, body: AdminUserUpdate, db: AsyncSession = Depends(get_db)):
+async def atualizar_admin(
+    admin_id: uuid.UUID,
+    body: AdminUserUpdate,
+    atual: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
     obj = await db.get(Admin, admin_id)
     if obj is None:
         raise _err(404, "NAO_ENCONTRADO", "Administrador não encontrado.")
     data = body.model_dump(exclude_unset=True)
+    # Não pode alterar o próprio papel (evita auto-rebaixamento/lock-out).
+    if admin_id == atual.id and data.get("papel") not in (None, obj.papel):
+        raise _err(409, "AUTO_ALTERACAO_PAPEL", "Você não pode alterar o próprio papel.")
     if "email" in data and data["email"] != obj.email:
         if await db.scalar(select(Admin.id).where(Admin.email == data["email"])):
             raise _err(409, "EMAIL_EM_USO", "E-mail já em uso.")

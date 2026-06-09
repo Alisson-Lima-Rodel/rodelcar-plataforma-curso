@@ -11,7 +11,7 @@ class LeadCreate(BaseModel):
     telefone: str = Field(min_length=8, max_length=40)
     email: EmailStr | None = None
     tipo_servico: str = Field(default="avaliacao_cambio", max_length=80)
-    mensagem: str | None = None
+    mensagem: str | None = Field(default=None, max_length=2000)
     origem: str | None = Field(default=None, max_length=80)
 
 

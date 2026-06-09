@@ -33,7 +33,8 @@ async def wa_verify(
     if (
         hub_mode == "subscribe"
         and hub_verify_token
-        and hub_verify_token == settings.WA_META_VERIFY_TOKEN
+        and settings.WA_META_VERIFY_TOKEN
+        and hmac.compare_digest(hub_verify_token, settings.WA_META_VERIFY_TOKEN)
         and hub_challenge
     ):
         return Response(content=hub_challenge, media_type="text/plain")
@@ -116,7 +117,8 @@ async def wa_status_webhook(
 ):
     body_bytes = await request.body()
 
-    # Valida assinatura HMAC-SHA256 quando WA_META_APP_SECRET está configurado
+    # Valida assinatura HMAC-SHA256 quando WA_META_APP_SECRET está configurado.
+    # Fail-closed: em produção sem segredo, recusa (não aceita webhook sem assinar).
     if settings.WA_META_APP_SECRET:
         if not x_hub_signature_256:
             raise HTTPException(
@@ -143,6 +145,18 @@ async def wa_status_webhook(
                     }
                 },
             )
+    elif settings.is_production:
+        # Sem segredo configurado em produção: não aceita webhook não autenticado.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "WEBHOOK_NAO_CONFIGURADO",
+                    "message": "Webhook de WhatsApp não configurado (assinatura obrigatória).",
+                    "details": None,
+                }
+            },
+        )
 
     try:
         payload: dict[str, Any] = json.loads(body_bytes)

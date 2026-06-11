@@ -260,3 +260,66 @@ class TestAdminRBAC:
         )
         assert resp.status_code == 409
         assert resp.json()["error"]["code"] == "AUTO_ALTERACAO_PAPEL"
+
+
+# ── Planos de assinatura (Premium) ────────────────────────────────────────────
+class TestAdminPlanos:
+    async def test_ciclo_completo(self, client: AsyncClient, admin_headers: dict):
+        pref = uuid.uuid4().hex[:8]
+        # create
+        resp = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={
+                "nome": f"Plano Teste {pref}",
+                "intervalo": "anual",
+                "stripe_price_id": f"price_adm_{pref}",
+                "preco": 499.0,
+            },
+        )
+        assert resp.status_code == 201
+        plano = resp.json()
+        assert plano["status"] == "Ativo"
+        assert plano["stripe_price_id"] == f"price_adm_{pref}"
+
+        # price duplicado → 409 (não 500)
+        dup = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={
+                "nome": "Outro",
+                "intervalo": "mensal",
+                "stripe_price_id": f"price_adm_{pref}",
+                "preco": 49.9,
+            },
+        )
+        assert dup.status_code == 409
+        assert dup.json()["error"]["code"] == "PRICE_EM_USO"
+
+        # list
+        lista = await client.get("/api/v1/admin/planos", headers=admin_headers)
+        assert lista.status_code == 200
+        assert any(p["id"] == plano["id"] for p in lista.json())
+
+        # patch (desativa — some da vitrine pública)
+        patch = await client.patch(
+            f"/api/v1/admin/planos/{plano['id']}",
+            headers=admin_headers,
+            json={"status": "Inativo"},
+        )
+        assert patch.status_code == 200
+        assert patch.json()["status"] == "Inativo"
+        publico = await client.get("/api/v1/planos")
+        assert plano["id"] not in [p["id"] for p in publico.json()]
+
+        # delete
+        dele = await client.delete(
+            f"/api/v1/admin/planos/{plano['id']}", headers=admin_headers
+        )
+        assert dele.status_code == 204
+
+    async def test_suporte_bloqueado_em_planos(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        resp = await client.get("/api/v1/admin/planos", headers=suporte_headers)
+        assert resp.status_code == 403

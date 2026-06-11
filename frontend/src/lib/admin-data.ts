@@ -56,6 +56,7 @@ export type EntityKey =
   | "courses"
   | "testimonials"
   | "packages"
+  | "plans"
   | "videos"
   | "faq"
   | "admins";
@@ -236,6 +237,58 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       parcelas: "12x de R$ 99,70",
       cursos: 3,
       inclui: "",
+      status: "Ativo",
+    },
+  },
+  // Planos de assinatura (Premium): dão acesso ao catálogo INTEIRO. É o que o
+  // card "Assinar Premium" da vitrine vende — diferente de Pacotes (marketing).
+  plans: {
+    label: "Planos (assinatura)",
+    singular: "plano",
+    icon: "infinity",
+    title: (it) => String(it.nome),
+    search: (it) => `${it.nome} ${it.intervalo}`,
+    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    columns: [
+      { key: "nome", label: "Plano", kind: "strong" },
+      { key: "intervalo", label: "Intervalo", kind: "muted" },
+      { key: "preco", label: "Preço", kind: "price" },
+      { key: "status", label: "Status", kind: "badgeStatus" },
+    ],
+    fields: [
+      { key: "nome", label: "Nome do plano", type: "text", col: "full" },
+      {
+        key: "intervalo",
+        label: "Intervalo",
+        type: "select",
+        options: ["mensal", "anual"],
+      },
+      {
+        key: "preco",
+        label: "Preço exibido (R$)",
+        type: "number",
+        hint: "Apenas exibição na vitrine — o valor COBRADO vem do Price do Stripe.",
+      },
+      {
+        key: "stripe_price_id",
+        label: "Stripe Price ID",
+        type: "text",
+        col: "full",
+        hint: "price_... recorrente, criado no Dashboard do Stripe ou via scripts.stripe_setup.",
+      },
+      {
+        key: "status",
+        label: "Plano ativo (aparece na vitrine)",
+        type: "toggle",
+        on: "Ativo",
+        off: "Inativo",
+      },
+    ],
+    defaults: {
+      nome: "",
+      intervalo: "anual",
+      preco: 499,
+      stripe_price_id: "",
       status: "Ativo",
     },
   },

@@ -20,6 +20,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   courses: { title: "Cursos", crumb: "ADMIN · CADASTROS" },
   testimonials: { title: "Depoimentos", crumb: "ADMIN · CADASTROS" },
   packages: { title: "Pacotes", crumb: "ADMIN · CADASTROS" },
+  plans: { title: "Planos (assinatura)", crumb: "ADMIN · CADASTROS" },
   videos: { title: "Vídeos", crumb: "ADMIN · PORTAL" },
   faq: { title: "FAQ", crumb: "ADMIN · PORTAL" },
   admins: { title: "Administradores", crumb: "ADMIN · EQUIPE" },

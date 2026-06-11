@@ -170,6 +170,39 @@ class PacoteUpdate(BaseModel):
     ordem: int | None = None
 
 
+# ── Planos de assinatura (Premium — acesso ao catálogo inteiro) ───────────────
+class PlanoAssinaturaAdmin(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+    intervalo: str
+    stripe_price_id: str
+    preco: float
+    status: str
+    ordem: int
+
+
+class PlanoAssinaturaCreate(BaseModel):
+    nome: str = Field(min_length=2, max_length=120)
+    intervalo: Literal["mensal", "anual"] = "anual"
+    # Price RECORRENTE do Stripe (price_...). É ele que define o valor cobrado;
+    # o campo `preco` abaixo é apenas exibição na vitrine.
+    stripe_price_id: str = Field(min_length=5, max_length=255)
+    preco: float = 0
+    status: StatusAtivo = "Ativo"
+    ordem: int = 0
+
+
+class PlanoAssinaturaUpdate(BaseModel):
+    nome: str | None = Field(default=None, max_length=120)
+    intervalo: Literal["mensal", "anual"] | None = None
+    stripe_price_id: str | None = Field(default=None, min_length=5, max_length=255)
+    preco: float | None = None
+    status: StatusAtivo | None = None
+    ordem: int | None = None
+
+
 # ── Vídeos (prova social) ─────────────────────────────────────────────────────
 class VideoAdmin(BaseModel):
     model_config = ConfigDict(from_attributes=True)

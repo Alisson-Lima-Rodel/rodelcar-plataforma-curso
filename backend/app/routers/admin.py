@@ -21,6 +21,7 @@ from app.models import (
     Modulo,
     Pacote,
     PapelAdmin,
+    PlanoAssinatura,
     StatusMatricula,
     Video,
 )
@@ -52,6 +53,9 @@ from app.schemas.admin import (
     PacoteAdmin,
     PacoteCreate,
     PacoteUpdate,
+    PlanoAssinaturaAdmin,
+    PlanoAssinaturaCreate,
+    PlanoAssinaturaUpdate,
     VideoAdmin,
     VideoCreate,
     VideoUpdate,
@@ -291,6 +295,69 @@ router.include_router(_crud_router("/depoimentos", Depoimento, DepoimentoAdmin, 
 router.include_router(_crud_router("/pacotes", Pacote, PacoteAdmin, PacoteCreate, PacoteUpdate))
 router.include_router(_crud_router("/videos", Video, VideoAdmin, VideoCreate, VideoUpdate))
 router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
+
+
+# ── Planos de assinatura (Premium) — fora do CRUD genérico pela checagem de ──
+# duplicidade do stripe_price_id (unique no banco; sem isso, 500 em vez de 409).
+planos = APIRouter(prefix="/planos", dependencies=[Depends(require_papel(*_CONTEUDO))])
+
+
+@planos.get("", response_model=list[PlanoAssinaturaAdmin])
+async def listar_planos_admin(db: AsyncSession = Depends(get_db)):
+    return (
+        await db.execute(
+            select(PlanoAssinatura).order_by(PlanoAssinatura.ordem, PlanoAssinatura.criado_em)
+        )
+    ).scalars().all()
+
+
+@planos.post("", response_model=PlanoAssinaturaAdmin, status_code=201)
+async def criar_plano(body: PlanoAssinaturaCreate, db: AsyncSession = Depends(get_db)):
+    if await db.scalar(
+        select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == body.stripe_price_id)
+    ):
+        raise _err(409, "PRICE_EM_USO", "Já existe um plano com esse Stripe Price ID.")
+    obj = PlanoAssinatura(**body.model_dump())
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@planos.patch("/{plano_id}", response_model=PlanoAssinaturaAdmin)
+async def atualizar_plano(
+    plano_id: uuid.UUID, body: PlanoAssinaturaUpdate, db: AsyncSession = Depends(get_db)
+):
+    obj = await db.get(PlanoAssinatura, plano_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
+    data = body.model_dump(exclude_unset=True)
+    novo_price = data.get("stripe_price_id")
+    if novo_price and novo_price != obj.stripe_price_id:
+        if await db.scalar(
+            select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == novo_price)
+        ):
+            raise _err(409, "PRICE_EM_USO", "Já existe um plano com esse Stripe Price ID.")
+    for k, v in data.items():
+        setattr(obj, k, v)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@planos.delete("/{plano_id}", status_code=204)
+async def excluir_plano(plano_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    obj = await db.get(PlanoAssinatura, plano_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
+    # Assinaturas já vendidas não dependem do plano (a renovação segue o
+    # stripe_subscription_id da matrícula) — excluir só tira o plano da vitrine.
+    await db.delete(obj)
+    await db.commit()
+    return Response(status_code=204)
+
+
+router.include_router(planos)
 
 
 # ── Administradores (equipe) — create/patch tratam senha ──────────────────────

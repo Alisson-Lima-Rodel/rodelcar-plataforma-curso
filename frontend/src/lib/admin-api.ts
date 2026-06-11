@@ -102,6 +102,7 @@ export const ADMIN_CRUD: Record<string, AdminCrud> = {
   courses: adminCrud("/admin/cursos"),
   testimonials: adminCrud("/admin/depoimentos"),
   packages: adminCrud("/admin/pacotes"),
+  plans: adminCrud("/admin/planos"),
   videos: adminCrud("/admin/videos"),
   faq: adminCrud("/admin/faqs"),
   admins: adminCrud("/admin/administradores"),

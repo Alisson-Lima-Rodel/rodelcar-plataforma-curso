@@ -7,11 +7,35 @@ import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHead } from "@/components/ui/section-head";
 import { PREMIUM, type Course } from "@/lib/portal-data";
+import { type PlanoPublico } from "@/lib/api";
 import { CourseCarousel } from "./course-carousel";
 import { usePortal } from "./portal-context";
+import { useCompra } from "./use-compra";
 
-export function Vitrine({ courses }: { courses: Course[] }) {
+export function Vitrine({
+  courses,
+  planoAnual,
+}: {
+  courses: Course[];
+  planoAnual: PlanoPublico | null;
+}) {
   const { showToast } = usePortal();
+  const { iniciarCompra, comprando } = useCompra();
+  // Preço real vem do plano (backend); o estático é só fallback de exibição.
+  const precoPremium = planoAnual?.preco ?? PREMIUM.price;
+  const parcelaPremium = `12x de R$ ${(precoPremium / 12)
+    .toFixed(2)
+    .replace(".", ",")}`;
+  const assinarPremium = () => {
+    if (!planoAnual) {
+      showToast({
+        title: "Indisponível no momento",
+        msg: "A assinatura Premium está temporariamente indisponível.",
+      });
+      return;
+    }
+    iniciarCompra({ tipo: "plano", planoId: planoAnual.id });
+  };
 
   return (
     <section
@@ -101,24 +125,23 @@ export function Vitrine({ courses }: { courses: Course[] }) {
                   variant="primary"
                   size="lg"
                   icon="bolt"
-                  onClick={() =>
-                    showToast({ title: "Compra iniciada", msg: PREMIUM.title })
-                  }
+                  onClick={assinarPremium}
+                  disabled={comprando}
                 >
-                  Assinar Premium
+                  {comprando ? "Abrindo pagamento..." : "Assinar Premium"}
                 </Button>
                 <div className="flex col" style={{ gap: 2 }}>
                   <div className="flex center gap-2">
                     <span className="price" style={{ fontSize: "2rem" }}>
-                      R$ {PREMIUM.price.toLocaleString("pt-BR")}
+                      R$ {precoPremium.toLocaleString("pt-BR")}
                     </span>
-                    <span className="strike tag-mono">
-                      R$ {PREMIUM.old.toLocaleString("pt-BR")}
-                    </span>
+                    {!planoAnual && (
+                      <span className="strike tag-mono">
+                        R$ {PREMIUM.old.toLocaleString("pt-BR")}
+                      </span>
+                    )}
                   </div>
-                  <span className="tag-mono">
-                    {PREMIUM.installment} · por ano
-                  </span>
+                  <span className="tag-mono">{parcelaPremium} · por ano</span>
                 </div>
               </div>
             </div>

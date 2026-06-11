@@ -22,7 +22,7 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:3000/sucesso}
-      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:3000/checkout}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:3000/}
     ports:
       - "8000:8000"
     volumes:

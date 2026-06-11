@@ -167,6 +167,31 @@ class TestCheckoutAvulso:
         assert chamadas == [["card", "pix"], ["card"]]
 
 
+class TestPlanosPublico:
+    async def test_lista_planos_ativos(self, client: AsyncClient, checkout_seed):
+        resp = await client.get("/api/v1/planos")
+        assert resp.status_code == 200
+        ids = [p["id"] for p in resp.json()]
+        assert checkout_seed["plano_id"] in ids
+        # Não expõe o stripe_price_id (dado interno).
+        assert all("stripe_price_id" not in p for p in resp.json())
+
+    async def test_plano_inativo_nao_aparece(self, client: AsyncClient, checkout_seed):
+        async with AsyncSessionLocal() as db:
+            plano = (
+                await db.execute(
+                    select(PlanoAssinatura).where(
+                        PlanoAssinatura.id == uuid.UUID(checkout_seed["plano_id"])
+                    )
+                )
+            ).scalar_one()
+            plano.status = "Inativo"
+            await db.commit()
+        resp = await client.get("/api/v1/planos")
+        assert resp.status_code == 200
+        assert checkout_seed["plano_id"] not in [p["id"] for p in resp.json()]
+
+
 class TestCheckoutAssinatura:
     async def test_assinatura_cartao_200(self, client, checkout_seed, monkeypatch):
         monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")

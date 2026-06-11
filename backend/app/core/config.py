@@ -82,9 +82,10 @@ class Settings(BaseSettings):
     # Segredo de assinatura do endpoint de webhook (whsec_...). A validação da
     # assinatura só é exigida quando setado (igual ao WA_META_APP_SECRET).
     STRIPE_WEBHOOK_SECRET: str = ""
-    # Para onde a Stripe redireciona após o checkout hospedado.
+    # Para onde a Stripe redireciona após o checkout hospedado. O cancelamento
+    # volta para a home do portal (onde a compra começou).
     STRIPE_SUCCESS_URL: str = "http://localhost:3000/sucesso"
-    STRIPE_CANCEL_URL: str = "http://localhost:3000/checkout"
+    STRIPE_CANCEL_URL: str = "http://localhost:3000/"
 
     @property
     def cors_origins_list(self) -> list[str]:

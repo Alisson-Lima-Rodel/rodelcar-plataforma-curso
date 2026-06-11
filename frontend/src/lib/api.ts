@@ -160,6 +160,19 @@ export async function getCursos(): Promise<Course[]> {
   return (data?.items ?? []).map(mapBase);
 }
 
+// ── Planos de assinatura (card Premium da vitrine) ────────────────────────────
+export interface PlanoPublico {
+  id: string;
+  nome: string;
+  intervalo: "mensal" | "anual" | string;
+  preco: number;
+}
+
+export async function getPlanos(): Promise<PlanoPublico[]> {
+  const data = await serverGet<PlanoPublico[]>("/planos");
+  return data ?? [];
+}
+
 // ── Depoimentos (prova social pública) ────────────────────────────────────────
 interface ApiDepoimento {
   nome: string;

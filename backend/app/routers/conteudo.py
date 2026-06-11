@@ -3,7 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.models import Faq, Video
+from app.models import Faq, PlanoAssinatura, Video
+from app.schemas.pagamentos import PlanoPublico
 from app.schemas.portal import FaqPublico, VideoPublico
 
 router = APIRouter(tags=["conteudo"])
@@ -18,6 +19,24 @@ async def listar_videos(db: AsyncSession = Depends(get_db)):
             .where(Video.status == "Ativo")
             .order_by(Video.ordem, Video.criado_em)
             .limit(100)  # teto defensivo p/ resposta pública
+        )
+    ).scalars().all()
+    return rows
+
+
+@router.get("/planos", response_model=list[PlanoPublico])
+async def listar_planos(db: AsyncSession = Depends(get_db)):
+    """Planos de assinatura ativos (público — alimenta o card Premium da vitrine).
+
+    O checkout em si exige login (`POST /checkout/assinatura-cartao`); aqui só os
+    dados de exibição + o id do plano. `stripe_price_id` não é exposto.
+    """
+    rows = (
+        await db.execute(
+            select(PlanoAssinatura)
+            .where(PlanoAssinatura.status == "Ativo")
+            .order_by(PlanoAssinatura.ordem, PlanoAssinatura.criado_em)
+            .limit(20)
         )
     ).scalars().all()
     return rows

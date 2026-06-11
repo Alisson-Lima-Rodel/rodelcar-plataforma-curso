@@ -1,13 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/components/providers/auth-provider";
 import { ApiError } from "@/lib/api";
 import { adminLogin } from "@/lib/admin-api";
+import {
+  executarCompra,
+  lerCompraPendente,
+  limparCompraPendente,
+} from "@/lib/checkout-api";
 
 type Mode = "login" | "signup" | "recover";
 
@@ -42,6 +47,28 @@ export function Login() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // Compra iniciada no portal sem login: avisa e retoma após entrar/cadastrar.
+  useEffect(() => {
+    if (lerCompraPendente()) {
+      setNotice("Entre ou crie sua conta para concluir a compra.");
+    }
+  }, []);
+
+  /** Pós-login do aluno: retoma a compra pendente (redireciona p/ a Stripe) ou
+   * segue para o painel. */
+  const concluirEntrada = async () => {
+    const intent = lerCompraPendente();
+    if (intent) {
+      try {
+        await executarCompra(intent); // window.location → Stripe
+        return;
+      } catch {
+        limparCompraPendente(); // compra falhou; segue p/ o painel (pode tentar de novo)
+      }
+    }
+    router.push("/painel");
+  };
+
   const submit = async () => {
     if (busy) return;
     setError("");
@@ -56,7 +83,7 @@ export function Login() {
     try {
       if (mode === "signup") {
         await register(nome.trim(), email.trim(), senha);
-        router.push("/painel");
+        await concluirEntrada();
       } else {
         // Uma única tela de login: tenta admin primeiro; se a conta não for
         // admin (401), entra como aluno. O nível de acesso é o da conta.
@@ -68,7 +95,7 @@ export function Login() {
           if (!(e instanceof ApiError) || e.status !== 401) throw e;
         }
         await login(email.trim(), senha);
-        router.push("/painel");
+        await concluirEntrada();
       }
     } catch (e) {
       setError(mensagemErro(e));

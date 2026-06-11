@@ -1,6 +1,17 @@
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class PlanoPublico(BaseModel):
+    """Plano de assinatura exibido na vitrine (público — sem stripe_price_id)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+    intervalo: str  # mensal | anual
+    preco: float
 
 
 class CheckoutAvulsoRequest(BaseModel):

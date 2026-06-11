@@ -263,6 +263,25 @@ Regras obrigatórias:
 { "received": true }
 ```
 
+### `GET /planos` (público)
+Planos de assinatura **ativos** para a vitrine (card Premium). Não expõe
+`stripe_price_id`; o checkout em si é autenticado.
+
+```json
+// response 200
+[ { "id": "uuid", "nome": "Assinatura Anual", "intervalo": "anual", "preco": 499.00 } ]
+```
+
+### Checkout (autenticado 🔒)
+- `POST /checkout/avulso` `{ "curso_slug": "..." }` → `{ "checkout_url", "session_id" }`
+  (Stripe Checkout hospedado; cartão+Pix com fallback card-only).
+- `POST /checkout/assinatura-cartao` `{ "plano_id": "uuid" }` → idem (recorrente).
+- `POST /checkout/assinatura-pix` `{ "plano_id": "uuid" }` → idem (Pix Automático,
+  exige Pix habilitado na conta Stripe; senão 400 `PIX_INDISPONIVEL`).
+
+O front redireciona o navegador para `checkout_url`; o acesso é liberado SOMENTE
+pelo webhook (a `success_url` é apenas UX).
+
 ---
 
 ## 8. Eventos analíticos

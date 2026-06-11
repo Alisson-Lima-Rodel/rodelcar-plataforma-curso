@@ -9,6 +9,7 @@ import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
 import { type Course, type CourseModule, type Faq } from "@/lib/portal-data";
 import { usePortal } from "./portal-context";
+import { useCompra } from "./use-compra";
 
 function AccItem({
   m,
@@ -126,13 +127,15 @@ export function CourseDetail({
   course: Course;
   faqs?: Faq[];
 }) {
-  const { openSchedule, showToast } = usePortal();
+  const { openSchedule } = usePortal();
+  const { iniciarCompra, comprando } = useCompra();
   const rich = course;
   const modules = rich.modules ?? [];
   const learn = rich.learn ?? [];
   const [openMod, setOpenMod] = useState(0);
   const [tab, setTab] = useState<"conteudo" | "aprende">("conteudo");
-  const enroll = () => showToast({ title: "Compra iniciada", msg: rich.title });
+  // Course.id carrega o slug do curso (mapBase em lib/api.ts).
+  const enroll = () => iniciarCompra({ tipo: "curso", slug: rich.id });
   const discount = rich.old ? Math.round((1 - rich.price / rich.old) * 100) : 0;
 
   return (
@@ -380,8 +383,9 @@ export function CourseDetail({
                   block
                   icon="bolt"
                   onClick={enroll}
+                  disabled={comprando}
                 >
-                  Comprar agora
+                  {comprando ? "Abrindo pagamento..." : "Comprar agora"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -509,8 +513,11 @@ export function CourseDetail({
                   size="lg"
                   icon="bolt"
                   onClick={enroll}
+                  disabled={comprando}
                 >
-                  Comprar por R$ {rich.price}
+                  {comprando
+                    ? "Abrindo pagamento..."
+                    : `Comprar por R$ ${rich.price}`}
                 </Button>
                 <Button
                   variant="secondary"

@@ -13,6 +13,7 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    dummy_verify,
     hash_password,
     verify_password,
 )
@@ -67,7 +68,11 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     result = await db.execute(select(Aluno).where(Aluno.email == body.email))
     aluno = result.scalar_one_or_none()
 
-    if aluno is None or not verify_password(body.senha, aluno.senha_hash):
+    # Equaliza o tempo de resposta quando o e-mail não existe (anti-enumeração).
+    if aluno is None:
+        dummy_verify()
+        raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
+    if not verify_password(body.senha, aluno.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     await checar_vigencia_aluno(aluno.id, db)
     return await _emitir_tokens(str(aluno.id), db)

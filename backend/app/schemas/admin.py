@@ -1,9 +1,17 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models import PapelAdmin, TipoCurso
+
+# Domínios fechados de status (validados no boundary; evita valor fora do conjunto
+# que sumiria silenciosamente da filtragem pública por igualdade exata).
+StatusAprovacao = Literal["Aprovado", "Pendente"]
+StatusAtivo = Literal["Ativo", "Inativo"]
+# Senha: max 72 (limite efetivo do bcrypt) / min 8.
+_SENHA = Field(min_length=8, max_length=72)
 
 
 # ── Auth do painel ────────────────────────────────────────────────────────────
@@ -55,8 +63,8 @@ class CursoAdmin(BaseModel):
 class CursoCreate(BaseModel):
     slug: str = Field(min_length=2, max_length=120)
     titulo: str = Field(min_length=2, max_length=200)
-    tagline: str | None = None
-    descricao: str | None = None
+    tagline: str | None = Field(default=None, max_length=300)
+    descricao: str | None = Field(default=None, max_length=5000)
     tipo: TipoCurso = TipoCurso.avulso
     preco: float = 0
     preco_antigo: float | None = None
@@ -76,8 +84,8 @@ class CursoCreate(BaseModel):
 class CursoUpdate(BaseModel):
     slug: str | None = None
     titulo: str | None = None
-    tagline: str | None = None
-    descricao: str | None = None
+    tagline: str | None = Field(default=None, max_length=300)
+    descricao: str | None = Field(default=None, max_length=5000)
     tipo: TipoCurso | None = None
     preco: float | None = None
     preco_antigo: float | None = None
@@ -109,19 +117,19 @@ class DepoimentoAdmin(BaseModel):
 
 class DepoimentoCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=160)
-    papel: str | None = None
+    papel: str | None = Field(default=None, max_length=160)
     estrelas: int = Field(default=5, ge=1, le=5)
-    texto: str = Field(min_length=2)
-    status: str = "Pendente"
+    texto: str = Field(min_length=2, max_length=5000)
+    status: StatusAprovacao = "Pendente"
     ordem: int = 0
 
 
 class DepoimentoUpdate(BaseModel):
-    nome: str | None = None
-    papel: str | None = None
+    nome: str | None = Field(default=None, max_length=160)
+    papel: str | None = Field(default=None, max_length=160)
     estrelas: int | None = Field(default=None, ge=1, le=5)
-    texto: str | None = None
-    status: str | None = None
+    texto: str | None = Field(default=None, max_length=5000)
+    status: StatusAprovacao | None = None
     ordem: int | None = None
 
 
@@ -144,10 +152,10 @@ class PacoteCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=200)
     preco: float = 0
     preco_antigo: float | None = None
-    parcelas: str | None = None
+    parcelas: str | None = Field(default=None, max_length=80)
     cursos: int = 1
-    inclui: str | None = None
-    status: str = "Ativo"
+    inclui: str | None = Field(default=None, max_length=2000)
+    status: StatusAtivo = "Ativo"
     ordem: int = 0
 
 
@@ -155,10 +163,10 @@ class PacoteUpdate(BaseModel):
     nome: str | None = None
     preco: float | None = None
     preco_antigo: float | None = None
-    parcelas: str | None = None
+    parcelas: str | None = Field(default=None, max_length=80)
     cursos: int | None = None
-    inclui: str | None = None
-    status: str | None = None
+    inclui: str | None = Field(default=None, max_length=2000)
+    status: StatusAtivo | None = None
     ordem: int | None = None
 
 
@@ -177,19 +185,19 @@ class VideoAdmin(BaseModel):
 
 class VideoCreate(BaseModel):
     titulo: str = Field(min_length=2, max_length=200)
-    youtube_url: str | None = None
-    duracao: str | None = None
-    views: str | None = None
-    status: str = "Ativo"
+    youtube_url: str | None = Field(default=None, max_length=500)
+    duracao: str | None = Field(default=None, max_length=20)
+    views: str | None = Field(default=None, max_length=40)
+    status: StatusAtivo = "Ativo"
     ordem: int = 0
 
 
 class VideoUpdate(BaseModel):
     titulo: str | None = None
-    youtube_url: str | None = None
-    duracao: str | None = None
-    views: str | None = None
-    status: str | None = None
+    youtube_url: str | None = Field(default=None, max_length=500)
+    duracao: str | None = Field(default=None, max_length=20)
+    views: str | None = Field(default=None, max_length=40)
+    status: StatusAtivo | None = None
     ordem: int | None = None
 
 
@@ -206,15 +214,15 @@ class FaqAdmin(BaseModel):
 
 class FaqCreate(BaseModel):
     pergunta: str = Field(min_length=2, max_length=300)
-    resposta: str = Field(min_length=2)
-    status: str = "Ativo"
+    resposta: str = Field(min_length=2, max_length=5000)
+    status: StatusAtivo = "Ativo"
     ordem: int = 0
 
 
 class FaqUpdate(BaseModel):
-    pergunta: str | None = None
-    resposta: str | None = None
-    status: str | None = None
+    pergunta: str | None = Field(default=None, max_length=300)
+    resposta: str | None = Field(default=None, max_length=5000)
+    status: StatusAtivo | None = None
     ordem: int | None = None
 
 
@@ -233,7 +241,7 @@ class AdminUserItem(BaseModel):
 class AdminUserCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=160)
     email: EmailStr
-    senha: str = Field(min_length=6, max_length=128)
+    senha: str = _SENHA
     papel: PapelAdmin = PapelAdmin.suporte
     ativo: bool = True
 
@@ -241,7 +249,7 @@ class AdminUserCreate(BaseModel):
 class AdminUserUpdate(BaseModel):
     nome: str | None = None
     email: EmailStr | None = None
-    senha: str | None = None
+    senha: str | None = Field(default=None, min_length=8, max_length=72)
     papel: PapelAdmin | None = None
     ativo: bool | None = None
 
@@ -264,12 +272,12 @@ class AlunoAdminItem(BaseModel):
 class AlunoCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=160)
     email: EmailStr
-    senha: str = Field(min_length=6, max_length=128)
-    telefone: str | None = None
+    senha: str = _SENHA
+    telefone: str | None = Field(default=None, max_length=40)
 
 
 class AlunoUpdate(BaseModel):
     nome: str | None = None
     email: EmailStr | None = None
-    senha: str | None = None
-    telefone: str | None = None
+    senha: str | None = Field(default=None, min_length=8, max_length=72)
+    telefone: str | None = Field(default=None, max_length=40)

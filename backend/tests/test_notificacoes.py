@@ -26,6 +26,7 @@ from app.models import (
 
 def _msg(tel: str | None = None) -> MensagemNotificacao:
     return MensagemNotificacao(
+        aluno_id=uuid.uuid4(),
         aluno_nome="João Silva",
         aluno_email="joao@example.com",
         aluno_telefone=tel,

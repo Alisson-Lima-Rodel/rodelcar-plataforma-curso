@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MensagemNotificacao:
+    aluno_id: uuid.UUID  # usado nos logs (em vez de e-mail/telefone — LGPD)
     aluno_nome: str
     aluno_email: str
     aluno_telefone: str | None
@@ -104,12 +105,12 @@ async def enviar_email(msg: MensagemNotificacao) -> str | None:
     """Envia e-mail via SMTP. Retorna identificador ou None em falha."""
     if settings.NOTIFICACOES_FAKE:
         logger.info(
-            "[FAKE EMAIL] para=%s assunto=%r", msg.aluno_email, _build_email_subject(msg)
+            "[FAKE EMAIL] aluno=%s assunto=%r", msg.aluno_id, _build_email_subject(msg)
         )
         return f"fake-email-{uuid.uuid4()}"
 
     if not settings.SMTP_HOST:
-        logger.debug("SMTP_HOST não configurado — e-mail ignorado para %s", msg.aluno_email)
+        logger.debug("SMTP_HOST não configurado — e-mail ignorado (aluno=%s)", msg.aluno_id)
         return None
 
     em = EmailMessage()
@@ -132,7 +133,7 @@ async def enviar_email(msg: MensagemNotificacao) -> str | None:
             await smtp.send_message(em)
         return f"smtp-{uuid.uuid4()}"
     except Exception:
-        logger.exception("Falha ao enviar e-mail para %s", msg.aluno_email)
+        logger.exception("Falha ao enviar e-mail (aluno=%s)", msg.aluno_id)
         return None
 
 
@@ -198,18 +199,16 @@ async def _wa_zapi(telefone: str, texto: str) -> str:
 async def enviar_whatsapp(msg: MensagemNotificacao) -> str | None:
     """Envia WhatsApp via provider configurado. Retorna provedor_msg_id ou None."""
     if not msg.aluno_telefone:
-        logger.debug("Telefone ausente para %s — WhatsApp ignorado", msg.aluno_email)
+        logger.debug("Telefone ausente (aluno=%s) — WhatsApp ignorado", msg.aluno_id)
         return None
 
     if settings.NOTIFICACOES_FAKE:
-        logger.info(
-            "[FAKE WHATSAPP] para=%s texto=%r",
-            msg.aluno_telefone, _build_wa_text(msg)[:80],
-        )
+        # Não loga telefone nem o texto da mensagem (PII/conteúdo) — só o id.
+        logger.info("[FAKE WHATSAPP] aluno=%s", msg.aluno_id)
         return f"fake-wa-{uuid.uuid4()}"
 
     if not settings.WA_PROVIDER:
-        logger.debug("WhatsApp não configurado (WA_PROVIDER) para %s", msg.aluno_email)
+        logger.debug("WhatsApp não configurado (WA_PROVIDER) — aluno=%s", msg.aluno_id)
         return None
 
     texto = _build_wa_text(msg)
@@ -226,6 +225,6 @@ async def enviar_whatsapp(msg: MensagemNotificacao) -> str | None:
         return None
     except Exception:
         logger.exception(
-            "Falha ao enviar WhatsApp para %s via %s", msg.aluno_telefone, settings.WA_PROVIDER
+            "Falha ao enviar WhatsApp (aluno=%s) via %s", msg.aluno_id, settings.WA_PROVIDER
         )
         return None

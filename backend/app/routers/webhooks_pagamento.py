@@ -42,6 +42,11 @@ router = APIRouter(prefix="/webhooks/pagamento", tags=["webhooks"])
 
 _GATEWAYS_CONHECIDOS = {"stripe", "mercadopago", "asaas"}
 
+# Teto do corpo do webhook (eventos do Stripe são pequenos). A rota é isenta de
+# rate limit (servidor a servidor), então um corpo gigante é rejeitado antes do
+# parse/verificação para não consumir memória/CPU à toa.
+_MAX_BODY_BYTES = 256 * 1024
+
 # Eventos do Stripe (mode=payment) que liberam acesso ou registram falha.
 _EVENTOS_CONCESSAO = {
     "checkout.session.completed",
@@ -79,6 +84,8 @@ async def webhook_pagamento(
         )
 
     body_bytes = await request.body()
+    if len(body_bytes) > _MAX_BODY_BYTES:
+        raise _err(413, "PAYLOAD_GRANDE_DEMAIS", "Corpo do webhook excede o limite.")
     event = _verificar_stripe(body_bytes, stripe_signature)
     await _processar_stripe(db, event)
     return WebhookRecebido(received=True)
@@ -126,6 +133,13 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
     if not event_id:
         raise _err(400, "EVENTO_SEM_ID", "Evento Stripe sem id — recusado.")
 
+    # Em produção, recusa eventos de test-mode: mesmo assinados, um evento disparado
+    # via Stripe CLI/test-mode (livemode=false) não pode conceder acesso real. 200
+    # para o Stripe não reentregar (no-op consciente).
+    if settings.is_production and event.get("livemode") is not True:
+        logger.warning("Evento Stripe test-mode (livemode!=true) ignorado em produção: %s", event_id)
+        return
+
     # 1) Idempotência por event.id — grava (flush, sem commit). Reentrega → no-op.
     db.add(WebhookEvento(event_id=event_id, gateway="stripe", tipo=tipo))
     try:
@@ -135,18 +149,29 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
         logger.info("Evento Stripe duplicado ignorado: %s", event_id)
         return
 
-    if tipo in _EVENTOS_CONCESSAO:
-        await _conceder_acesso(db, event, obj, tipo)
-    elif tipo == "invoice.paid":
-        await _conceder_assinatura(db, event, obj)
-    elif tipo == "customer.subscription.deleted":
-        await _revogar_assinatura(db, obj)
-    elif tipo in _EVENTOS_FALHA:
-        await _registrar_falha(db, event, obj)
-    else:
-        logger.debug("Evento Stripe sem ação: %s", tipo)
-
-    await db.commit()
+    # Corrida: dois eventos DIFERENTES sobre o mesmo pagamento (ex.: cartão
+    # `completed` e Pix `async_payment_succeeded`) podem inserir Pagamento com o
+    # mesmo gateway_transaction_id concorrentemente. O unique constraint garante
+    # que não há dupla concessão; aqui tratamos o IntegrityError como no-op (o
+    # evento concorrente já concedeu) em vez de devolver 500.
+    try:
+        if tipo in _EVENTOS_CONCESSAO:
+            await _conceder_acesso(db, event, obj, tipo)
+        elif tipo == "invoice.paid":
+            await _conceder_assinatura(db, event, obj)
+        elif tipo == "customer.subscription.deleted":
+            await _revogar_assinatura(db, obj)
+        elif tipo in _EVENTOS_FALHA:
+            await _registrar_falha(db, event, obj)
+        else:
+            logger.debug("Evento Stripe sem ação: %s", tipo)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        logger.info(
+            "IntegrityError no processamento (corrida do mesmo pagamento) — no-op: %s",
+            event_id,
+        )
 
 
 async def _conceder_acesso(

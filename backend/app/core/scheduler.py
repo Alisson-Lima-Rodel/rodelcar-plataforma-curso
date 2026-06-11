@@ -12,9 +12,11 @@ from app.core.db import AsyncSessionLocal
 from app.core.notificacoes import MensagemNotificacao, enviar_email, enviar_whatsapp
 from app.models import (
     CanalNotificacao,
+    Lead,
     Matricula,
     Notificacao,
     RefreshToken,
+    StatusLead,
     StatusMatricula,
     StatusNotificacao,
     TipoNotificacao,
@@ -25,6 +27,10 @@ logger = logging.getLogger(__name__)
 # Tokens revogados ficam por este período (auditoria / detecção de reuso) antes
 # de serem apagados; expirados saem assim que vencem.
 REFRESH_RETENCAO_REVOGADOS_DIAS = 30
+
+# Leads de captação finalizados (concluido/perdido) são expurgados após este
+# período — minimização/descarte após a finalidade (LGPD).
+LEAD_RETENCAO_DIAS = 180
 
 # (marco, dias_antes_da_expiracao, tipo_notificacao)
 _MARCOS_PREVIA = [
@@ -166,6 +172,7 @@ async def _processar_notificacao(
     await db.flush()  # obtém o id gerado
 
     msg = MensagemNotificacao(
+        aluno_id=matricula.aluno_id,
         aluno_nome=matricula.aluno.nome,
         aluno_email=matricula.aluno.email,
         aluno_telefone=matricula.aluno.telefone,
@@ -216,6 +223,25 @@ async def limpar_refresh_tokens(db) -> int:
     return result.rowcount or 0
 
 
+# ── Expurgo de leads finalizados (LGPD) ───────────────────────────────────────
+
+async def limpar_leads_antigos(db) -> int:
+    """Apaga leads finalizados (concluido/perdido) com mais de LEAD_RETENCAO_DIAS.
+
+    Dados de captação contêm PII (nome/telefone/e-mail/mensagem); após a finalidade
+    do follow-up comercial, são descartados (minimização — LGPD).
+    """
+    corte = datetime.now(timezone.utc) - timedelta(days=LEAD_RETENCAO_DIAS)
+    result = await db.execute(
+        delete(Lead).where(
+            Lead.status.in_((StatusLead.concluido, StatusLead.perdido)),
+            Lead.criado_em < corte,
+        )
+    )
+    await db.commit()
+    return result.rowcount or 0
+
+
 # ── Scheduler ─────────────────────────────────────────────────────────────────
 
 scheduler = AsyncIOScheduler()
@@ -237,6 +263,15 @@ async def _job_limpeza_tokens() -> None:
         logger.exception("Erro não tratado no job de limpeza de refresh tokens")
 
 
+async def _job_limpeza_leads() -> None:
+    try:
+        async with AsyncSessionLocal() as db:
+            removidos = await limpar_leads_antigos(db)
+        logger.info("Expurgo de leads finalizados concluído — %d removidos", removidos)
+    except Exception:
+        logger.exception("Erro não tratado no job de expurgo de leads")
+
+
 def iniciar_scheduler() -> None:
     scheduler.add_job(
         _job_vigencia_diaria,
@@ -250,9 +285,16 @@ def iniciar_scheduler() -> None:
         id="limpeza_refresh_tokens",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _job_limpeza_leads,
+        CronTrigger(hour=6, minute=20, timezone="UTC"),
+        id="limpeza_leads",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
-        "Scheduler iniciado — vigência diária 06:00 UTC, limpeza de tokens 06:10 UTC"
+        "Scheduler iniciado — vigência 06:00, limpeza de tokens 06:10, "
+        "expurgo de leads 06:20 (UTC)"
     )
 
 

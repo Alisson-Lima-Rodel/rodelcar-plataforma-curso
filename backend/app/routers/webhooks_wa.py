@@ -20,6 +20,9 @@ from app.models import Notificacao, StatusNotificacao
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 
+# Teto do corpo (rota isenta de rate limit): rejeita payload gigante antes do parse.
+_MAX_BODY_BYTES = 256 * 1024
+
 
 def _err(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(
@@ -163,6 +166,8 @@ async def wa_status_webhook(
     x_hub_signature_256: str | None = Header(None),
 ):
     body_bytes = await request.body()
+    if len(body_bytes) > _MAX_BODY_BYTES:
+        raise _err(413, "PAYLOAD_GRANDE_DEMAIS", "Corpo do webhook excede o limite.")
     _verificar_assinatura(body_bytes, x_hub_signature_256)
 
     try:

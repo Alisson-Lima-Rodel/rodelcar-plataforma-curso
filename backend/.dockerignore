@@ -1,0 +1,19 @@
+# Segredos — nunca devem entrar na imagem
+.env
+.env.*
+
+# Artefatos Python / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Testes não precisam ir para a imagem de runtime
+tests/
+
+# Logs e temporários
+*.log

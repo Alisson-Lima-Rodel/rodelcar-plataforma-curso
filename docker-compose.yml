@@ -7,7 +7,7 @@ services:
       # Supabase: postgresql+asyncpg://rodelcar_app:SENHA@db.<ref>.supabase.co:5432/postgres
       DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL no .env (conexão do Supabase)}
       DATABASE_SSL: ${DATABASE_SSL:-}
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (>=32 chars aleatorios; nunca o placeholder do repo)}
       RODELCAR_FERNET_KEY: ${RODELCAR_FERNET_KEY:-}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
       ENVIRONMENT: ${ENVIRONMENT:-development}

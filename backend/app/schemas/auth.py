@@ -11,7 +11,9 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     nome: str = Field(min_length=2, max_length=160)
     email: EmailStr
-    senha: str = Field(min_length=6, max_length=128)
+    # max 72: o bcrypt trunca silenciosamente em 72 bytes — alinhar o limite evita
+    # que parte da senha seja ignorada sem o usuário saber. min 8: piso razoável.
+    senha: str = Field(min_length=8, max_length=72)
 
 
 class TokenResponse(BaseModel):

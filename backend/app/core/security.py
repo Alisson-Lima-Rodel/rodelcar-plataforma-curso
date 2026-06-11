@@ -15,6 +15,16 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
+# Hash dummy fixo (custo de um verify real) para equalizar o tempo de resposta
+# quando o e-mail não existe — mitiga enumeração de contas por timing no login.
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equalization-dummy", bcrypt.gensalt())
+
+
+def dummy_verify() -> None:
+    """Gasta ~o mesmo tempo de um verify_password real, sem revelar nada."""
+    bcrypt.checkpw(b"x", _DUMMY_HASH)
+
+
 def _make_token(data: dict, expires_delta: timedelta) -> str:
     payload = {**data, "exp": datetime.now(timezone.utc) + expires_delta}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import auth_limit, limiter
-from app.core.security import create_admin_token, hash_password, verify_password
+from app.core.security import create_admin_token, dummy_verify, hash_password, verify_password
 from app.dependencies import get_current_admin, require_papel
 from app.models import (
     Admin,
@@ -72,7 +72,11 @@ def _err(status: int, code: str, message: str) -> HTTPException:
 @limiter.limit(auth_limit)
 async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
     admin = (await db.execute(select(Admin).where(Admin.email == body.email))).scalar_one_or_none()
-    if admin is None or not admin.ativo or not verify_password(body.senha, admin.senha_hash):
+    # Equaliza o tempo quando o e-mail não existe (anti-enumeração por timing).
+    if admin is None:
+        dummy_verify()
+        raise _err(401, "CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos.")
+    if not admin.ativo or not verify_password(body.senha, admin.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos.")
     admin.ultimo_acesso = datetime.now(timezone.utc)
     await db.commit()

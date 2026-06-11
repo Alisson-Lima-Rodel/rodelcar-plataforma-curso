@@ -17,6 +17,7 @@ async def listar_depoimentos(db: AsyncSession = Depends(get_db)):
             select(Depoimento)
             .where(Depoimento.status == "Aprovado")
             .order_by(Depoimento.ordem, Depoimento.criado_em)
+            .limit(100)  # teto defensivo: resposta pública não cresce sem limite
         )
     ).scalars().all()
     return rows

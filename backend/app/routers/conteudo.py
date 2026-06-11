@@ -17,6 +17,7 @@ async def listar_videos(db: AsyncSession = Depends(get_db)):
             select(Video)
             .where(Video.status == "Ativo")
             .order_by(Video.ordem, Video.criado_em)
+            .limit(100)  # teto defensivo p/ resposta pública
         )
     ).scalars().all()
     return rows
@@ -30,6 +31,7 @@ async def listar_faq(db: AsyncSession = Depends(get_db)):
             select(Faq)
             .where(Faq.status == "Ativo")
             .order_by(Faq.ordem, Faq.criado_em)
+            .limit(100)  # teto defensivo p/ resposta pública
         )
     ).scalars().all()
     return rows

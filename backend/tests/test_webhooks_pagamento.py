@@ -212,6 +212,36 @@ class TestWebhookStripe:
         esperado = datetime.now(timezone.utc) + timedelta(days=seed["validade_dias"])
         assert abs((matriculas[0].data_expiracao - esperado).total_seconds()) < 120
 
+    async def test_evento_test_mode_ignorado_em_producao(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        """Em produção, evento com livemode!=true (test-mode) não concede acesso."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+        pref = seed["pref"]
+        event = _session_event(
+            "checkout.session.completed",
+            event_id=f"evt_{pref}_tm",
+            pi_id=f"pi_{pref}_tm",
+            aluno_id=seed["aluno_id"],
+            curso_slug=seed["curso_slug"],
+        )
+        event["livemode"] = False  # test-mode
+        resp = await _post(client, event)
+        assert resp.status_code == 200  # 200 p/ o Stripe não reentregar
+        assert len(await _pagamentos(seed["aluno_id"])) == 0
+        assert len(await _matriculas(seed["aluno_id"])) == 0
+
+    async def test_corpo_grande_demais_413(self, client: AsyncClient, monkeypatch):
+        """Corpo acima do teto é rejeitado antes do parse/verificação (DoS)."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        body = "x" * (256 * 1024 + 16)
+        resp = await client.post(
+            URL, content=body, headers={"Content-Type": "application/json"}
+        )
+        assert resp.status_code == 413
+        assert resp.json()["error"]["code"] == "PAYLOAD_GRANDE_DEMAIS"
+
     async def test_evento_duplicado_nao_duplica(self, client: AsyncClient, seed, monkeypatch):
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
         pref = seed["pref"]

@@ -1,9 +1,16 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Valores de placeholder que JAMAIS podem valer em produção.
+# Valores de placeholder que JAMAIS podem valer em produção. Inclui o default do
+# docker-compose.yml (`dev-jwt-secret-change-in-production`): ele tem >=32 chars e
+# passaria pela checagem de tamanho, então precisa ser barrado pelo nome — senão a
+# API subiria em produção com uma chave de assinatura JWT pública no repositório.
 _INSECURE_DEFAULTS = {
-    "JWT_SECRET": {"dev-secret", "change-this-to-a-strong-random-secret-min-32-chars"},
+    "JWT_SECRET": {
+        "dev-secret",
+        "change-this-to-a-strong-random-secret-min-32-chars",
+        "dev-jwt-secret-change-in-production",
+    },
     "INTERNAL_TOKEN": {"", "change-to-a-strong-random-secret", "dev-internal-token"},
 }
 
@@ -33,6 +40,10 @@ class Settings(BaseSettings):
     # Storage do rate limiter. Vazio = memória (só serve p/ 1 processo/instância).
     # Em produção multi-instância, aponte para Redis: redis://host:6379/0
     RATELIMIT_STORAGE_URI: str = ""
+    # Nº de workers do uvicorn (espelha o entrypoint.sh, default 2 em produção).
+    # Com >1 worker e sem RATELIMIT_STORAGE_URI o teto anti brute-force conta por
+    # processo (vira N×); o fail-fast de produção recusa subir nessa combinação.
+    WEB_CONCURRENCY: int = 2
 
     # Modo fake: renderiza e loga as notificações em vez de enviar (dev/testes).
     # Não dispara e-mail/WhatsApp real, mas exercita todo o pipeline (status,
@@ -118,6 +129,11 @@ class Settings(BaseSettings):
             problemas.append("DATABASE_URL usa o superusuário 'postgres' (use um papel dedicado, não-root)")
         if self.STRIPE_SECRET_KEY and not self.STRIPE_WEBHOOK_SECRET:
             problemas.append("STRIPE_WEBHOOK_SECRET ausente (Stripe ativo → webhook ficaria fail-open)")
+        if self.WEB_CONCURRENCY > 1 and not self.RATELIMIT_STORAGE_URI:
+            problemas.append(
+                "RATELIMIT_STORAGE_URI ausente com WEB_CONCURRENCY>1 (rate limit por "
+                "processo → teto anti brute-force multiplicado; use redis://...)"
+            )
         if "*" in self.cors_origins_list:
             problemas.append("CORS_ORIGINS contém '*' (use os domínios explícitos do front)")
         if self.WA_PROVIDER == "meta" and not self.WA_META_APP_SECRET:

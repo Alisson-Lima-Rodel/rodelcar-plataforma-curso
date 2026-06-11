@@ -78,25 +78,35 @@ def _invoice_event(
     customer: str = "cus_test",
     amount_paid: int = 4990,
     period_end: int | None = None,
+    formato: str = "atual",
 ) -> dict:
+    """Invoice nos DOIS formatos da API Stripe.
+
+    `atual` (basil/dahlia, 2025+): assinatura em `parent.subscription_details`.
+    `legado` (<2025): `subscription` na raiz + `subscription_details`.
+    """
     if period_end is None:
         period_end = int(time.time()) + 30 * 86400
-    return {
-        "id": event_id,
-        "type": tipo,
-        "data": {
-            "object": {
-                "id": invoice_id,
-                "object": "invoice",
-                "subscription": sub_id,
-                "customer": customer,
-                "amount_paid": amount_paid,
-                "amount_due": amount_paid,
-                "subscription_details": {"metadata": {"app_user_id": aluno_id}},
-                "lines": {"data": [{"period": {"end": period_end}}]},
-            }
-        },
+    obj: dict = {
+        "id": invoice_id,
+        "object": "invoice",
+        "customer": customer,
+        "amount_paid": amount_paid,
+        "amount_due": amount_paid,
+        "lines": {"data": [{"period": {"end": period_end}}]},
     }
+    if formato == "legado":
+        obj["subscription"] = sub_id
+        obj["subscription_details"] = {"metadata": {"app_user_id": aluno_id}}
+    else:
+        obj["parent"] = {
+            "type": "subscription_details",
+            "subscription_details": {
+                "subscription": sub_id,
+                "metadata": {"app_user_id": aluno_id},
+            },
+        }
+    return {"id": event_id, "type": tipo, "data": {"object": obj}}
 
 
 def _sub_event(tipo: str, *, event_id: str, sub_id: str) -> dict:
@@ -491,6 +501,25 @@ class TestWebhookAssinatura:
             p.gateway_transaction_id == f"in_{pref}_1" and p.status == StatusPagamento.aprovado
             for p in pags
         )
+
+    async def test_invoice_paid_formato_legado(self, client: AsyncClient, seed, monkeypatch):
+        """Compat: invoice no formato antigo (`subscription` na raiz) segue funcionando."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}_leg"
+        ev = _invoice_event(
+            "invoice.paid",
+            event_id=f"evt_{pref}_leg",
+            invoice_id=f"in_{pref}_leg",
+            sub_id=sub,
+            aluno_id=seed["aluno_id"],
+            formato="legado",
+        )
+        assert (await _post(client, ev)).status_code == 200
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat is not None
+        assert mat.status == StatusMatricula.ativo
+        assert mat.stripe_subscription_id == sub
 
     async def test_invoice_paid_renova_expiracao(self, client: AsyncClient, seed, monkeypatch):
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)

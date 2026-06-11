@@ -264,11 +264,30 @@ async def _registrar_falha(
 
 # ── Assinaturas (mode=subscription) ─────────────────────────────────────────────
 
+def _sub_details(invoice: dict[str, Any]) -> dict[str, Any]:
+    """Detalhes da assinatura no invoice — compat com os DOIS formatos da API.
+
+    Legado (<2025): `invoice.subscription` (id) e `invoice.subscription_details`.
+    Atual (basil/dahlia): tudo em `invoice.parent.subscription_details`
+    (`{"subscription": "sub_...", "metadata": {...}}`).
+    """
+    parent = invoice.get("parent") or {}
+    return (
+        invoice.get("subscription_details")
+        or parent.get("subscription_details")
+        or {}
+    )
+
+
+def _sub_id_do_invoice(invoice: dict[str, Any]) -> str | None:
+    return invoice.get("subscription") or _sub_details(invoice).get("subscription")
+
+
 async def _conceder_assinatura(
     db: AsyncSession, event: dict[str, Any], invoice: dict[str, Any]
 ) -> None:
     """invoice.paid → libera/renova acesso ao catálogo inteiro até o fim do ciclo."""
-    sub_id = invoice.get("subscription")
+    sub_id = _sub_id_do_invoice(invoice)
     invoice_id = invoice.get("id")
     if not sub_id or not invoice_id:
         logger.warning("invoice.paid sem subscription/id — ignorado (event=%s).", event.get("id"))
@@ -328,8 +347,7 @@ async def _revogar_assinatura(db: AsyncSession, sub: dict[str, Any]) -> None:
 async def _resolver_aluno_assinatura(
     db: AsyncSession, invoice: dict[str, Any]
 ) -> Aluno | None:
-    detalhes = invoice.get("subscription_details") or {}
-    meta = detalhes.get("metadata") or {}
+    meta = _sub_details(invoice).get("metadata") or {}
     return await _resolver_aluno(db, meta.get("app_user_id"), invoice.get("customer"))
 
 

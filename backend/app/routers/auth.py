@@ -42,9 +42,9 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-async def _emitir_tokens(aluno_id: str, db: AsyncSession) -> TokenResponse:
+async def _emitir_tokens(aluno_id: str, token_version: int, db: AsyncSession) -> TokenResponse:
     """Emite par access+refresh e persiste o refresh (jti) p/ rotação/revogação."""
-    access = create_access_token(aluno_id)
+    access = create_access_token(aluno_id, token_version)
     refresh_token, jti = create_refresh_token(aluno_id)
     db.add(
         RefreshToken(
@@ -75,7 +75,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     if not verify_password(body.senha, aluno.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     await checar_vigencia_aluno(aluno.id, db)
-    return await _emitir_tokens(str(aluno.id), db)
+    return await _emitir_tokens(str(aluno.id), aluno.token_version, db)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -88,7 +88,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     aluno = Aluno(nome=body.nome, email=body.email, senha_hash=hash_password(body.senha))
     db.add(aluno)
     await db.flush()  # gera aluno.id
-    return await _emitir_tokens(str(aluno.id), db)
+    return await _emitir_tokens(str(aluno.id), aluno.token_version, db)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -112,12 +112,18 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     if rt is None or rt.aluno_id != aluno_uuid:
         raise _err(401, "REFRESH_INVALIDO", "Refresh token inválido ou expirado.")
 
-    # Reuso de token já rotacionado = sinal de roubo → revoga a família inteira.
+    # Reuso de token já rotacionado = sinal de roubo → revoga a família inteira E
+    # incrementa token_version (mata também os access tokens vivos, não só os refresh).
     if rt.revogado:
         await db.execute(
             update(RefreshToken)
             .where(RefreshToken.aluno_id == aluno_uuid, RefreshToken.revogado.is_(False))
             .values(revogado=True, revogado_em=agora)
+        )
+        await db.execute(
+            update(Aluno)
+            .where(Aluno.id == aluno_uuid)
+            .values(token_version=Aluno.token_version + 1)
         )
         await db.commit()
         raise _err(
@@ -132,7 +138,8 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     # Rotação: revoga o token atual e emite um novo par (commit atômico em _emitir_tokens).
     rt.revogado = True
     rt.revogado_em = agora
-    return await _emitir_tokens(str(aluno_uuid), db)
+    aluno = await db.get(Aluno, aluno_uuid)
+    return await _emitir_tokens(str(aluno_uuid), aluno.token_version, db)
 
 
 @router.post("/logout", status_code=204)

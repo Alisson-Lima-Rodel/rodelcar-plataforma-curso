@@ -131,6 +131,10 @@ class Aluno(Base):
     cpf: Mapped[str | None] = mapped_column(EncryptedStr(255))
     telefone: Mapped[str | None] = mapped_column(String(40))
     senha_hash: Mapped[str] = mapped_column(String(255))
+    # Versão da sessão: embutida no access token (claim "tv") e conferida a cada
+    # request. Incrementar invalida TODOS os access tokens vivos do aluno (ex.: ao
+    # detectar reuso de refresh = roubo). Default 0 mantém tokens antigos válidos.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Customer do Stripe (cus_...); criado no 1º checkout e reaproveitado depois.
     stripe_customer_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
@@ -378,6 +382,9 @@ class Admin(Base):
     nome: Mapped[str] = mapped_column(String(160))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     senha_hash: Mapped[str] = mapped_column(String(255))
+    # Versão da sessão (claim "tv"): o admin não tem refresh, então o logout
+    # incrementa este contador para invalidar o(s) access token(s) vivos.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     papel: Mapped[PapelAdmin] = mapped_column(
         # values_callable: o tipo Postgres usa os VALORES ("Administrador"…),
         # não os nomes dos membros — casa com o enum criado na migração.

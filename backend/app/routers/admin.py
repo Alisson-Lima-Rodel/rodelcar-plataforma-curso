@@ -81,7 +81,7 @@ async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSessio
     admin.ultimo_acesso = datetime.now(timezone.utc)
     await db.commit()
     return AdminTokenResponse(
-        access_token=create_admin_token(str(admin.id)),
+        access_token=create_admin_token(str(admin.id), admin.token_version),
         expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
     )
 
@@ -89,6 +89,17 @@ async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSessio
 @router.get("/auth/me", response_model=AdminMe)
 async def admin_me(admin: Admin = Depends(get_current_admin)):
     return admin
+
+
+@router.post("/auth/logout", status_code=204)
+async def admin_logout(
+    admin: Admin = Depends(get_current_admin), db: AsyncSession = Depends(get_db)
+):
+    """Logout do painel: incrementa token_version e invalida os access tokens vivos
+    deste admin (o admin não usa refresh; esta é a forma de revogar a sessão)."""
+    admin.token_version += 1
+    await db.commit()
+    return Response(status_code=204)
 
 
 # ── Cursos (CRUD) — protegido por admin ───────────────────────────────────────

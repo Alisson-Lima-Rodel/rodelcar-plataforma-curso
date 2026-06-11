@@ -30,17 +30,17 @@ def _make_token(data: dict, expires_delta: timedelta) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_access_token(sub: str) -> str:
+def create_access_token(sub: str, token_version: int = 0) -> str:
     return _make_token(
-        {"sub": sub, "type": "access"},
+        {"sub": sub, "type": "access", "tv": token_version},
         timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES),
     )
 
 
-def create_admin_token(sub: str) -> str:
+def create_admin_token(sub: str, token_version: int = 0) -> str:
     """Token de acesso do painel admin — `type` distinto p/ não cruzar com aluno."""
     return _make_token(
-        {"sub": sub, "type": "admin_access"},
+        {"sub": sub, "type": "admin_access", "tv": token_version},
         timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES),
     )
 

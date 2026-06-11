@@ -78,6 +78,20 @@ class TestAdminAuth:
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "TOKEN_INVALIDO"
 
+    async def test_logout_invalida_token(self, client: AsyncClient, admin_user: dict):
+        """Logout incrementa token_version → o access token deixa de valer."""
+        login = await client.post(
+            "/api/v1/admin/auth/login",
+            json={"email": admin_user["email"], "senha": admin_user["password"]},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        assert (await client.get("/api/v1/admin/auth/me", headers=headers)).status_code == 200
+        assert (await client.post("/api/v1/admin/auth/logout", headers=headers)).status_code == 204
+        # Mesmo token, agora com tv defasado → 401.
+        resp = await client.get("/api/v1/admin/auth/me", headers=headers)
+        assert resp.status_code == 401
+        assert resp.json()["error"]["code"] == "TOKEN_INVALIDO"
+
 
 # ── CRUD de Vídeos (fábrica _crud_router) ─────────────────────────────────────
 class TestAdminVideos:

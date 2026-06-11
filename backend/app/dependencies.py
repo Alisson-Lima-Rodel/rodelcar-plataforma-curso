@@ -47,6 +47,12 @@ async def get_current_aluno(
             status_code=401,
             detail={"error": {"code": "ALUNO_NAO_ENCONTRADO", "message": "Aluno não encontrado.", "details": None}},
         )
+    # Versão da sessão: token com tv defasado foi invalidado (ex.: reuso detectado).
+    if payload.get("tv", 0) != aluno.token_version:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": {"code": "TOKEN_INVALIDO", "message": "Sessão expirada. Faça login novamente.", "details": None}},
+        )
     return aluno
 
 
@@ -67,6 +73,9 @@ async def get_current_admin(
     admin = (await db.execute(select(Admin).where(Admin.id == admin_uuid))).scalar_one_or_none()
     if admin is None or not admin.ativo:
         raise _unauth("ADMIN_NAO_ENCONTRADO", "Administrador não encontrado ou inativo.")
+    # Versão da sessão: o logout do admin incrementa token_version e invalida o token.
+    if payload.get("tv", 0) != admin.token_version:
+        raise _unauth("TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
     return admin
 
 

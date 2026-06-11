@@ -119,6 +119,28 @@ class TestRefresh:
         )
         assert r3.status_code == 401
 
+    async def test_reuso_invalida_access_token(
+        self, client: AsyncClient, test_aluno: dict
+    ):
+        """Detecção de reuso bumpa token_version → o access token vivo é invalidado."""
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": test_aluno["email"], "senha": test_aluno["password"]},
+        )
+        access = login.json()["access_token"]
+        old_refresh = login.json()["refresh_token"]
+        h = {"Authorization": f"Bearer {access}"}
+        assert (await client.get("/api/v1/auth/me", headers=h)).status_code == 200
+
+        # rotaciona e reusa o token antigo → reuso/roubo → bump token_version
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+
+        # o access token capturado (tv defasado) agora é rejeitado
+        resp = await client.get("/api/v1/auth/me", headers=h)
+        assert resp.status_code == 401
+        assert resp.json()["error"]["code"] == "TOKEN_INVALIDO"
+
     async def test_logout_revoga_refresh(
         self, client: AsyncClient, test_aluno: dict
     ):

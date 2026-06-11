@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,14 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import auth_limit, limiter
 from app.core.security import create_admin_token, dummy_verify, hash_password, verify_password
+from app.core.stripe_admin import (
+    arquivar_price,
+    criar_price_curso,
+    criar_price_plano,
+    renomear_produto,
+    stripe_ativo,
+    trocar_preco,
+)
 from app.dependencies import get_current_admin, require_papel
 from app.models import (
     Admin,
@@ -23,6 +32,7 @@ from app.models import (
     PapelAdmin,
     PlanoAssinatura,
     StatusMatricula,
+    TipoCurso,
     Video,
 )
 
@@ -120,6 +130,14 @@ async def criar_curso(body: CursoCreate, db: AsyncSession = Depends(get_db)):
     if await db.scalar(select(Curso.id).where(Curso.slug == body.slug)):
         raise _err(409, "SLUG_EM_USO", "Já existe um curso com esse slug.")
     curso = Curso(**body.model_dump(), aprende=[])
+    # Sincroniza com a Stripe: curso avulso nasce vendável (Product+Price).
+    if curso.tipo == TipoCurso.avulso and stripe_ativo():
+        try:
+            curso.stripe_price_id = await criar_price_curso(
+                curso.titulo, curso.slug, float(curso.preco or 0)
+            )
+        except stripe.error.StripeError:
+            raise _err(502, "STRIPE_ERRO", "Falha ao criar o produto na Stripe — curso não salvo.")
     db.add(curso)
     await db.commit()
     await db.refresh(curso)
@@ -135,6 +153,27 @@ async def atualizar_curso(curso_id: uuid.UUID, body: CursoUpdate, db: AsyncSessi
     if "slug" in data and data["slug"] != curso.slug:
         if await db.scalar(select(Curso.id).where(Curso.slug == data["slug"])):
             raise _err(409, "SLUG_EM_USO", "Já existe um curso com esse slug.")
+
+    # Sincroniza com a Stripe ANTES do commit (falhou lá → nada muda aqui).
+    muda_preco = "preco" in data and float(data["preco"] or 0) != float(curso.preco or 0)
+    muda_titulo = "titulo" in data and data["titulo"] != curso.titulo
+    if stripe_ativo():
+        try:
+            if curso.stripe_price_id:
+                if muda_preco:
+                    data["stripe_price_id"] = await trocar_preco(
+                        curso.stripe_price_id, float(data["preco"])
+                    )
+                if muda_titulo:
+                    await renomear_produto(curso.stripe_price_id, data["titulo"])
+            elif muda_preco and curso.tipo == TipoCurso.avulso:
+                # Curso ainda sem produto na Stripe: cria na 1ª edição de preço.
+                data["stripe_price_id"] = await criar_price_curso(
+                    data.get("titulo", curso.titulo), curso.slug, float(data["preco"])
+                )
+        except stripe.error.StripeError:
+            raise _err(502, "STRIPE_ERRO", "Falha ao sincronizar com a Stripe — alteração não aplicada.")
+
     for k, v in data.items():
         setattr(curso, k, v)
     await db.commit()
@@ -153,6 +192,8 @@ async def excluir_curso(curso_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     if mod_ids:
         await db.execute(delete(Aula).where(Aula.modulo_id.in_(mod_ids)))
         await db.execute(delete(Modulo).where(Modulo.curso_id == curso_id))
+    if curso.stripe_price_id and stripe_ativo():
+        await arquivar_price(curso.stripe_price_id)  # best-effort (não bloqueia)
     await db.delete(curso)
     await db.commit()
     return Response(status_code=204)
@@ -313,11 +354,25 @@ async def listar_planos_admin(db: AsyncSession = Depends(get_db)):
 
 @planos.post("", response_model=PlanoAssinaturaAdmin, status_code=201)
 async def criar_plano(body: PlanoAssinaturaCreate, db: AsyncSession = Depends(get_db)):
-    if await db.scalar(
-        select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == body.stripe_price_id)
+    data = body.model_dump()
+    if not data.get("stripe_price_id"):
+        # Sem price informado → cria Product + Price recorrente na Stripe.
+        if not stripe_ativo():
+            raise _err(
+                400, "PRICE_OBRIGATORIO",
+                "Sem Stripe configurado: informe um Stripe Price ID existente.",
+            )
+        try:
+            data["stripe_price_id"] = await criar_price_plano(
+                data["nome"], data["intervalo"], float(data["preco"] or 0)
+            )
+        except stripe.error.StripeError:
+            raise _err(502, "STRIPE_ERRO", "Falha ao criar o plano na Stripe — nada salvo.")
+    elif await db.scalar(
+        select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == data["stripe_price_id"])
     ):
         raise _err(409, "PRICE_EM_USO", "Já existe um plano com esse Stripe Price ID.")
-    obj = PlanoAssinatura(**body.model_dump())
+    obj = PlanoAssinatura(**data)
     db.add(obj)
     await db.commit()
     await db.refresh(obj)
@@ -332,12 +387,32 @@ async def atualizar_plano(
     if obj is None:
         raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
     data = body.model_dump(exclude_unset=True)
-    novo_price = data.get("stripe_price_id")
-    if novo_price and novo_price != obj.stripe_price_id:
+    price_manual = data.get("stripe_price_id")
+    if price_manual and price_manual != obj.stripe_price_id:
         if await db.scalar(
-            select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == novo_price)
+            select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == price_manual)
         ):
             raise _err(409, "PRICE_EM_USO", "Já existe um plano com esse Stripe Price ID.")
+
+    # Sincroniza com a Stripe (a menos que um price manual tenha sido colado —
+    # override explícito vence). Preço/intervalo novo → Price novo p/ as
+    # PRÓXIMAS vendas; assinaturas existentes mantêm o valor contratado.
+    muda_preco = "preco" in data and float(data["preco"] or 0) != float(obj.preco or 0)
+    muda_intervalo = "intervalo" in data and data["intervalo"] != obj.intervalo
+    muda_nome = "nome" in data and data["nome"] != obj.nome
+    if not price_manual and stripe_ativo() and obj.stripe_price_id:
+        try:
+            if muda_preco or muda_intervalo:
+                data["stripe_price_id"] = await trocar_preco(
+                    obj.stripe_price_id,
+                    float(data.get("preco", obj.preco)),
+                    data.get("intervalo", obj.intervalo),
+                )
+            if muda_nome:
+                await renomear_produto(obj.stripe_price_id, data["nome"])
+        except stripe.error.StripeError:
+            raise _err(502, "STRIPE_ERRO", "Falha ao sincronizar com a Stripe — alteração não aplicada.")
+
     for k, v in data.items():
         setattr(obj, k, v)
     await db.commit()
@@ -352,6 +427,8 @@ async def excluir_plano(plano_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
     # Assinaturas já vendidas não dependem do plano (a renovação segue o
     # stripe_subscription_id da matrícula) — excluir só tira o plano da vitrine.
+    if obj.stripe_price_id and stripe_ativo():
+        await arquivar_price(obj.stripe_price_id)  # best-effort (não bloqueia)
     await db.delete(obj)
     await db.commit()
     return Response(status_code=204)

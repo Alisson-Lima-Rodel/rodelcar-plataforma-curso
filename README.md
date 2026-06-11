@@ -58,6 +58,9 @@ Checkout HOSPEDADO da Stripe (cartão + Pix), com liberação de acesso **soment
    docker compose run --rm --entrypoint python backend -m scripts.stripe_setup
    ```
    (ou crie no Dashboard e cole o `price_id` em `cursos.stripe_price_id`).
+   Depois do bootstrap, o **painel admin sincroniza sozinho**: criar/editar/excluir
+   curso ou plano reflete na Stripe (Price é imutável → mudar preço gera um Price
+   novo para as próximas vendas; assinaturas existentes mantêm o valor contratado).
 3. **Migrar o schema** (colunas `stripe_customer_id`/`stripe_price_id` + tabela `webhook_eventos`):
    ```bash
    docker compose run --rm --entrypoint alembic backend upgrade head

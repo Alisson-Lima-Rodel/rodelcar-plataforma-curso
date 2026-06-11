@@ -1,6 +1,8 @@
 import uuid
 
+import pytest
 import pytest_asyncio
+import stripe
 from httpx import AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -11,6 +13,50 @@ from app.models import Admin, Aluno, Faq, PapelAdmin, Video
 
 ADMIN_EMAIL = f"admin_{uuid.uuid4().hex[:8]}@rodelcar.dev"
 ADMIN_PASS = "AdminTest123!"
+
+
+@pytest.fixture(autouse=True)
+def stripe_stub(monkeypatch):
+    """Stub da SDK da Stripe p/ TODOS os testes do admin (sem chamadas reais).
+
+    O container de teste tem STRIPE_SECRET_KEY no env, então `stripe_ativo()` é
+    True e a sincronização roda — contra estes stubs. Retorna o registro de
+    chamadas p/ os testes de sync inspecionarem.
+    """
+    chamadas: dict[str, list] = {
+        "product_create": [], "price_create": [],
+        "price_modify": [], "product_modify": [],
+    }
+
+    class _Stub:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    def product_create(**kw):
+        chamadas["product_create"].append(kw)
+        return _Stub(id=f"prod_stub_{len(chamadas['product_create'])}")
+
+    def price_create(**kw):
+        chamadas["price_create"].append(kw)
+        return _Stub(id=f"price_stub_{uuid.uuid4().hex[:8]}")
+
+    def price_retrieve(price_id, **kw):
+        return {"id": price_id, "product": "prod_stub_ret"}
+
+    def price_modify(price_id, **kw):
+        chamadas["price_modify"].append((price_id, kw))
+        return _Stub(id=price_id)
+
+    def product_modify(product_id, **kw):
+        chamadas["product_modify"].append((product_id, kw))
+        return _Stub(id=product_id)
+
+    monkeypatch.setattr(stripe.Product, "create", product_create)
+    monkeypatch.setattr(stripe.Product, "modify", product_modify)
+    monkeypatch.setattr(stripe.Price, "create", price_create)
+    monkeypatch.setattr(stripe.Price, "retrieve", price_retrieve)
+    monkeypatch.setattr(stripe.Price, "modify", price_modify)
+    return chamadas
 
 
 @pytest_asyncio.fixture
@@ -323,3 +369,91 @@ class TestAdminPlanos:
     ):
         resp = await client.get("/api/v1/admin/planos", headers=suporte_headers)
         assert resp.status_code == 403
+
+
+# ── Sincronização admin → Stripe (Products/Prices) ────────────────────────────
+class TestAdminStripeSync:
+    async def test_criar_curso_cria_product_e_price(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        pref = uuid.uuid4().hex[:8]
+        resp = await client.post(
+            "/api/v1/admin/cursos",
+            headers=admin_headers,
+            json={"slug": f"sync-{pref}", "titulo": f"Curso Sync {pref}", "preco": 350},
+        )
+        assert resp.status_code == 201
+        curso_id = resp.json()["id"]
+        # Product + Price one-time criados na Stripe (350 → 35000 centavos).
+        assert len(stripe_stub["product_create"]) == 1
+        assert stripe_stub["price_create"][0]["unit_amount"] == 35000
+        assert "recurring" not in stripe_stub["price_create"][0]
+
+        # Editar o preço → Price NOVO + desativação do antigo.
+        patch = await client.patch(
+            f"/api/v1/admin/cursos/{curso_id}",
+            headers=admin_headers,
+            json={"preco": 399},
+        )
+        assert patch.status_code == 200
+        assert stripe_stub["price_create"][-1]["unit_amount"] == 39900
+        assert stripe_stub["price_modify"][-1][1] == {"active": False}
+
+        # Renomear → Product.modify com o nome novo.
+        patch2 = await client.patch(
+            f"/api/v1/admin/cursos/{curso_id}",
+            headers=admin_headers,
+            json={"titulo": "Curso Sync Renomeado"},
+        )
+        assert patch2.status_code == 200
+        assert stripe_stub["product_modify"][-1][1] == {"name": "Curso Sync Renomeado"}
+
+        # Excluir → arquiva na Stripe (best-effort) e some do banco.
+        dele = await client.delete(
+            f"/api/v1/admin/cursos/{curso_id}", headers=admin_headers
+        )
+        assert dele.status_code == 204
+
+    async def test_criar_plano_sem_price_cria_na_stripe(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        pref = uuid.uuid4().hex[:8]
+        resp = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={"nome": f"Plano Sync {pref}", "intervalo": "mensal", "preco": 59.9},
+        )
+        assert resp.status_code == 201
+        plano = resp.json()
+        assert plano["stripe_price_id"].startswith("price_stub_")
+        assert stripe_stub["price_create"][-1]["recurring"] == {"interval": "month"}
+        assert stripe_stub["price_create"][-1]["unit_amount"] == 5990
+
+        # Mudar o preço → Price recorrente novo (mantém o intervalo) + desativa o antigo.
+        patch = await client.patch(
+            f"/api/v1/admin/planos/{plano['id']}",
+            headers=admin_headers,
+            json={"preco": 69.9},
+        )
+        assert patch.status_code == 200
+        assert patch.json()["stripe_price_id"] != plano["stripe_price_id"]
+        assert stripe_stub["price_create"][-1]["unit_amount"] == 6990
+        assert stripe_stub["price_create"][-1]["recurring"] == {"interval": "month"}
+        assert stripe_stub["price_modify"][-1][0] == plano["stripe_price_id"]
+
+        dele = await client.delete(
+            f"/api/v1/admin/planos/{patch.json()['id']}", headers=admin_headers
+        )
+        assert dele.status_code == 204
+
+    async def test_criar_plano_sem_price_sem_stripe_400(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "")
+        resp = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={"nome": "Plano Sem Stripe", "intervalo": "anual", "preco": 499},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "PRICE_OBRIGATORIO"

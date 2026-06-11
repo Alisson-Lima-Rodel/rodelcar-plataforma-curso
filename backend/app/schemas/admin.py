@@ -186,9 +186,9 @@ class PlanoAssinaturaAdmin(BaseModel):
 class PlanoAssinaturaCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
     intervalo: Literal["mensal", "anual"] = "anual"
-    # Price RECORRENTE do Stripe (price_...). É ele que define o valor cobrado;
-    # o campo `preco` abaixo é apenas exibição na vitrine.
-    stripe_price_id: str = Field(min_length=5, max_length=255)
+    # Price RECORRENTE do Stripe (price_...). Vazio + Stripe configurado → o
+    # backend cria Product+Price automaticamente a partir de nome/intervalo/preco.
+    stripe_price_id: str = Field(default="", max_length=255)
     preco: float = 0
     status: StatusAtivo = "Ativo"
     ordem: int = 0

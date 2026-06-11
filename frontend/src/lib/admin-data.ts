@@ -138,7 +138,12 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         type: "select",
         options: ["Iniciante", "Intermediário", "Avançado"],
       },
-      { key: "preco", label: "Preço (R$)", type: "number" },
+      {
+        key: "preco",
+        label: "Preço (R$)",
+        type: "number",
+        hint: "Sincroniza com a Stripe: muda o valor cobrado nas próximas vendas.",
+      },
       { key: "preco_antigo", label: "Preço antigo (R$)", type: "number" },
       { key: "horas", label: "Carga horária", type: "text" },
       { key: "aulas_total", label: "Nº de aulas", type: "number" },
@@ -265,16 +270,16 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       },
       {
         key: "preco",
-        label: "Preço exibido (R$)",
+        label: "Preço (R$)",
         type: "number",
-        hint: "Apenas exibição na vitrine — o valor COBRADO vem do Price do Stripe.",
+        hint: "Sincroniza com a Stripe: salvar gera um novo Price para as PRÓXIMAS vendas (assinaturas existentes mantêm o valor contratado).",
       },
       {
         key: "stripe_price_id",
         label: "Stripe Price ID",
         type: "text",
         col: "full",
-        hint: "price_... recorrente, criado no Dashboard do Stripe ou via scripts.stripe_setup.",
+        hint: "Deixe VAZIO para criar automaticamente na Stripe ao salvar. Preencha só para usar um Price já existente.",
       },
       {
         key: "status",

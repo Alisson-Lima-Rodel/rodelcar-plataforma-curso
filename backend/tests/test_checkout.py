@@ -140,6 +140,32 @@ class TestCheckoutAvulso:
         resp = await client.post(URL, json={"curso_slug": "qualquer"})
         assert resp.status_code == 401
 
+    async def test_fallback_card_quando_pix_indisponivel(
+        self, client, checkout_seed, monkeypatch
+    ):
+        """Conta sem Pix (preview/convite no BR): degrada para só cartão, não bloqueia."""
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        chamadas: list[list[str]] = []
+
+        def fake(**kwargs):
+            chamadas.append(kwargs["payment_method_types"])
+            if "pix" in kwargs["payment_method_types"]:
+                raise stripe.error.InvalidRequestError(
+                    "The payment method type provided: pix is invalid.",
+                    param="payment_method_types",
+                )
+            return _Stub(id="cs_card_only", url="https://checkout.stripe.test/cs_card_only")
+
+        monkeypatch.setattr(stripe.checkout.Session, "create", fake)
+        monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+
+        resp = await client.post(
+            URL, json={"curso_slug": checkout_seed["curso_slug"]}, headers=checkout_seed["headers"]
+        )
+        assert resp.status_code == 200
+        assert resp.json()["session_id"] == "cs_card_only"
+        assert chamadas == [["card", "pix"], ["card"]]
+
 
 class TestCheckoutAssinatura:
     async def test_assinatura_cartao_200(self, client, checkout_seed, monkeypatch):

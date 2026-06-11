@@ -104,17 +104,36 @@ async def checkout_avulso(
         raise _err(404, "PRECO_NAO_CONFIGURADO", "Curso sem preço configurado no Stripe.")
 
     customer_id = await _ensure_customer(db, aluno)
+    kwargs = dict(
+        mode="payment",
+        customer=customer_id,
+        line_items=[{"price": curso.stripe_price_id, "quantity": 1}],
+        metadata={"app_user_id": str(aluno.id), "curso_slug": curso.slug},
+        success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url=settings.STRIPE_CANCEL_URL,
+    )
     try:
         session = await run_in_threadpool(
             stripe.checkout.Session.create,
-            mode="payment",
-            customer=customer_id,
-            line_items=[{"price": curso.stripe_price_id, "quantity": 1}],
             payment_method_types=["card", "pix"],
-            metadata={"app_user_id": str(aluno.id), "curso_slug": curso.slug},
-            success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=settings.STRIPE_CANCEL_URL,
+            **kwargs,
         )
+    except stripe.error.InvalidRequestError as exc:
+        # Pix no BR pode estar em preview/por convite: sem ele na conta, a sessão
+        # card+pix é recusada inteira. Degrada para só cartão em vez de perder a venda.
+        if "pix" not in str(getattr(exc, "user_message", "") or exc).lower():
+            raise _tratar_erro_stripe(exc)
+        logger.warning(
+            "Pix indisponível na conta Stripe — checkout avulso degradado para cartão."
+        )
+        try:
+            session = await run_in_threadpool(
+                stripe.checkout.Session.create,
+                payment_method_types=["card"],
+                **kwargs,
+            )
+        except stripe.error.StripeError as exc2:
+            raise _tratar_erro_stripe(exc2)
     except stripe.error.StripeError as exc:
         raise _tratar_erro_stripe(exc)
 

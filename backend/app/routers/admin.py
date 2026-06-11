@@ -386,24 +386,16 @@ async def atualizar_plano(
     obj = await db.get(PlanoAssinatura, plano_id)
     if obj is None:
         raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
+    # O schema de update NÃO aceita stripe_price_id (chave extra do form é
+    # ignorada pelo Pydantic) — o id é gerido somente pela sincronização abaixo.
     data = body.model_dump(exclude_unset=True)
-    # Override manual = um price DIFERENTE foi colado. O form do admin envia o
-    # objeto inteiro (stripe_price_id inalterado junto) — isso NÃO é override.
-    price_manual = data.get("stripe_price_id")
-    troca_manual = bool(price_manual) and price_manual != obj.stripe_price_id
-    if troca_manual:
-        if await db.scalar(
-            select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == price_manual)
-        ):
-            raise _err(409, "PRICE_EM_USO", "Já existe um plano com esse Stripe Price ID.")
 
-    # Sincroniza com a Stripe (a menos que um price manual tenha sido colado —
-    # override explícito vence). Preço/intervalo novo → Price novo p/ as
-    # PRÓXIMAS vendas; assinaturas existentes mantêm o valor contratado.
+    # Preço/intervalo novo → Price novo p/ as PRÓXIMAS vendas; assinaturas
+    # existentes mantêm o valor contratado (padrão Stripe).
     muda_preco = "preco" in data and float(data["preco"] or 0) != float(obj.preco or 0)
     muda_intervalo = "intervalo" in data and data["intervalo"] != obj.intervalo
     muda_nome = "nome" in data and data["nome"] != obj.nome
-    if not troca_manual and stripe_ativo() and obj.stripe_price_id:
+    if stripe_ativo() and obj.stripe_price_id:
         try:
             if muda_preco or muda_intervalo:
                 data["stripe_price_id"] = await trocar_preco(

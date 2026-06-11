@@ -195,9 +195,11 @@ class PlanoAssinaturaCreate(BaseModel):
 
 
 class PlanoAssinaturaUpdate(BaseModel):
+    # SEM stripe_price_id: o id é gerido exclusivamente pelo backend (sync com a
+    # Stripe). Aceitá-lo em update corrompe — o form ecoa o objeto inteiro e um
+    # valor desatualizado apontaria o plano p/ um Price inativo/errado.
     nome: str | None = Field(default=None, max_length=120)
     intervalo: Literal["mensal", "anual"] | None = None
-    stripe_price_id: str | None = Field(default=None, min_length=5, max_length=255)
     preco: float | None = None
     status: StatusAtivo | None = None
     ordem: int | None = None

@@ -446,6 +446,44 @@ class TestAdminStripeSync:
         )
         assert dele.status_code == 204
 
+    async def test_patch_com_price_inalterado_ainda_sincroniza(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        """Regressão: o form do admin envia o objeto INTEIRO no PATCH (incluindo
+        o stripe_price_id inalterado). Isso não é override manual — a troca de
+        preço tem que sincronizar com a Stripe mesmo assim."""
+        pref = uuid.uuid4().hex[:8]
+        criado = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={"nome": f"Plano Form {pref}", "intervalo": "anual", "preco": 499},
+        )
+        plano = criado.json()
+
+        # PATCH como o form envia: todos os campos, price igual, preço novo.
+        patch = await client.patch(
+            f"/api/v1/admin/planos/{plano['id']}",
+            headers=admin_headers,
+            json={
+                "nome": plano["nome"],
+                "intervalo": plano["intervalo"],
+                "stripe_price_id": plano["stripe_price_id"],  # inalterado
+                "preco": 1499,
+                "status": plano["status"],
+                "ordem": plano["ordem"],
+            },
+        )
+        assert patch.status_code == 200
+        assert patch.json()["preco"] == 1499
+        # Sincronizou: price novo de 149900 centavos e o antigo desativado.
+        assert patch.json()["stripe_price_id"] != plano["stripe_price_id"]
+        assert stripe_stub["price_create"][-1]["unit_amount"] == 149900
+        assert stripe_stub["price_modify"][-1][0] == plano["stripe_price_id"]
+
+        await client.delete(
+            f"/api/v1/admin/planos/{plano['id']}", headers=admin_headers
+        )
+
     async def test_criar_plano_sem_price_sem_stripe_400(
         self, client: AsyncClient, admin_headers: dict, monkeypatch
     ):

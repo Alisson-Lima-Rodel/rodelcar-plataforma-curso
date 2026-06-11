@@ -387,8 +387,11 @@ async def atualizar_plano(
     if obj is None:
         raise _err(404, "NAO_ENCONTRADO", "Plano não encontrado.")
     data = body.model_dump(exclude_unset=True)
+    # Override manual = um price DIFERENTE foi colado. O form do admin envia o
+    # objeto inteiro (stripe_price_id inalterado junto) — isso NÃO é override.
     price_manual = data.get("stripe_price_id")
-    if price_manual and price_manual != obj.stripe_price_id:
+    troca_manual = bool(price_manual) and price_manual != obj.stripe_price_id
+    if troca_manual:
         if await db.scalar(
             select(PlanoAssinatura.id).where(PlanoAssinatura.stripe_price_id == price_manual)
         ):
@@ -400,7 +403,7 @@ async def atualizar_plano(
     muda_preco = "preco" in data and float(data["preco"] or 0) != float(obj.preco or 0)
     muda_intervalo = "intervalo" in data and data["intervalo"] != obj.intervalo
     muda_nome = "nome" in data and data["nome"] != obj.nome
-    if not price_manual and stripe_ativo() and obj.stripe_price_id:
+    if not troca_manual and stripe_ativo() and obj.stripe_price_id:
         try:
             if muda_preco or muda_intervalo:
                 data["stripe_price_id"] = await trocar_preco(

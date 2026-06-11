@@ -274,13 +274,8 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         type: "number",
         hint: "Sincroniza com a Stripe: salvar gera um novo Price para as PRÓXIMAS vendas (assinaturas existentes mantêm o valor contratado).",
       },
-      {
-        key: "stripe_price_id",
-        label: "Stripe Price ID",
-        type: "text",
-        col: "full",
-        hint: "Deixe VAZIO para criar automaticamente na Stripe ao salvar. Preencha só para usar um Price já existente.",
-      },
+      // stripe_price_id NÃO é editável pelo painel (gerido automaticamente pelo
+      // backend; editar à mão dessincronizaria vitrine × cobrança).
       {
         key: "status",
         label: "Plano ativo (aparece na vitrine)",
@@ -293,7 +288,6 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       nome: "",
       intervalo: "anual",
       preco: 499,
-      stripe_price_id: "",
       status: "Ativo",
     },
   },

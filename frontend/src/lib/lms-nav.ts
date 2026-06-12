@@ -2,7 +2,7 @@
 export const LMS_ROUTES: Record<string, string> = {
   dashboard: "/painel",
   player: "/curso",
-  courses: "/painel",
+  courses: "/meus-cursos",
   certificate: "/certificado",
   community: "/curso",
 };
@@ -13,6 +13,7 @@ export function lmsHref(id: string): string {
 
 /** Deriva o id ativo a partir do pathname (para destacar item da sidebar). */
 export function activeLmsId(pathname: string): string {
+  if (pathname.startsWith("/meus-cursos")) return "courses";
   if (pathname.startsWith("/curso")) return "player";
   if (pathname.startsWith("/certificado")) return "certificate";
   return "dashboard";

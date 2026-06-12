@@ -201,6 +201,17 @@ export interface MatriculaItem {
   data_expiracao: string;
   dias_restantes: number;
   progresso_percentual: number;
+  // Direito de arrependimento (7 dias da compra)
+  origem: "avulsa" | "assinatura" | "manual";
+  cancelavel: boolean;
+  cancelavel_ate: string | null;
+}
+
+export interface CancelamentoResultado {
+  matricula_id: string;
+  reembolsado: boolean;
+  assinatura_cancelada: boolean;
+  cursos_revogados: number;
 }
 
 export interface AulaMaterial {
@@ -274,3 +285,7 @@ export const salvarProgresso = (
 
 export const emitirCertificado = (matriculaId: string) =>
   authPost<CertificadoEmitido>(`/certificados/${matriculaId}`);
+
+/** Cancela a compra dentro dos 7 dias (reembolso integral via Stripe). */
+export const cancelarMatricula = (matriculaId: string) =>
+  authPost<CancelamentoResultado>(`/me/matriculas/${matriculaId}/cancelar`);

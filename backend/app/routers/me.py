@@ -1,11 +1,20 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
+from app.core.stripe_admin import stripe_ativo
+from app.core.stripe_refunds import (
+    GARANTIA_DIAS,
+    cancelar_assinatura_stripe,
+    payment_intent_da_invoice,
+    reembolsar_payment_intent,
+)
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
 from app.models import (
@@ -15,11 +24,14 @@ from app.models import (
     Curso,
     Matricula,
     Modulo,
+    Pagamento,
     Progresso,
     StatusMatricula,
+    StatusPagamento,
 )
 from app.schemas.me import (
     Alerta,
+    CancelamentoResultado,
     CertificadoResumo,
     CursoResumo,
     DashboardResponse,
@@ -74,6 +86,15 @@ async def listar_matriculas(
         ).all()
         aula_counts = {row.curso_id: row.n for row in rows}
 
+    # Pagamentos vinculados (p/ janela de arrependimento de 7 dias)
+    pag_ids = [m.pagamento_id for m in matriculas if m.pagamento_id]
+    pagamentos: dict = {}
+    if pag_ids:
+        rows = (
+            await db.execute(select(Pagamento).where(Pagamento.id.in_(pag_ids)))
+        ).scalars().all()
+        pagamentos = {p.id: p for p in rows}
+
     items = []
     for mat in matriculas:
         exp = _exp_aware(mat.data_expiracao)
@@ -81,6 +102,21 @@ async def listar_matriculas(
         total = aula_counts.get(mat.curso_id, 0)
         soma_pct = sum(float(p.percentual) for p in mat.progresso)
         pct = round(soma_pct / total, 2) if total > 0 else 0.0
+
+        pag = pagamentos.get(mat.pagamento_id) if mat.pagamento_id else None
+        limite = _limite_cancelamento(pag)
+        cancelavel = (
+            mat.status == StatusMatricula.ativo
+            and limite is not None
+            and agora <= limite
+        )
+        if pag is None:
+            origem = "manual"
+        elif mat.stripe_subscription_id:
+            origem = "assinatura"
+        else:
+            origem = "avulsa"
+
         items.append(
             MatriculaItem(
                 id=mat.id,
@@ -94,10 +130,102 @@ async def listar_matriculas(
                 data_expiracao=mat.data_expiracao,
                 dias_restantes=dias,
                 progresso_percentual=pct,
+                origem=origem,
+                cancelavel=cancelavel,
+                cancelavel_ate=limite if cancelavel else None,
             )
         )
 
     return MatriculaListResponse(items=items)
+
+
+def _limite_cancelamento(pag: Pagamento | None) -> datetime | None:
+    """Fim da janela de arrependimento: 7 dias após o pagamento aprovado."""
+    if pag is None or pag.status != StatusPagamento.aprovado or pag.gateway != "stripe":
+        return None
+    return _exp_aware(pag.criado_em) + timedelta(days=GARANTIA_DIAS)
+
+
+@router.post("/matriculas/{matricula_id}/cancelar", response_model=CancelamentoResultado)
+async def cancelar_matricula(
+    matricula_id: uuid.UUID,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Direito de arrependimento (CDC art. 49): até 7 dias após a compra, cancela
+    com reembolso INTEGRAL via Stripe. Compra avulsa → estorna e expira o curso;
+    assinatura → estorna, cancela a assinatura e revoga o catálogo dela."""
+    mat = (
+        await db.execute(
+            select(Matricula).where(
+                Matricula.id == matricula_id, Matricula.aluno_id == aluno.id
+            )
+        )
+    ).scalar_one_or_none()
+    if mat is None:
+        # 404 (não 403) para não revelar matrícula alheia existente.
+        raise _err(404, "MATRICULA_NAO_ENCONTRADA", "Matrícula não encontrada.")
+    if mat.status != StatusMatricula.ativo:
+        raise _err(409, "MATRICULA_NAO_ATIVA", "Esta matrícula não está ativa.")
+
+    pag = await db.get(Pagamento, mat.pagamento_id) if mat.pagamento_id else None
+    limite = _limite_cancelamento(pag)
+    if limite is None:
+        raise _err(
+            409, "SEM_PAGAMENTO_REEMBOLSAVEL",
+            "Não há pagamento online vinculado a esta matrícula para reembolsar.",
+        )
+    if datetime.now(timezone.utc) > limite:
+        raise _err(
+            400, "FORA_DO_PRAZO",
+            f"O prazo de arrependimento ({GARANTIA_DIAS} dias) já passou.",
+        )
+    if not stripe_ativo():
+        raise _err(503, "STRIPE_NAO_CONFIGURADO", "Reembolsos indisponíveis no momento.")
+
+    # Stripe primeiro; banco só muda se o estorno/cancelamento der certo.
+    assinatura_cancelada = False
+    try:
+        if mat.stripe_subscription_id:
+            pi = await payment_intent_da_invoice(pag.gateway_transaction_id)
+            if pi:
+                await reembolsar_payment_intent(pi)
+            await cancelar_assinatura_stripe(mat.stripe_subscription_id)
+            assinatura_cancelada = True
+            # Revoga o catálogo da assinatura já (o webhook
+            # customer.subscription.deleted fará o mesmo — idempotente).
+            mats_sub = (
+                await db.execute(
+                    select(Matricula).where(
+                        Matricula.stripe_subscription_id == mat.stripe_subscription_id
+                    )
+                )
+            ).scalars().all()
+            for m in mats_sub:
+                m.status = StatusMatricula.expirado
+            cursos_revogados = len(mats_sub)
+        else:
+            await reembolsar_payment_intent(pag.gateway_transaction_id)
+            mat.status = StatusMatricula.expirado
+            cursos_revogados = 1
+    except stripe.error.StripeError:
+        raise _err(502, "STRIPE_ERRO", "Falha ao processar o reembolso — nada foi alterado.")
+
+    pag.status = StatusPagamento.estornado
+    await db.commit()
+    return CancelamentoResultado(
+        matricula_id=mat.id,
+        reembolsado=True,
+        assinatura_cancelada=assinatura_cancelada,
+        cursos_revogados=cursos_revogados,
+    )
+
+
+def _err(status: int, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status,
+        detail={"error": {"code": code, "message": message, "details": None}},
+    )
 
 
 @router.get("/dashboard", response_model=DashboardResponse)

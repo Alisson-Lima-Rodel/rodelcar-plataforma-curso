@@ -22,10 +22,21 @@ class MatriculaItem(BaseModel):
     data_expiracao: datetime
     dias_restantes: int
     progresso_percentual: float
+    # Direito de arrependimento (7 dias da compra, CDC art. 49)
+    origem: str = "avulsa"  # avulsa | assinatura | manual
+    cancelavel: bool = False
+    cancelavel_ate: datetime | None = None
 
 
 class MatriculaListResponse(BaseModel):
     items: list[MatriculaItem]
+
+
+class CancelamentoResultado(BaseModel):
+    matricula_id: uuid.UUID
+    reembolsado: bool
+    assinatura_cancelada: bool
+    cursos_revogados: int
 
 
 class UltimaAula(BaseModel):

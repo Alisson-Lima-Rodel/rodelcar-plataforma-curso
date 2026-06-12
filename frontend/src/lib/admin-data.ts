@@ -55,7 +55,6 @@ export type EntityKey =
   | "students"
   | "courses"
   | "testimonials"
-  | "packages"
   | "plans"
   | "videos"
   | "faq"
@@ -201,52 +200,8 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       status: "Pendente",
     },
   },
-  packages: {
-    label: "Pacotes",
-    singular: "pacote",
-    icon: "award",
-    title: (it) => String(it.nome),
-    search: (it) => String(it.nome),
-    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
-    columns: [
-      { key: "nome", label: "Pacote", kind: "strong" },
-      { key: "cursos", label: "Cursos", kind: "center" },
-      { key: "parcelas", label: "Parcelamento" },
-      { key: "preco", label: "Preço", kind: "price" },
-      { key: "status", label: "Status", kind: "badgeStatus" },
-    ],
-    fields: [
-      { key: "nome", label: "Nome do pacote", type: "text", col: "full" },
-      { key: "preco", label: "Preço (R$)", type: "number" },
-      { key: "preco_antigo", label: "Preço antigo (R$)", type: "number" },
-      { key: "parcelas", label: "Parcelamento", type: "text" },
-      { key: "cursos", label: "Qtd. de cursos", type: "number" },
-      {
-        key: "inclui",
-        label: "Inclui (um item por linha)",
-        type: "textarea",
-        col: "full",
-      },
-      {
-        key: "status",
-        label: "Pacote ativo",
-        type: "toggle",
-        on: "Ativo",
-        off: "Inativo",
-      },
-    ],
-    defaults: {
-      nome: "",
-      preco: 997,
-      preco_antigo: 1297,
-      parcelas: "12x de R$ 99,70",
-      cursos: 3,
-      inclui: "",
-      status: "Ativo",
-    },
-  },
   // Planos de assinatura (Premium): dão acesso ao catálogo INTEIRO. É o que o
-  // card "Assinar Premium" da vitrine vende — diferente de Pacotes (marketing).
+  // card "Assinar Premium" da vitrine vende.
   plans: {
     label: "Planos (assinatura)",
     singular: "plano",

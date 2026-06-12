@@ -71,11 +71,11 @@ export function Overview({
   const students = useAdminList("students");
   const courses = useAdminList("courses");
   const testimonials = useAdminList("testimonials");
-  const packages = useAdminList("packages");
+  const plans = useAdminList("plans");
 
   const activeStudents = students.filter((s) => s.status === "Ativo").length;
   const pending = testimonials.filter((t) => t.status === "Pendente");
-  const activePkgs = packages.filter((p) => p.status === "Ativo").length;
+  const activePlans = plans.filter((p) => p.status === "Ativo").length;
 
   return (
     <div
@@ -88,7 +88,7 @@ export function Overview({
         </div>
         <h1 style={{ fontSize: "2rem", marginBottom: 6 }}>Visão geral</h1>
         <p className="muted">
-          Gestão de alunos, cursos, depoimentos e pacotes da Rödelcar.
+          Gestão de alunos, cursos, depoimentos e planos da Rödelcar.
         </p>
       </div>
 
@@ -113,9 +113,9 @@ export function Overview({
           hint="aguardando aprovação"
         />
         <StatCard
-          icon="award"
-          value={activePkgs}
-          label="Pacotes ativos"
+          icon="infinity"
+          value={activePlans}
+          label="Planos ativos"
           hint="à venda no site"
         />
       </div>

@@ -28,7 +28,6 @@ from app.models import (
     Faq,
     Matricula,
     Modulo,
-    Pacote,
     PapelAdmin,
     PlanoAssinatura,
     StatusMatricula,
@@ -37,7 +36,7 @@ from app.models import (
 )
 
 # Escopos de papel (RBAC). Administrador faz tudo; Editor cuida de conteúdo
-# (cursos/pacotes/depoimentos/vídeos/FAQ); Suporte cuida de alunos.
+# (cursos/planos/depoimentos/vídeos/FAQ); Suporte cuida de alunos.
 _CONTEUDO = (PapelAdmin.administrador, PapelAdmin.editor)
 _ALUNOS = (PapelAdmin.administrador, PapelAdmin.suporte)
 _SO_ADMIN = (PapelAdmin.administrador,)
@@ -60,9 +59,6 @@ from app.schemas.admin import (
     FaqAdmin,
     FaqCreate,
     FaqUpdate,
-    PacoteAdmin,
-    PacoteCreate,
-    PacoteUpdate,
     PlanoAssinaturaAdmin,
     PlanoAssinaturaCreate,
     PlanoAssinaturaUpdate,
@@ -293,7 +289,7 @@ async def excluir_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 router.include_router(alunos)
 
 
-# ── CRUD genérico p/ cadastros simples (Depoimentos, Pacotes) ─────────────────
+# ── CRUD genérico p/ cadastros simples (Depoimentos, Vídeos, FAQ) ─────────────
 def _crud_router(prefix, model, read_schema, create_schema, update_schema, papeis=_CONTEUDO):
     r = APIRouter(prefix=prefix, dependencies=[Depends(require_papel(*papeis))])
 
@@ -333,7 +329,6 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema, papei
 
 
 router.include_router(_crud_router("/depoimentos", Depoimento, DepoimentoAdmin, DepoimentoCreate, DepoimentoUpdate))
-router.include_router(_crud_router("/pacotes", Pacote, PacoteAdmin, PacoteCreate, PacoteUpdate))
 router.include_router(_crud_router("/videos", Video, VideoAdmin, VideoCreate, VideoUpdate))
 router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
 

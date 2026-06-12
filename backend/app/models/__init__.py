@@ -410,22 +410,6 @@ class Depoimento(Base):
     criado_em: Mapped[datetime] = _created_at()
 
 
-class Pacote(Base):
-    """Pacote/combo comercial (ex.: Formação Completa)."""
-    __tablename__ = "pacotes"
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    nome: Mapped[str] = mapped_column(String(200))
-    preco: Mapped[float] = mapped_column(Numeric(10, 2))
-    preco_antigo: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    parcelas: Mapped[str | None] = mapped_column(String(80))
-    cursos: Mapped[int] = mapped_column(Integer, default=1)
-    inclui: Mapped[str | None] = mapped_column(Text())  # um item por linha
-    status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
-    ordem: Mapped[int] = mapped_column(Integer, default=0)
-    criado_em: Mapped[datetime] = _created_at()
-
-
 class Video(Base):
     """Vídeo do YouTube exibido na prova social do portal."""
     __tablename__ = "videos"

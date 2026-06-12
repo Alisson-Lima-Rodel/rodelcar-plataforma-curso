@@ -7,6 +7,7 @@ import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHead } from "@/components/ui/section-head";
 import { BRAND, type Testimonial, type Video } from "@/lib/portal-data";
+import { youtubeThumb } from "@/lib/youtube";
 
 export function SocialProof({
   testimonials = [],
@@ -50,57 +51,74 @@ export function SocialProof({
               marginBottom: 18,
             }}
           >
-            {videos.map((v, i) => (
-              <a
-                key={i}
-                href={v.url || BRAND.youtube}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="video-card card card-hover"
-                style={{
-                  padding: 12,
-                  cursor: "pointer",
-                  textDecoration: "none",
-                  color: "inherit",
-                  display: "block",
-                }}
-              >
-                <div className="thumb" style={{ marginBottom: 13 }}>
-                  <div className="play-btn">
-                    <Icon name="play" size={20} />
+            {videos.map((v, i) => {
+              const capa = youtubeThumb(v.url);
+              return (
+                <a
+                  key={i}
+                  href={v.url || BRAND.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="video-card card card-hover"
+                  style={{
+                    padding: 12,
+                    cursor: "pointer",
+                    textDecoration: "none",
+                    color: "inherit",
+                    display: "block",
+                  }}
+                >
+                  <div
+                    className="thumb"
+                    style={{
+                      marginBottom: 13,
+                      ...(capa
+                        ? {
+                            backgroundImage: `url(${capa})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }
+                        : {}),
+                    }}
+                  >
+                    <div className="play-btn">
+                      <Icon name="play" size={20} />
+                    </div>
+                    <span
+                      className="badge"
+                      style={{
+                        position: "absolute",
+                        top: 9,
+                        right: 9,
+                        padding: "3px 8px",
+                        background: "rgba(10,12,16,0.8)",
+                        borderColor: "var(--border-strong)",
+                      }}
+                    >
+                      {v.dur}
+                    </span>
+                    {!capa && (
+                      <span className="thumb-label">[ youtube · 16:9 ]</span>
+                    )}
                   </div>
-                  <span
-                    className="badge"
-                    style={{
-                      position: "absolute",
-                      top: 9,
-                      right: 9,
-                      padding: "3px 8px",
-                      background: "rgba(10,12,16,0.8)",
-                      borderColor: "var(--border-strong)",
-                    }}
-                  >
-                    {v.dur}
-                  </span>
-                  <span className="thumb-label">[ youtube · 16:9 ]</span>
-                </div>
-                <div style={{ padding: "0 4px 6px" }}>
-                  <p
-                    style={{
-                      fontWeight: 600,
-                      fontSize: "0.98rem",
-                      marginBottom: 7,
-                      lineHeight: 1.3,
-                    }}
-                  >
-                    {v.t}
-                  </p>
-                  <span className="tag-mono">
-                    {v.views ? `${v.views} de visualizações` : "YouTube"}
-                  </span>
-                </div>
-              </a>
-            ))}
+                  <div style={{ padding: "0 4px 6px" }}>
+                    <p
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "0.98rem",
+                        marginBottom: 7,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {v.t}
+                    </p>
+                    <span className="tag-mono">
+                      {v.views ? `${v.views} de visualizações` : "YouTube"}
+                    </span>
+                  </div>
+                </a>
+              );
+            })}
           </Reveal>
         )}
         <div style={{ textAlign: "center", marginBottom: 64 }}>

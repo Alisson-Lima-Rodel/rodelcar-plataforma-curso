@@ -266,7 +266,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         label: "Link do YouTube",
         type: "text",
         col: "full",
-        hint: "Cole a URL do vídeo. Em branco, o card leva ao canal.",
+        hint: "Cole a URL do vídeo — a capa do card usa automaticamente a do YouTube. Em branco, o card leva ao canal.",
       },
       { key: "duracao", label: "Duração (ex.: 12:48)", type: "text" },
       { key: "views", label: "Views (ex.: 84 mil)", type: "text" },

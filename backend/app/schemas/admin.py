@@ -224,6 +224,25 @@ class FaqUpdate(BaseModel):
     ordem: int | None = None
 
 
+# ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────
+class ReembolsoItem(BaseModel):
+    matricula_id: uuid.UUID
+    curso_titulo: str
+    status: str
+    origem: str  # avulsa | assinatura | manual
+    valor: float | None = None
+    pago_em: datetime | None = None
+    dentro_da_janela: bool  # janela de 7 dias do aluno (informativo p/ o suporte)
+    cancelavel: bool
+
+
+class AlunoReembolsos(BaseModel):
+    aluno_id: uuid.UUID
+    nome: str
+    email: str
+    matriculas: list[ReembolsoItem]
+
+
 # ── Administradores (usuários do painel) ──────────────────────────────────────
 class AdminUserItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)

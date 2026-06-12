@@ -74,6 +74,42 @@ export function adminLogout() {
 
 export const getAdminMe = () => adminFetch<AdminMe>("/admin/auth/me");
 
+// ── Reembolsos (suporte) ──────────────────────────────────────────────────────
+export interface ReembolsoItem {
+  matricula_id: string;
+  curso_titulo: string;
+  status: string;
+  origem: "avulsa" | "assinatura" | "manual";
+  valor: number | null;
+  pago_em: string | null;
+  dentro_da_janela: boolean;
+  cancelavel: boolean;
+}
+
+export interface AlunoReembolsos {
+  aluno_id: string;
+  nome: string;
+  email: string;
+  matriculas: ReembolsoItem[];
+}
+
+export interface CancelamentoAdmin {
+  matricula_id: string;
+  reembolsado: boolean;
+  assinatura_cancelada: boolean;
+  cursos_revogados: number;
+}
+
+export const buscarReembolsos = (email: string) =>
+  adminFetch<AlunoReembolsos>(
+    `/admin/reembolsos?email=${encodeURIComponent(email)}`,
+  );
+
+export const cancelarMatriculaAdmin = (matriculaId: string) =>
+  adminFetch<CancelamentoAdmin>(`/admin/reembolsos/${matriculaId}/cancelar`, {
+    method: "POST",
+  });
+
 // ── CRUD genérico ─────────────────────────────────────────────────────────────
 export type AdminRow = Record<string, unknown> & { id: string };
 

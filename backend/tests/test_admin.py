@@ -26,6 +26,7 @@ def stripe_stub(monkeypatch):
     chamadas: dict[str, list] = {
         "product_create": [], "price_create": [],
         "price_modify": [], "product_modify": [],
+        "refund": [], "sub_cancel": [],
     }
 
     class _Stub:
@@ -51,11 +52,25 @@ def stripe_stub(monkeypatch):
         chamadas["product_modify"].append((product_id, kw))
         return _Stub(id=product_id)
 
+    def refund_create(**kw):
+        chamadas["refund"].append(kw)
+        return _Stub(id=f"re_stub_{len(chamadas['refund'])}")
+
+    def sub_cancel(sub_id, **kw):
+        chamadas["sub_cancel"].append(sub_id)
+        return _Stub(id=sub_id, status="canceled")
+
+    def invoice_payment_list(**kw):
+        return {"data": [{"payment": {"type": "payment_intent", "payment_intent": "pi_da_invoice"}}]}
+
     monkeypatch.setattr(stripe.Product, "create", product_create)
     monkeypatch.setattr(stripe.Product, "modify", product_modify)
     monkeypatch.setattr(stripe.Price, "create", price_create)
     monkeypatch.setattr(stripe.Price, "retrieve", price_retrieve)
     monkeypatch.setattr(stripe.Price, "modify", price_modify)
+    monkeypatch.setattr(stripe.Refund, "create", refund_create)
+    monkeypatch.setattr(stripe.Subscription, "cancel", sub_cancel)
+    monkeypatch.setattr(stripe.InvoicePayment, "list", invoice_payment_list)
     return chamadas
 
 
@@ -495,3 +510,104 @@ class TestAdminStripeSync:
         )
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "PRICE_OBRIGATORIO"
+
+
+# ── Reembolsos pelo suporte (sem trava de 7 dias) ─────────────────────────────
+@pytest_asyncio.fixture
+async def reembolso_seed():
+    """Aluno + curso + pagamento aprovado há 8 DIAS + matrícula ativa."""
+    import datetime as dt
+    from decimal import Decimal
+
+    from app.core.db import AsyncSessionLocal
+    from app.models import Curso, Matricula, Pagamento, StatusMatricula, StatusPagamento, TipoCurso
+
+    pref = uuid.uuid4().hex[:8]
+    email = f"reemb_{pref}@rodelcar.dev"
+    async with AsyncSessionLocal() as db:
+        aluno = Aluno(nome="Reembolso Tester", email=email, senha_hash=hash_password("x" * 8))
+        db.add(aluno)
+        await db.flush()
+        curso = Curso(
+            slug=f"reemb-{pref}", titulo="Curso Reembolso", tipo=TipoCurso.avulso,
+            preco=Decimal("100.00"), validade_dias=365,
+        )
+        db.add(curso)
+        await db.flush()
+        pag = Pagamento(
+            aluno_id=aluno.id, gateway="stripe", gateway_transaction_id=f"pi_{pref}_adm",
+            valor=Decimal("100.00"), status=StatusPagamento.aprovado, payload={},
+            criado_em=dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=8),
+        )
+        db.add(pag)
+        await db.flush()
+        mat = Matricula(
+            aluno_id=aluno.id, curso_id=curso.id, pagamento_id=pag.id,
+            status=StatusMatricula.ativo,
+            data_expiracao=dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=365),
+        )
+        db.add(mat)
+        await db.flush()
+        data = {
+            "email": email, "aluno_id": str(aluno.id),
+            "matricula_id": str(mat.id), "curso_id": str(curso.id),
+            "pi": f"pi_{pref}_adm",
+        }
+        await db.commit()
+
+    yield data
+
+    from sqlalchemy import delete as _delete
+
+    from app.core.db import AsyncSessionLocal as _S
+    from app.models import Curso as _C, Matricula as _M, Pagamento as _P
+
+    aid = uuid.UUID(data["aluno_id"])
+    async with _S() as db:
+        await db.execute(_delete(_M).where(_M.aluno_id == aid))
+        await db.execute(_delete(_P).where(_P.aluno_id == aid))
+        await db.execute(_delete(_C).where(_C.id == uuid.UUID(data["curso_id"])))
+        await db.execute(_delete(Aluno).where(Aluno.id == aid))
+        await db.commit()
+
+
+class TestAdminReembolsos:
+    async def test_busca_e_cancela_fora_da_janela(
+        self, client: AsyncClient, admin_headers: dict, reembolso_seed, stripe_stub
+    ):
+        # Busca por e-mail: matrícula cancelável, mas FORA da janela de 7 dias.
+        busca = await client.get(
+            f"/api/v1/admin/reembolsos?email={reembolso_seed['email']}",
+            headers=admin_headers,
+        )
+        assert busca.status_code == 200
+        body = busca.json()
+        assert body["email"] == reembolso_seed["email"]
+        item = body["matriculas"][0]
+        assert item["cancelavel"] is True
+        assert item["dentro_da_janela"] is False  # 8 dias — aluno não pode, admin pode
+
+        # Admin cancela mesmo fora da janela (cortesia) → reembolso + expira.
+        resp = await client.post(
+            f"/api/v1/admin/reembolsos/{reembolso_seed['matricula_id']}/cancelar",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["reembolsado"] is True
+        assert stripe_stub["refund"][-1]["payment_intent"] == reembolso_seed["pi"]
+
+    async def test_aluno_inexistente_404(self, client: AsyncClient, admin_headers: dict):
+        resp = await client.get(
+            "/api/v1/admin/reembolsos?email=naoexiste@rodelcar.dev",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_suporte_pode_reembolsar(
+        self, client: AsyncClient, suporte_headers: dict, reembolso_seed
+    ):
+        resp = await client.get(
+            f"/api/v1/admin/reembolsos?email={reembolso_seed['email']}",
+            headers=suporte_headers,
+        )
+        assert resp.status_code == 200

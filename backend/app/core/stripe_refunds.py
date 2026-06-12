@@ -7,13 +7,59 @@ partir da invoice (API 2025+ usa /v1/invoice_payments; legado tinha o campo
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import stripe
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Matricula, Pagamento, StatusMatricula, StatusPagamento
 
 logger = logging.getLogger(__name__)
 
 GARANTIA_DIAS = 7
+
+
+def limite_cancelamento(pag: Pagamento | None) -> datetime | None:
+    """Fim da janela de arrependimento do ALUNO: 7 dias após o pagamento aprovado.
+
+    O admin não está sujeito à janela (reembolso de cortesia a qualquer tempo).
+    """
+    if pag is None or pag.status != StatusPagamento.aprovado or pag.gateway != "stripe":
+        return None
+    criado = pag.criado_em if pag.criado_em.tzinfo else pag.criado_em.replace(tzinfo=timezone.utc)
+    return criado + timedelta(days=GARANTIA_DIAS)
+
+
+async def executar_cancelamento(
+    db: AsyncSession, mat: Matricula, pag: Pagamento
+) -> tuple[bool, int]:
+    """Estorna na Stripe e revoga o(s) acesso(s). Retorna (assinatura_cancelada,
+    cursos_revogados). Stripe PRIMEIRO (exceção → nada muda no banco); quem
+    chama trata StripeError e commita.
+    """
+    if mat.stripe_subscription_id:
+        pi = await payment_intent_da_invoice(pag.gateway_transaction_id)
+        if pi:
+            await reembolsar_payment_intent(pi)
+        await cancelar_assinatura_stripe(mat.stripe_subscription_id)
+        mats_sub = (
+            await db.execute(
+                select(Matricula).where(
+                    Matricula.stripe_subscription_id == mat.stripe_subscription_id
+                )
+            )
+        ).scalars().all()
+        for m in mats_sub:
+            m.status = StatusMatricula.expirado
+        pag.status = StatusPagamento.estornado
+        return True, len(mats_sub)
+
+    await reembolsar_payment_intent(pag.gateway_transaction_id)
+    mat.status = StatusMatricula.expirado
+    pag.status = StatusPagamento.estornado
+    return False, 1
 
 
 async def reembolsar_payment_intent(pi_id: str) -> str | None:

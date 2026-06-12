@@ -2,9 +2,11 @@ import uuid
 from datetime import datetime, timezone
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import EmailStr
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.db import get_db
@@ -18,6 +20,7 @@ from app.core.stripe_admin import (
     stripe_ativo,
     trocar_preco,
 )
+from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
 from app.dependencies import get_current_admin, require_papel
 from app.models import (
     Admin,
@@ -28,12 +31,15 @@ from app.models import (
     Faq,
     Matricula,
     Modulo,
+    Pagamento,
     PapelAdmin,
     PlanoAssinatura,
     StatusMatricula,
+    StatusPagamento,
     TipoCurso,
     Video,
 )
+from app.schemas.me import CancelamentoResultado
 
 # Escopos de papel (RBAC). Administrador faz tudo; Editor cuida de conteúdo
 # (cursos/planos/depoimentos/vídeos/FAQ); Suporte cuida de alunos.
@@ -59,9 +65,11 @@ from app.schemas.admin import (
     FaqAdmin,
     FaqCreate,
     FaqUpdate,
+    AlunoReembolsos,
     PlanoAssinaturaAdmin,
     PlanoAssinaturaCreate,
     PlanoAssinaturaUpdate,
+    ReembolsoItem,
     VideoAdmin,
     VideoCreate,
     VideoUpdate,
@@ -425,6 +433,105 @@ async def excluir_plano(plano_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 router.include_router(planos)
+
+
+# ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────
+# Sem trava de 7 dias: a janela é o DIREITO do aluno; o suporte pode reembolsar
+# a qualquer tempo (cortesia/exceção). Papéis: Administrador e Suporte.
+reembolsos = APIRouter(prefix="/reembolsos", dependencies=[Depends(require_papel(*_ALUNOS))])
+
+
+@reembolsos.get("", response_model=AlunoReembolsos)
+async def buscar_reembolsos(
+    email: EmailStr = Query(..., description="E-mail do aluno"),
+    db: AsyncSession = Depends(get_db),
+):
+    aluno = (
+        await db.execute(select(Aluno).where(Aluno.email == email))
+    ).scalar_one_or_none()
+    if aluno is None:
+        raise _err(404, "ALUNO_NAO_ENCONTRADO", "Nenhum aluno com esse e-mail.")
+
+    mats = (
+        await db.execute(
+            select(Matricula)
+            .where(Matricula.aluno_id == aluno.id)
+            .options(selectinload(Matricula.curso))
+            .order_by(Matricula.data_inicio.desc())
+        )
+    ).scalars().all()
+    pag_ids = [m.pagamento_id for m in mats if m.pagamento_id]
+    pagamentos: dict = {}
+    if pag_ids:
+        rows = (
+            await db.execute(select(Pagamento).where(Pagamento.id.in_(pag_ids)))
+        ).scalars().all()
+        pagamentos = {p.id: p for p in rows}
+
+    agora = datetime.now(timezone.utc)
+    items = []
+    for m in mats:
+        pag = pagamentos.get(m.pagamento_id) if m.pagamento_id else None
+        limite = limite_cancelamento(pag)
+        if pag is None:
+            origem = "manual"
+        elif m.stripe_subscription_id:
+            origem = "assinatura"
+        else:
+            origem = "avulsa"
+        items.append(ReembolsoItem(
+            matricula_id=m.id,
+            curso_titulo=m.curso.titulo,
+            status=m.status.value,
+            origem=origem,
+            valor=float(pag.valor) if pag else None,
+            pago_em=pag.criado_em if pag else None,
+            dentro_da_janela=bool(limite is not None and agora <= limite),
+            cancelavel=(
+                pag is not None
+                and pag.status == StatusPagamento.aprovado
+                and pag.gateway == "stripe"
+                and m.status == StatusMatricula.ativo
+            ),
+        ))
+    return AlunoReembolsos(
+        aluno_id=aluno.id, nome=aluno.nome, email=aluno.email, matriculas=items
+    )
+
+
+@reembolsos.post("/{matricula_id}/cancelar", response_model=CancelamentoResultado)
+async def cancelar_matricula_admin(
+    matricula_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    mat = await db.get(Matricula, matricula_id)
+    if mat is None:
+        raise _err(404, "MATRICULA_NAO_ENCONTRADA", "Matrícula não encontrada.")
+    if mat.status != StatusMatricula.ativo:
+        raise _err(409, "MATRICULA_NAO_ATIVA", "Esta matrícula não está ativa.")
+    pag = await db.get(Pagamento, mat.pagamento_id) if mat.pagamento_id else None
+    if pag is None or pag.status != StatusPagamento.aprovado or pag.gateway != "stripe":
+        raise _err(
+            409, "SEM_PAGAMENTO_REEMBOLSAVEL",
+            "Não há pagamento online aprovado vinculado a esta matrícula.",
+        )
+    if not stripe_ativo():
+        raise _err(503, "STRIPE_NAO_CONFIGURADO", "Reembolsos indisponíveis no momento.")
+
+    try:
+        assinatura_cancelada, cursos_revogados = await executar_cancelamento(db, mat, pag)
+    except stripe.error.StripeError:
+        raise _err(502, "STRIPE_ERRO", "Falha ao processar o reembolso — nada foi alterado.")
+
+    await db.commit()
+    return CancelamentoResultado(
+        matricula_id=mat.id,
+        reembolsado=True,
+        assinatura_cancelada=assinatura_cancelada,
+        cursos_revogados=cursos_revogados,
+    )
+
+
+router.include_router(reembolsos)
 
 
 # ── Administradores (equipe) — create/patch tratam senha ──────────────────────

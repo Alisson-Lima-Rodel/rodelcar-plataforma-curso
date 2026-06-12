@@ -11,9 +11,8 @@ from app.core.db import get_db
 from app.core.stripe_admin import stripe_ativo
 from app.core.stripe_refunds import (
     GARANTIA_DIAS,
-    cancelar_assinatura_stripe,
-    payment_intent_da_invoice,
-    reembolsar_payment_intent,
+    executar_cancelamento,
+    limite_cancelamento,
 )
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
@@ -27,7 +26,6 @@ from app.models import (
     Pagamento,
     Progresso,
     StatusMatricula,
-    StatusPagamento,
 )
 from app.schemas.me import (
     Alerta,
@@ -104,7 +102,7 @@ async def listar_matriculas(
         pct = round(soma_pct / total, 2) if total > 0 else 0.0
 
         pag = pagamentos.get(mat.pagamento_id) if mat.pagamento_id else None
-        limite = _limite_cancelamento(pag)
+        limite = limite_cancelamento(pag)
         cancelavel = (
             mat.status == StatusMatricula.ativo
             and limite is not None
@@ -139,13 +137,6 @@ async def listar_matriculas(
     return MatriculaListResponse(items=items)
 
 
-def _limite_cancelamento(pag: Pagamento | None) -> datetime | None:
-    """Fim da janela de arrependimento: 7 dias após o pagamento aprovado."""
-    if pag is None or pag.status != StatusPagamento.aprovado or pag.gateway != "stripe":
-        return None
-    return _exp_aware(pag.criado_em) + timedelta(days=GARANTIA_DIAS)
-
-
 @router.post("/matriculas/{matricula_id}/cancelar", response_model=CancelamentoResultado)
 async def cancelar_matricula(
     matricula_id: uuid.UUID,
@@ -169,7 +160,7 @@ async def cancelar_matricula(
         raise _err(409, "MATRICULA_NAO_ATIVA", "Esta matrícula não está ativa.")
 
     pag = await db.get(Pagamento, mat.pagamento_id) if mat.pagamento_id else None
-    limite = _limite_cancelamento(pag)
+    limite = limite_cancelamento(pag)
     if limite is None:
         raise _err(
             409, "SEM_PAGAMENTO_REEMBOLSAVEL",
@@ -183,35 +174,13 @@ async def cancelar_matricula(
     if not stripe_ativo():
         raise _err(503, "STRIPE_NAO_CONFIGURADO", "Reembolsos indisponíveis no momento.")
 
-    # Stripe primeiro; banco só muda se o estorno/cancelamento der certo.
-    assinatura_cancelada = False
+    # Stripe primeiro; banco só muda se o estorno/cancelamento der certo. A
+    # revogação do catálogo é idempotente com o webhook subscription.deleted.
     try:
-        if mat.stripe_subscription_id:
-            pi = await payment_intent_da_invoice(pag.gateway_transaction_id)
-            if pi:
-                await reembolsar_payment_intent(pi)
-            await cancelar_assinatura_stripe(mat.stripe_subscription_id)
-            assinatura_cancelada = True
-            # Revoga o catálogo da assinatura já (o webhook
-            # customer.subscription.deleted fará o mesmo — idempotente).
-            mats_sub = (
-                await db.execute(
-                    select(Matricula).where(
-                        Matricula.stripe_subscription_id == mat.stripe_subscription_id
-                    )
-                )
-            ).scalars().all()
-            for m in mats_sub:
-                m.status = StatusMatricula.expirado
-            cursos_revogados = len(mats_sub)
-        else:
-            await reembolsar_payment_intent(pag.gateway_transaction_id)
-            mat.status = StatusMatricula.expirado
-            cursos_revogados = 1
+        assinatura_cancelada, cursos_revogados = await executar_cancelamento(db, mat, pag)
     except stripe.error.StripeError:
         raise _err(502, "STRIPE_ERRO", "Falha ao processar o reembolso — nada foi alterado.")
 
-    pag.status = StatusPagamento.estornado
     await db.commit()
     return CancelamentoResultado(
         matricula_id=mat.id,

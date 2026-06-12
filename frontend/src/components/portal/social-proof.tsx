@@ -102,19 +102,52 @@ export function SocialProof({
                     )}
                   </div>
                   <div style={{ padding: "0 4px 6px" }}>
+                    {v.estrelas ? (
+                      <div style={{ marginBottom: 7 }}>
+                        <Stars value={v.estrelas} size={14} />
+                      </div>
+                    ) : null}
                     <p
                       style={{
                         fontWeight: 600,
                         fontSize: "0.98rem",
-                        marginBottom: 7,
+                        marginBottom: 6,
                         lineHeight: 1.3,
                       }}
                     >
                       {v.t}
                     </p>
-                    <span className="tag-mono">
-                      {v.views ? `${v.views} de visualizações` : "YouTube"}
-                    </span>
+                    <div
+                      className="flex center between"
+                      style={{ gap: 8, flexWrap: "wrap" }}
+                    >
+                      <span className="tag-mono">
+                        {v.canal
+                          ? v.canal
+                          : v.views
+                            ? `${v.views} de visualizações`
+                            : "YouTube"}
+                      </span>
+                      <span
+                        className="flex center gap-1"
+                        style={{
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          color: "var(--primary)",
+                        }}
+                      >
+                        Assistir
+                        <Icon name="arrow" size={14} />
+                      </span>
+                    </div>
+                    {v.canal && v.views && (
+                      <span
+                        className="tag-mono subtle"
+                        style={{ display: "block", marginTop: 6 }}
+                      >
+                        {v.views} de visualizações
+                      </span>
+                    )}
                   </div>
                 </a>
               );

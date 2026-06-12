@@ -190,6 +190,49 @@ class TestAdminVideos:
         lista = (await client.get("/api/v1/admin/videos", headers=admin_headers)).json()
         assert not any(v["id"] == vid_id for v in lista)
 
+    async def test_enriquece_do_youtube(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        """Só com a URL: título e canal são puxados do YouTube (oEmbed mockado)."""
+        async def fake_meta(url):
+            return {"titulo": "Como sangrar o câmbio DSG", "canal": "RödelCar"}
+
+        monkeypatch.setattr("app.routers.admin.buscar_metadados", fake_meta)
+        resp = await client.post(
+            "/api/v1/admin/videos",
+            headers=admin_headers,
+            json={"youtube_url": "https://youtu.be/abc12345678", "estrelas": 4},
+        )
+        assert resp.status_code == 201
+        v = resp.json()
+        assert v["titulo"] == "Como sangrar o câmbio DSG"
+        assert v["canal"] == "RödelCar"
+        assert v["estrelas"] == 4
+        await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
+
+    async def test_titulo_manual_prevalece(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        """O que o admin digita não é sobrescrito pelo YouTube; canal em branco enche."""
+        async def fake_meta(url):
+            return {"titulo": "Título do YT", "canal": "Canal do YT"}
+
+        monkeypatch.setattr("app.routers.admin.buscar_metadados", fake_meta)
+        resp = await client.post(
+            "/api/v1/admin/videos",
+            headers=admin_headers,
+            json={
+                "youtube_url": "https://youtu.be/zzz99999999",
+                "titulo": "Meu título custom",
+            },
+        )
+        assert resp.status_code == 201
+        v = resp.json()
+        assert v["titulo"] == "Meu título custom"  # mantido
+        assert v["canal"] == "Canal do YT"  # enriquecido
+        assert v["estrelas"] == 5  # default
+        await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
+
 
 # ── CRUD de FAQ ───────────────────────────────────────────────────────────────
 class TestAdminFaq:

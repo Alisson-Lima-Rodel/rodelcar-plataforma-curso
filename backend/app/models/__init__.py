@@ -417,8 +417,12 @@ class Video(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     titulo: Mapped[str] = mapped_column(String(200))
     youtube_url: Mapped[str | None] = mapped_column(String(500))
+    # Canal/autor — extraído do YouTube (oEmbed) no cadastro; editável.
+    canal: Mapped[str | None] = mapped_column(String(120))
     duracao: Mapped[str | None] = mapped_column(String(20))
     views: Mapped[str | None] = mapped_column(String(40))
+    # Avaliação curada exibida na prova social (YouTube não expõe nota pública).
+    estrelas: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = _created_at()

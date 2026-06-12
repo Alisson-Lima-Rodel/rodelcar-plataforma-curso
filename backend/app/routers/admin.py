@@ -21,6 +21,7 @@ from app.core.stripe_admin import (
     trocar_preco,
 )
 from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
+from app.core.youtube import buscar_metadados
 from app.dependencies import get_current_admin, require_papel
 from app.models import (
     Admin,
@@ -298,7 +299,7 @@ router.include_router(alunos)
 
 
 # ── CRUD genérico p/ cadastros simples (Depoimentos, Vídeos, FAQ) ─────────────
-def _crud_router(prefix, model, read_schema, create_schema, update_schema, papeis=_CONTEUDO):
+def _crud_router(prefix, model, read_schema, create_schema, update_schema, papeis=_CONTEUDO, enrich=None):
     r = APIRouter(prefix=prefix, dependencies=[Depends(require_papel(*papeis))])
 
     @r.get("", response_model=list[read_schema])
@@ -307,7 +308,10 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema, papei
 
     @r.post("", response_model=read_schema, status_code=201)
     async def criar(body: create_schema, db: AsyncSession = Depends(get_db)):  # type: ignore[valid-type]
-        obj = model(**body.model_dump())
+        data = body.model_dump()
+        if enrich is not None:
+            data = await enrich(data)
+        obj = model(**data)
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
@@ -318,7 +322,13 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema, papei
         obj = await db.get(model, obj_id)
         if obj is None:
             raise _err(404, "NAO_ENCONTRADO", "Registro não encontrado.")
-        for k, v in body.model_dump(exclude_unset=True).items():
+        data = body.model_dump(exclude_unset=True)
+        # O form do admin envia o objeto inteiro: re-salvar com a URL repuxa o
+        # que estiver em branco (ex.: canal de um vídeo antigo). enrich só enche
+        # vazios — o que o admin digitou não é tocado.
+        if enrich is not None:
+            data = await enrich(data)
+        for k, v in data.items():
             setattr(obj, k, v)
         await db.commit()
         await db.refresh(obj)
@@ -336,8 +346,26 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema, papei
     return r
 
 
+async def _enriquecer_video(data: dict) -> dict:
+    """No cadastro, completa título/canal com o que o YouTube expõe (oEmbed).
+    Só preenche o que veio em branco — o que o admin digitou prevalece."""
+    if not data.get("youtube_url"):
+        return data
+    meta = await buscar_metadados(data["youtube_url"])
+    if meta:
+        if not (data.get("titulo") or "").strip() and meta["titulo"]:
+            data["titulo"] = meta["titulo"][:200]
+        if not (data.get("canal") or "").strip() and meta["canal"]:
+            data["canal"] = meta["canal"][:120]
+    if not (data.get("titulo") or "").strip():
+        data["titulo"] = (data.get("canal") or "Vídeo do YouTube")[:200]
+    return data
+
+
 router.include_router(_crud_router("/depoimentos", Depoimento, DepoimentoAdmin, DepoimentoCreate, DepoimentoUpdate))
-router.include_router(_crud_router("/videos", Video, VideoAdmin, VideoCreate, VideoUpdate))
+router.include_router(_crud_router(
+    "/videos", Video, VideoAdmin, VideoCreate, VideoUpdate, enrich=_enriquecer_video
+))
 router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
 
 

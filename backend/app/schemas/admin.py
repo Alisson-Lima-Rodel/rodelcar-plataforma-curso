@@ -175,26 +175,33 @@ class VideoAdmin(BaseModel):
     id: uuid.UUID
     titulo: str
     youtube_url: str | None = None
+    canal: str | None = None
     duracao: str | None = None
     views: str | None = None
+    estrelas: int
     status: str
     ordem: int
 
 
 class VideoCreate(BaseModel):
-    titulo: str = Field(min_length=2, max_length=200)
+    # título/canal opcionais: o backend completa pelo YouTube (oEmbed) ao salvar.
+    titulo: str = Field(default="", max_length=200)
     youtube_url: str | None = Field(default=None, max_length=500)
+    canal: str | None = Field(default=None, max_length=120)
     duracao: str | None = Field(default=None, max_length=20)
     views: str | None = Field(default=None, max_length=40)
+    estrelas: int = Field(default=5, ge=1, le=5)
     status: StatusAtivo = "Ativo"
     ordem: int = 0
 
 
 class VideoUpdate(BaseModel):
-    titulo: str | None = None
+    titulo: str | None = Field(default=None, max_length=200)
     youtube_url: str | None = Field(default=None, max_length=500)
+    canal: str | None = Field(default=None, max_length=120)
     duracao: str | None = Field(default=None, max_length=20)
     views: str | None = Field(default=None, max_length=40)
+    estrelas: int | None = Field(default=None, ge=1, le=5)
     status: StatusAtivo | None = None
     ordem: int | None = None
 

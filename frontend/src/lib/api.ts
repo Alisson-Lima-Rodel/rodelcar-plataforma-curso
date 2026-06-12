@@ -195,14 +195,18 @@ export async function getDepoimentos(): Promise<Testimonial[]> {
 interface ApiVideo {
   titulo: string;
   youtube_url?: string | null;
+  canal?: string | null;
   duracao?: string | null;
   views?: string | null;
+  estrelas?: number | null;
 }
 
 export async function getVideos(): Promise<Video[]> {
   const data = await serverGet<ApiVideo[]>("/videos");
   return (data ?? []).map((v) => ({
     t: v.titulo,
+    canal: v.canal ?? undefined,
+    estrelas: v.estrelas ?? undefined,
     dur: v.duracao ?? "",
     views: v.views ?? "",
     url: v.youtube_url ?? undefined,

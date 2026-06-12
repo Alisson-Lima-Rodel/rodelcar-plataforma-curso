@@ -40,6 +40,8 @@ export interface Premium {
 
 export interface Video {
   t: string;
+  canal?: string;
+  estrelas?: number;
   dur: string;
   views: string;
   url?: string;

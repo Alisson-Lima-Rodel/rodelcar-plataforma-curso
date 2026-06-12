@@ -11,8 +11,10 @@ class VideoPublico(BaseModel):
     id: uuid.UUID
     titulo: str
     youtube_url: str | None = None
+    canal: str | None = None
     duracao: str | None = None
     views: str | None = None
+    estrelas: int = 5
 
 
 class FaqPublico(BaseModel):

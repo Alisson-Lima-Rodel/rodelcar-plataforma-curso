@@ -198,6 +198,7 @@ interface ApiVideo {
   canal?: string | null;
   duracao?: string | null;
   views?: string | null;
+  likes?: string | null;
   estrelas?: number | null;
 }
 
@@ -209,6 +210,7 @@ export async function getVideos(): Promise<Video[]> {
     estrelas: v.estrelas ?? undefined,
     dur: v.duracao ?? "",
     views: v.views ?? "",
+    likes: v.likes ?? undefined,
     url: v.youtube_url ?? undefined,
   }));
 }

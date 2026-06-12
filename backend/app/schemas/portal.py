@@ -14,6 +14,7 @@ class VideoPublico(BaseModel):
     canal: str | None = None
     duracao: str | None = None
     views: str | None = None
+    likes: str | None = None
     estrelas: int = 5
 
 

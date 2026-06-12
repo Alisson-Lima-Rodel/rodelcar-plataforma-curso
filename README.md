@@ -91,6 +91,17 @@ Webhook trata: `invoice.paid` (libera/renova acesso a **todos os cursos** até o
 `current_period_end`), `invoice.payment_failed` (registra recusa) e `customer.subscription.deleted`
 (expira as matrículas da assinatura). Acesso sempre liberado **só pelo webhook**.
 
+## Vídeos da prova social (YouTube)
+
+No cadastro de vídeo do admin, basta colar a **URL do YouTube**: a **capa** sai da própria
+URL e **título/canal** são puxados via oEmbed (sem chave). Para também trazer **duração,
+views e likes** automaticamente, configure a **YouTube Data API v3**:
+
+1. Google Cloud Console → ative *YouTube Data API v3* → crie uma **API key**.
+2. No `.env`: `YOUTUBE_API_KEY=AIza...` (cota grátis de 10 mil unidades/dia; 1 por vídeo).
+
+Sem a chave, duração/views/likes seguem manuais. O YouTube não expõe *dislikes* (só 👍).
+
 ## Hospedagem (produção)
 - **Front-end** → Vercel (deploy direto do diretório `frontend/`).
 - **Banco** → Supabase. Use a connection string com `postgresql+asyncpg://...` no

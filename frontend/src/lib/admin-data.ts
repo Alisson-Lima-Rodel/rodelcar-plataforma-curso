@@ -258,6 +258,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       { key: "canal", label: "Canal", kind: "muted" },
       { key: "estrelas", label: "Nota", kind: "stars" },
       { key: "views", label: "Views", kind: "muted" },
+      { key: "likes", label: "Likes", kind: "muted" },
       { key: "status", label: "Status", kind: "badgeStatus" },
     ],
     fields: [
@@ -266,7 +267,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         label: "Link do YouTube",
         type: "text",
         col: "full",
-        hint: "Cole a URL — capa, título e canal são puxados automaticamente do YouTube ao salvar.",
+        hint: "Cole a URL — capa, título, canal, duração, views e likes são puxados do YouTube ao salvar (duração/views/likes exigem a chave da API configurada).",
       },
       {
         key: "titulo",
@@ -281,9 +282,10 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         type: "text",
         hint: "Em branco, usa o canal do YouTube.",
       },
-      { key: "estrelas", label: "Avaliação", type: "stars" },
-      { key: "duracao", label: "Duração (ex.: 12:48)", type: "text" },
-      { key: "views", label: "Views (ex.: 84 mil)", type: "text" },
+      { key: "estrelas", label: "Avaliação (curada)", type: "stars" },
+      { key: "duracao", label: "Duração (auto)", type: "text" },
+      { key: "views", label: "Views (auto)", type: "text" },
+      { key: "likes", label: "Likes (auto)", type: "text" },
       { key: "ordem", label: "Ordem na vitrine", type: "number" },
       {
         key: "status",
@@ -300,6 +302,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       estrelas: 5,
       duracao: "",
       views: "",
+      likes: "",
       ordem: 0,
       status: "Ativo",
     },

@@ -44,6 +44,7 @@ export interface Video {
   estrelas?: number;
   dur: string;
   views: string;
+  likes?: string;
   url?: string;
 }
 

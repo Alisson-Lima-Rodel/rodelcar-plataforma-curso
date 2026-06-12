@@ -121,13 +121,7 @@ export function SocialProof({
                       className="flex center between"
                       style={{ gap: 8, flexWrap: "wrap" }}
                     >
-                      <span className="tag-mono">
-                        {v.canal
-                          ? v.canal
-                          : v.views
-                            ? `${v.views} de visualizações`
-                            : "YouTube"}
-                      </span>
+                      <span className="tag-mono">{v.canal || "YouTube"}</span>
                       <span
                         className="flex center gap-1"
                         style={{
@@ -140,13 +134,23 @@ export function SocialProof({
                         <Icon name="arrow" size={14} />
                       </span>
                     </div>
-                    {v.canal && v.views && (
-                      <span
-                        className="tag-mono subtle"
-                        style={{ display: "block", marginTop: 6 }}
+                    {(v.views || v.likes) && (
+                      <div
+                        className="flex center gap-3"
+                        style={{ marginTop: 6 }}
                       >
-                        {v.views} de visualizações
-                      </span>
+                        {v.views && (
+                          <span className="tag-mono subtle">
+                            {v.views} views
+                          </span>
+                        )}
+                        {v.likes && (
+                          <span className="tag-mono subtle flex center gap-1">
+                            <Icon name="thumbsUp" size={12} />
+                            {v.likes}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </a>

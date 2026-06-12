@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # URL de renovação usada nas mensagens de vigência
     RENOVACAO_URL: str = "https://rodelcar.com.br"
 
+    # YouTube Data API v3 (opcional). Com a chave, o cadastro de vídeo puxa
+    # duração, views e likes automaticamente; sem ela, só título/canal via oEmbed.
+    YOUTUBE_API_KEY: str = ""
+
     # ── Pagamentos — Stripe ───────────────────────────────────────────────────
     # Chave secreta da API (sk_test_... / sk_live_...). Usada só no checkout.
     STRIPE_SECRET_KEY: str = ""

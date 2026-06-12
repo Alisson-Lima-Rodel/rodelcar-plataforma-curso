@@ -421,6 +421,8 @@ class Video(Base):
     canal: Mapped[str | None] = mapped_column(String(120))
     duracao: Mapped[str | None] = mapped_column(String(20))
     views: Mapped[str | None] = mapped_column(String(40))
+    # Likes do YouTube (via Data API, se houver chave). String formatada ("1,2 mil").
+    likes: Mapped[str | None] = mapped_column(String(40))
     # Avaliação curada exibida na prova social (YouTube não expõe nota pública).
     estrelas: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo

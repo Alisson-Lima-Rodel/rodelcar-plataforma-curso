@@ -18,6 +18,9 @@ services:
       # Em dev, SMTP/WA ficam vazios (não envia). Para exercitar o pipeline
       # localmente sem disparo real, defina NOTIFICACOES_FAKE=true.
       NOTIFICACOES_FAKE: ${NOTIFICACOES_FAKE:-false}
+      # YouTube Data API (opcional) — com a chave, o cadastro de vídeo puxa
+      # duração, views e likes; sem ela, só título/canal via oEmbed.
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       # Pagamentos — Stripe (vazios em dev; defina no .env para rodar o checkout).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

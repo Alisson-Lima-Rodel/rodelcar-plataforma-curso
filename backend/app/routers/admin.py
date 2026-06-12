@@ -346,17 +346,21 @@ def _crud_router(prefix, model, read_schema, create_schema, update_schema, papei
     return r
 
 
+_VIDEO_LIMITES = {"titulo": 200, "canal": 120, "duracao": 20, "views": 40, "likes": 40}
+
+
 async def _enriquecer_video(data: dict) -> dict:
-    """No cadastro, completa título/canal com o que o YouTube expõe (oEmbed).
-    Só preenche o que veio em branco — o que o admin digitou prevalece."""
+    """No cadastro, completa do YouTube o que veio em branco — o que o admin
+    digitou prevalece. Com YOUTUBE_API_KEY: título, canal, duração, views e likes;
+    sem a chave: só título e canal (oEmbed)."""
     if not data.get("youtube_url"):
         return data
     meta = await buscar_metadados(data["youtube_url"])
     if meta:
-        if not (data.get("titulo") or "").strip() and meta["titulo"]:
-            data["titulo"] = meta["titulo"][:200]
-        if not (data.get("canal") or "").strip() and meta["canal"]:
-            data["canal"] = meta["canal"][:120]
+        for campo, limite in _VIDEO_LIMITES.items():
+            valor = meta.get(campo)
+            if valor and not (data.get(campo) or "").strip():
+                data[campo] = str(valor)[:limite]
     if not (data.get("titulo") or "").strip():
         data["titulo"] = (data.get("canal") or "Vídeo do YouTube")[:200]
     return data

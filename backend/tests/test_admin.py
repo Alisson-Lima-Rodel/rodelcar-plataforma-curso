@@ -233,6 +233,36 @@ class TestAdminVideos:
         assert v["estrelas"] == 5  # default
         await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
 
+    async def test_data_api_preenche_duracao_views_likes(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        """Com a Data API (mockada), duração/views/likes vêm automáticos."""
+        async def fake_meta(url):
+            return {
+                "titulo": "Sangria do DSG",
+                "canal": "RödelCar",
+                "duracao": "12:48",
+                "views": "84,2 mil",
+                "likes": "3,1 mil",
+            }
+
+        monkeypatch.setattr("app.routers.admin.buscar_metadados", fake_meta)
+        resp = await client.post(
+            "/api/v1/admin/videos",
+            headers=admin_headers,
+            json={"youtube_url": "https://youtu.be/dsg00000000"},
+        )
+        assert resp.status_code == 201
+        v = resp.json()
+        assert v["duracao"] == "12:48"
+        assert v["views"] == "84,2 mil"
+        assert v["likes"] == "3,1 mil"
+        # e o público expõe likes
+        pub = await client.get("/api/v1/videos")
+        item = next(x for x in pub.json() if x["id"] == v["id"])
+        assert item["likes"] == "3,1 mil"
+        await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
+
 
 # ── CRUD de FAQ ───────────────────────────────────────────────────────────────
 class TestAdminFaq:

@@ -11,6 +11,9 @@ const paths: Record<string, ReactNode> = {
     </>
   ),
   play: <path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none" />,
+  thumbsUp: (
+    <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm0 0 4.5-7a2 2 0 0 1 1.8 2.9L12 10h6a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 17 21H7" />
+  ),
   chevron: <path d="m6 9 6 6 6-6" />,
   chevronRight: <path d="m9 6 6 6-6 6" />,
   star: (

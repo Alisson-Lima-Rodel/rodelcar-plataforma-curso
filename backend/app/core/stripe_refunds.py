@@ -14,11 +14,26 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Matricula, Pagamento, StatusMatricula, StatusPagamento
+from app.models import (
+    Aula,
+    Matricula,
+    Modulo,
+    Pagamento,
+    Progresso,
+    StatusMatricula,
+    StatusPagamento,
+)
 
 logger = logging.getLogger(__name__)
 
 GARANTIA_DIAS = 7
+
+# Anti-abuso do AUTOATENDIMENTO (o suporte/admin não tem essas travas):
+# - consumo alto do curso não é "arrependimento" — é uso;
+# - estornos repetidos na conta indicam o loop compra→assiste→reembolsa.
+# Nesses casos o aluno é direcionado ao suporte, que decide caso a caso.
+LIMITE_PROGRESSO_REEMBOLSO = 20.0  # % máximo assistido p/ cancelar sozinho
+LIMITE_REEMBOLSOS_AUTO = 2         # nº de estornos na conta que trava o autoatendimento
 
 
 def limite_cancelamento(pag: Pagamento | None) -> datetime | None:
@@ -30,6 +45,85 @@ def limite_cancelamento(pag: Pagamento | None) -> datetime | None:
         return None
     criado = pag.criado_em if pag.criado_em.tzinfo else pag.criado_em.replace(tzinfo=timezone.utc)
     return criado + timedelta(days=GARANTIA_DIAS)
+
+
+def motivo_bloqueio_autoatendimento(progresso_pct: float, n_estornos: int) -> str | None:
+    """Por que o ALUNO não pode cancelar SOZINHO (None = liberado).
+
+    Anti-abuso do loop comprar→assistir→reembolsar→recomprar. NÃO se aplica ao
+    suporte/admin (que reembolsa por cortesia a qualquer tempo via /admin/reembolsos):
+    - progresso acima do teto = consumiu o conteúdo, não é arrependimento;
+    - estornos demais na conta = padrão de abuso → vai para análise do suporte.
+    """
+    if progresso_pct > LIMITE_PROGRESSO_REEMBOLSO:
+        return "RECURSO_CONSUMIDO"
+    if n_estornos >= LIMITE_REEMBOLSOS_AUTO:
+        return "LIMITE_REEMBOLSOS"
+    return None
+
+
+async def contar_estornos(db: AsyncSession, aluno_id) -> int:
+    """Nº de pagamentos já estornados na conta (cada reembolso = 1)."""
+    from sqlalchemy import func
+
+    return (
+        await db.scalar(
+            select(func.count())
+            .select_from(Pagamento)
+            .where(
+                Pagamento.aluno_id == aluno_id,
+                Pagamento.status == StatusPagamento.estornado,
+            )
+        )
+    ) or 0
+
+
+async def progresso_para_gate(db: AsyncSession, mat: Matricula) -> float:
+    """% assistido relevante p/ o gate. Avulso = o próprio curso; assinatura =
+    o MAIOR progresso entre os cursos da assinatura (cancelar 1 revoga todos)."""
+    from sqlalchemy import func
+
+    if mat.stripe_subscription_id:
+        alvos = (
+            await db.execute(
+                select(Matricula).where(
+                    Matricula.stripe_subscription_id == mat.stripe_subscription_id
+                )
+            )
+        ).scalars().all()
+    else:
+        alvos = [mat]
+
+    curso_ids = list({m.curso_id for m in alvos})
+    contagens = {
+        row.curso_id: row.n
+        for row in (
+            await db.execute(
+                select(Modulo.curso_id, func.count(Aula.id).label("n"))
+                .join(Aula, Aula.modulo_id == Modulo.id)
+                .where(Modulo.curso_id.in_(curso_ids))
+                .group_by(Modulo.curso_id)
+            )
+        ).all()
+    }
+    mat_ids = [m.id for m in alvos]
+    somas: dict = {}
+    rows = (
+        await db.execute(
+            select(Progresso.matricula_id, func.sum(Progresso.percentual).label("s"))
+            .where(Progresso.matricula_id.in_(mat_ids))
+            .group_by(Progresso.matricula_id)
+        )
+    ).all()
+    for r in rows:
+        somas[r.matricula_id] = float(r.s or 0)
+
+    maior = 0.0
+    for m in alvos:
+        total = contagens.get(m.curso_id, 0)
+        if total:
+            maior = max(maior, round(somas.get(m.id, 0.0) / total, 2))
+    return maior
 
 
 async def executar_cancelamento(

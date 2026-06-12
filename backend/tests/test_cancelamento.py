@@ -16,9 +16,12 @@ from app.core.db import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models import (
     Aluno,
+    Aula,
     Curso,
     Matricula,
+    Modulo,
     Pagamento,
+    Progresso,
     StatusMatricula,
     StatusPagamento,
     TipoCurso,
@@ -236,3 +239,138 @@ class TestCancelamento:
         # matrícula do catálogo sem pagamento próprio: não cancelável diretamente
         sub2 = por_id[cancel_seed["mat_sub2"]]
         assert sub2["cancelavel"] is False
+
+
+@pytest_asyncio.fixture
+async def aluno_logado(client: AsyncClient):
+    """Aluno vazio logado; limpa tudo (progresso→matrícula→pagamento→curso) ao fim."""
+    pref = uuid.uuid4().hex[:8]
+    email = f"abuso_{pref}@rodelcar.dev"
+    async with AsyncSessionLocal() as db:
+        aluno = Aluno(nome="Abuso Tester", email=email, senha_hash=hash_password(SENHA))
+        db.add(aluno)
+        await db.flush()
+        aid = aluno.id
+        await db.commit()
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "senha": SENHA})
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    yield {"aluno_id": str(aid), "pref": pref, "headers": headers}
+
+    async with AsyncSessionLocal() as db:
+        mat_ids = (
+            await db.execute(select(Matricula.id).where(Matricula.aluno_id == aid))
+        ).scalars().all()
+        if mat_ids:
+            await db.execute(delete(Progresso).where(Progresso.matricula_id.in_(mat_ids)))
+        await db.execute(delete(Matricula).where(Matricula.aluno_id == aid))
+        await db.execute(delete(Pagamento).where(Pagamento.aluno_id == aid))
+        cursos = (
+            await db.execute(select(Curso.id).where(Curso.slug.like(f"%{pref}%")))
+        ).scalars().all()
+        if cursos:
+            mods = (
+                await db.execute(select(Modulo.id).where(Modulo.curso_id.in_(cursos)))
+            ).scalars().all()
+            if mods:
+                await db.execute(delete(Aula).where(Aula.modulo_id.in_(mods)))
+                await db.execute(delete(Modulo).where(Modulo.curso_id.in_(cursos)))
+            await db.execute(delete(Curso).where(Curso.id.in_(cursos)))
+        await db.execute(delete(Aluno).where(Aluno.id == aid))
+        await db.commit()
+
+
+class TestAntiAbuso:
+    async def test_progresso_alto_bloqueia_autoatendimento(
+        self, client: AsyncClient, aluno_logado, stripe_stub
+    ):
+        """>20% assistido = consumo, não arrependimento → autoatendimento barrado."""
+        aid = uuid.UUID(aluno_logado["aluno_id"])
+        pref = aluno_logado["pref"]
+        async with AsyncSessionLocal() as db:
+            curso = Curso(
+                slug=f"abuso-prog-{pref}", titulo="C Prog", tipo=TipoCurso.avulso,
+                preco=Decimal("100.00"), validade_dias=365,
+            )
+            db.add(curso)
+            await db.flush()
+            modulo = Modulo(curso_id=curso.id, titulo="M", ordem=1)
+            db.add(modulo)
+            await db.flush()
+            aula = Aula(modulo_id=modulo.id, titulo="A", ordem=1)
+            db.add(aula)
+            await db.flush()
+            pag = Pagamento(
+                aluno_id=aid, gateway="stripe", gateway_transaction_id=f"pi_{pref}_p",
+                valor=Decimal("100.00"), status=StatusPagamento.aprovado, payload={},
+                criado_em=datetime.now(timezone.utc),
+            )
+            db.add(pag)
+            await db.flush()
+            mat = Matricula(
+                aluno_id=aid, curso_id=curso.id, pagamento_id=pag.id,
+                status=StatusMatricula.ativo,
+                data_expiracao=datetime.now(timezone.utc) + timedelta(days=365),
+            )
+            db.add(mat)
+            await db.flush()
+            db.add(Progresso(
+                matricula_id=mat.id, aula_id=aula.id, concluida=False,
+                percentual=Decimal("50.00"),  # 50% de 1 aula = 50% do curso
+            ))
+            mat_id = str(mat.id)
+            await db.commit()
+
+        resp = await client.post(
+            f"/api/v1/me/matriculas/{mat_id}/cancelar", headers=aluno_logado["headers"]
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "RECURSO_CONSUMIDO"
+
+        # a listagem sinaliza o motivo (UI manda falar com o suporte)
+        lista = await client.get("/api/v1/me/matriculas", headers=aluno_logado["headers"])
+        item = next(m for m in lista.json()["items"] if m["id"] == mat_id)
+        assert item["cancelavel"] is False
+        assert item["motivo_bloqueio"] == "RECURSO_CONSUMIDO"
+
+    async def test_limite_de_estornos_bloqueia(
+        self, client: AsyncClient, aluno_logado, stripe_stub
+    ):
+        """A partir de 2 estornos na conta, autoatendimento vai para o suporte."""
+        aid = uuid.UUID(aluno_logado["aluno_id"])
+        pref = aluno_logado["pref"]
+        async with AsyncSessionLocal() as db:
+            for k in range(2):  # 2 reembolsos já feitos
+                db.add(Pagamento(
+                    aluno_id=aid, gateway="stripe", gateway_transaction_id=f"pi_{pref}_e{k}",
+                    valor=Decimal("100.00"), status=StatusPagamento.estornado, payload={},
+                    criado_em=datetime.now(timezone.utc),
+                ))
+            curso = Curso(
+                slug=f"abuso-lim-{pref}", titulo="C Lim", tipo=TipoCurso.avulso,
+                preco=Decimal("100.00"), validade_dias=365,
+            )
+            db.add(curso)
+            await db.flush()
+            pag = Pagamento(
+                aluno_id=aid, gateway="stripe", gateway_transaction_id=f"pi_{pref}_ok",
+                valor=Decimal("100.00"), status=StatusPagamento.aprovado, payload={},
+                criado_em=datetime.now(timezone.utc),
+            )
+            db.add(pag)
+            await db.flush()
+            mat = Matricula(
+                aluno_id=aid, curso_id=curso.id, pagamento_id=pag.id,
+                status=StatusMatricula.ativo,
+                data_expiracao=datetime.now(timezone.utc) + timedelta(days=365),
+            )
+            db.add(mat)
+            await db.flush()
+            mat_id = str(mat.id)
+            await db.commit()
+
+        resp = await client.post(
+            f"/api/v1/me/matriculas/{mat_id}/cancelar", headers=aluno_logado["headers"]
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "LIMITE_REEMBOLSOS"

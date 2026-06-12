@@ -205,6 +205,7 @@ export interface MatriculaItem {
   origem: "avulsa" | "assinatura" | "manual";
   cancelavel: boolean;
   cancelavel_ate: string | null;
+  motivo_bloqueio: "RECURSO_CONSUMIDO" | "LIMITE_REEMBOLSOS" | null;
 }
 
 export interface CancelamentoResultado {

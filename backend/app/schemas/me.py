@@ -26,6 +26,9 @@ class MatriculaItem(BaseModel):
     origem: str = "avulsa"  # avulsa | assinatura | manual
     cancelavel: bool = False
     cancelavel_ate: datetime | None = None
+    # Quando NÃO é autoatendível por anti-abuso (mas seria pelo prazo): direciona
+    # ao suporte. RECURSO_CONSUMIDO (>20% assistido) | LIMITE_REEMBOLSOS.
+    motivo_bloqueio: str | None = None
 
 
 class MatriculaListResponse(BaseModel):

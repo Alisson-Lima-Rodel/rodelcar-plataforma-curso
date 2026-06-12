@@ -30,12 +30,24 @@ function mensagemErro(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.code === "FORA_DO_PRAZO")
       return "O prazo de 7 dias para cancelamento já passou.";
+    if (e.code === "RECURSO_CONSUMIDO" || e.code === "LIMITE_REEMBOLSOS")
+      return e.message; // já vem explicando "fale com o suporte"
     if (e.code === "STRIPE_ERRO")
       return "Falha ao processar o reembolso — tente novamente em instantes.";
     return e.message;
   }
   return "Não foi possível cancelar. Tente novamente.";
 }
+
+const MOTIVO_HINT: Record<
+  NonNullable<MatriculaItem["motivo_bloqueio"]>,
+  string
+> = {
+  RECURSO_CONSUMIDO:
+    "Você já avançou no conteúdo — para cancelar, fale com o suporte.",
+  LIMITE_REEMBOLSOS:
+    "Limite de cancelamentos automáticos atingido — novos pedidos passam pelo suporte.",
+};
 
 const ORIGEM_LABEL: Record<MatriculaItem["origem"], string> = {
   avulsa: "Compra avulsa",
@@ -210,6 +222,14 @@ export function MyCourses() {
                       ? "Processando..."
                       : `Cancelar e reembolsar (até ${m.cancelavel_ate ? fmtData(m.cancelavel_ate) : "7 dias"})`}
                   </Button>
+                )}
+                {!m.cancelavel && m.motivo_bloqueio && (
+                  <span
+                    className="tag-mono subtle"
+                    style={{ maxWidth: 360, lineHeight: 1.4 }}
+                  >
+                    {MOTIVO_HINT[m.motivo_bloqueio]}
+                  </span>
                 )}
               </div>
             </div>

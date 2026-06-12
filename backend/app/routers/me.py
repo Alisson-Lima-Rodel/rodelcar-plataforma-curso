@@ -11,8 +11,11 @@ from app.core.db import get_db
 from app.core.stripe_admin import stripe_ativo
 from app.core.stripe_refunds import (
     GARANTIA_DIAS,
+    contar_estornos,
     executar_cancelamento,
     limite_cancelamento,
+    motivo_bloqueio_autoatendimento,
+    progresso_para_gate,
 )
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
@@ -93,27 +96,48 @@ async def listar_matriculas(
         ).scalars().all()
         pagamentos = {p.id: p for p in rows}
 
+    # % por matrícula + maior progresso por assinatura (cancelar 1 revoga todas) e
+    # nº de estornos da conta — entradas do gate anti-abuso do autoatendimento.
+    pct_por_mat = {
+        m.id: (
+            round(sum(float(p.percentual) for p in m.progresso) / aula_counts[m.curso_id], 2)
+            if aula_counts.get(m.curso_id)
+            else 0.0
+        )
+        for m in matriculas
+    }
+    sub_max: dict = {}
+    for m in matriculas:
+        if m.stripe_subscription_id:
+            sub_max[m.stripe_subscription_id] = max(
+                sub_max.get(m.stripe_subscription_id, 0.0), pct_por_mat[m.id]
+            )
+    n_estornos = await contar_estornos(db, aluno.id)
+
     items = []
     for mat in matriculas:
         exp = _exp_aware(mat.data_expiracao)
         dias = max(0, (exp - agora).days)
-        total = aula_counts.get(mat.curso_id, 0)
-        soma_pct = sum(float(p.percentual) for p in mat.progresso)
-        pct = round(soma_pct / total, 2) if total > 0 else 0.0
+        pct = pct_por_mat[mat.id]
 
         pag = pagamentos.get(mat.pagamento_id) if mat.pagamento_id else None
         limite = limite_cancelamento(pag)
-        cancelavel = (
-            mat.status == StatusMatricula.ativo
-            and limite is not None
-            and agora <= limite
-        )
+        dentro_prazo = limite is not None and agora <= limite
         if pag is None:
             origem = "manual"
         elif mat.stripe_subscription_id:
             origem = "assinatura"
         else:
             origem = "avulsa"
+
+        progresso_gate = (
+            sub_max[mat.stripe_subscription_id]
+            if mat.stripe_subscription_id
+            else pct
+        )
+        bloqueio = motivo_bloqueio_autoatendimento(progresso_gate, n_estornos)
+        reembolsavel = mat.status == StatusMatricula.ativo and dentro_prazo
+        cancelavel = reembolsavel and bloqueio is None
 
         items.append(
             MatriculaItem(
@@ -131,6 +155,9 @@ async def listar_matriculas(
                 origem=origem,
                 cancelavel=cancelavel,
                 cancelavel_ate=limite if cancelavel else None,
+                # só informa o motivo quando seria cancelável pelo prazo mas o
+                # anti-abuso barrou (aí a UI manda falar com o suporte).
+                motivo_bloqueio=bloqueio if (reembolsavel and bloqueio) else None,
             )
         )
 
@@ -171,6 +198,23 @@ async def cancelar_matricula(
             400, "FORA_DO_PRAZO",
             f"O prazo de arrependimento ({GARANTIA_DIAS} dias) já passou.",
         )
+
+    # Anti-abuso (só o AUTOATENDIMENTO; o suporte reembolsa via /admin/reembolsos).
+    bloqueio = motivo_bloqueio_autoatendimento(
+        await progresso_para_gate(db, mat),
+        await contar_estornos(db, aluno.id),
+    )
+    if bloqueio == "RECURSO_CONSUMIDO":
+        raise _err(
+            409, "RECURSO_CONSUMIDO",
+            "Você já avançou mais de 20% no conteúdo. Para cancelar, fale com o suporte.",
+        )
+    if bloqueio == "LIMITE_REEMBOLSOS":
+        raise _err(
+            409, "LIMITE_REEMBOLSOS",
+            "Você atingiu o limite de cancelamentos automáticos. Novos pedidos passam pelo suporte.",
+        )
+
     if not stripe_ativo():
         raise _err(503, "STRIPE_NAO_CONFIGURADO", "Reembolsos indisponíveis no momento.")
 

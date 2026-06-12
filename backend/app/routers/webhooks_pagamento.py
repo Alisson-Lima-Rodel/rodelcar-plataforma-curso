@@ -481,3 +481,7 @@ async def _criar_ou_renovar_matricula(
         mat.status = StatusMatricula.ativo
         mat.data_expiracao = nova_exp
         mat.pagamento_id = pagamento_id
+        # Compra AVULSA desamarra a matrícula da assinatura: sem isso, cancelar
+        # a assinatura (customer.subscription.deleted) expiraria também um curso
+        # que o aluno pagou avulso por cima dela.
+        mat.stripe_subscription_id = None

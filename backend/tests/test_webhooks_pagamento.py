@@ -502,6 +502,39 @@ class TestWebhookAssinatura:
             for p in pags
         )
 
+    async def test_avulso_sobre_assinatura_sobrevive_ao_cancelamento(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        """Compra avulsa por cima de assinatura desamarra a matrícula: cancelar a
+        assinatura depois NÃO pode expirar o curso pago avulso."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}_mix"
+
+        # 1) Assinatura libera o catálogo (matrícula do curso seed fica com o sub).
+        await _post(client, _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_mix1", invoice_id=f"in_{pref}_mix",
+            sub_id=sub, aluno_id=seed["aluno_id"],
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat is not None and mat.stripe_subscription_id == sub
+
+        # 2) Compra AVULSA do mesmo curso → renova e desamarra da assinatura.
+        await _post(client, _session_event(
+            "checkout.session.completed", event_id=f"evt_{pref}_mix2",
+            pi_id=f"pi_{pref}_mix", aluno_id=seed["aluno_id"],
+            curso_slug=seed["curso_slug"],
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat.stripe_subscription_id is None
+
+        # 3) Cancelamento da assinatura não derruba o curso comprado avulso.
+        await _post(client, _sub_event(
+            "customer.subscription.deleted", event_id=f"evt_{pref}_mix3", sub_id=sub
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat.status == StatusMatricula.ativo
+
     async def test_invoice_paid_formato_legado(self, client: AsyncClient, seed, monkeypatch):
         """Compat: invoice no formato antigo (`subscription` na raiz) segue funcionando."""
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)

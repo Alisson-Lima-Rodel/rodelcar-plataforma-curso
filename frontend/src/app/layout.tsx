@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { SITE_URL } from "@/lib/seo";
 
 const archivo = Archivo({
   subsets: ["latin"],
@@ -26,7 +27,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rodelcar.com.br"),
+  metadataBase: new URL(SITE_URL),
+  applicationName: "RödelCar",
   title: {
     default: "RödelCar — Câmbio Automático e Automatizado · Canoas-RS",
     template: "%s · RödelCar",
@@ -50,6 +52,15 @@ export const metadata: Metadata = {
     description:
       "Diagnóstico de bancada e formação técnica para mecânicos. Canoas-RS.",
   },
+  twitter: { card: "summary_large_image" },
+  // Token do Search Console (opcional, via env) — sem ele a tag não sai.
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0c10",
 };
 
 export default function RootLayout({

@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { Hero } from "@/components/portal/hero";
 import { SocialProof } from "@/components/portal/social-proof";
 import { Vitrine } from "@/components/portal/vitrine";
 import { getCursos, getDepoimentos, getPlanos, getVideos } from "@/lib/api";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default async function HomePage() {
   const [courses, testimonials, videos, planos] = await Promise.all([

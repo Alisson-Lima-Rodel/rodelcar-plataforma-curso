@@ -68,8 +68,23 @@ export async function adminLogin(email: string, senha: string): Promise<void> {
   setAdminToken(t.access_token);
 }
 
-export function adminLogout() {
+/** Logout: limpa o token local E revoga a sessão no servidor (o backend bumpa
+ * o token_version, matando qualquer access token vivo — token roubado para de
+ * valer). Best-effort: a UI desloga na hora mesmo se a rede falhar. O token é
+ * capturado ANTES da limpeza porque a rota exige Bearer. */
+export async function adminLogout(): Promise<void> {
+  const token = getAdminToken();
   clearAdminToken();
+  if (!token) return;
+  try {
+    await fetch(`${API_URL}/admin/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      keepalive: true,
+    });
+  } catch {
+    /* logout é best-effort */
+  }
 }
 
 export const getAdminMe = () => adminFetch<AdminMe>("/admin/auth/me");

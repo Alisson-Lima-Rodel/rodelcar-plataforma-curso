@@ -58,7 +58,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   useEffect(() => load(), [load]);
 
   const logout = useCallback(() => {
-    apiAdminLogout();
+    // fire-and-forget: a revogação server-side é best-effort; a UI desloga já.
+    // (adminLogout captura o token de forma síncrona antes de qualquer await.)
+    void apiAdminLogout();
     setAdmin(null);
     setStatus("unauthed");
   }, []);

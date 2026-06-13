@@ -28,3 +28,11 @@ export function youtubeThumb(url: string | null | undefined): string | null {
   const id = youtubeId(url);
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
 }
+
+/** URL de watch SEGURA, reconstruída a partir do id extraído — nunca devolve a
+ * string crua do banco. Assim um `youtube_url` malicioso (javascript:, data:…)
+ * jamais chega a um href: ou vira watch?v=<id> válido, ou null. */
+export function youtubeWatchUrl(url: string | null | undefined): string | null {
+  const id = youtubeId(url);
+  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+}

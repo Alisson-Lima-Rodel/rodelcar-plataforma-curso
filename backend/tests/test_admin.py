@@ -263,6 +263,22 @@ class TestAdminVideos:
         assert item["likes"] == "3,1 mil"
         await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
 
+    @pytest.mark.parametrize(
+        "url_perigosa",
+        ["javascript:alert(1)", "data:text/html,<script>x</script>", "vbscript:msgbox"],
+    )
+    async def test_rejeita_url_nao_http(
+        self, client: AsyncClient, admin_headers: dict, url_perigosa: str
+    ):
+        """URL com esquema executável é barrada no boundary (422) — anti-XSS no
+        href do card de vídeo do portal."""
+        resp = await client.post(
+            "/api/v1/admin/videos",
+            headers=admin_headers,
+            json={"youtube_url": url_perigosa},
+        )
+        assert resp.status_code == 422
+
 
 # ── Upload de imagem (capa de curso) ──────────────────────────────────────────
 class TestAdminUpload:

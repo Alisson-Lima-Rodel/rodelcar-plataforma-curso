@@ -7,7 +7,7 @@ import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHead } from "@/components/ui/section-head";
 import { BRAND, type Testimonial, type Video } from "@/lib/portal-data";
-import { youtubeThumb } from "@/lib/youtube";
+import { youtubeThumb, youtubeWatchUrl } from "@/lib/youtube";
 
 export function SocialProof({
   testimonials = [],
@@ -53,10 +53,12 @@ export function SocialProof({
           >
             {videos.map((v, i) => {
               const capa = youtubeThumb(v.url);
+              // href reconstruído do id (nunca a string crua) — barra javascript:/data:
+              const href = youtubeWatchUrl(v.url) || BRAND.youtube;
               return (
                 <a
                   key={i}
-                  href={v.url || BRAND.youtube}
+                  href={href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="video-card card card-hover"

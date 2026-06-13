@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import PapelAdmin, TipoCurso
 
@@ -12,6 +12,19 @@ StatusAprovacao = Literal["Aprovado", "Pendente"]
 StatusAtivo = Literal["Ativo", "Inativo"]
 # Senha: max 72 (limite efetivo do bcrypt) / min 8.
 _SENHA = Field(min_length=8, max_length=72)
+
+
+def _so_http_url(v: str | None) -> str | None:
+    """Aceita só http(s):// — barra esquemas executáveis (javascript:, data:,
+    vbscript:) que viram XSS quando a URL é renderizada em href no portal."""
+    if v is None:
+        return None
+    v = v.strip()
+    if not v:
+        return None
+    if not v.lower().startswith(("http://", "https://")):
+        raise ValueError("URL deve começar com http:// ou https://")
+    return v
 
 
 # ── Auth do painel ────────────────────────────────────────────────────────────
@@ -197,6 +210,8 @@ class VideoCreate(BaseModel):
     status: StatusAtivo = "Ativo"
     ordem: int = 0
 
+    _valida_url = field_validator("youtube_url")(_so_http_url)
+
 
 class VideoUpdate(BaseModel):
     titulo: str | None = Field(default=None, max_length=200)
@@ -208,6 +223,8 @@ class VideoUpdate(BaseModel):
     estrelas: int | None = Field(default=None, ge=1, le=5)
     status: StatusAtivo | None = None
     ordem: int | None = None
+
+    _valida_url = field_validator("youtube_url")(_so_http_url)
 
 
 # ── FAQ (página de venda) ─────────────────────────────────────────────────────

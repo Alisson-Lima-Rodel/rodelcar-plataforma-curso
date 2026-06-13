@@ -248,6 +248,25 @@ export async function getAvaliacoes(slug: string): Promise<AvaliacoesCurso> {
   return data ?? { items: [], media: null, total: 0 };
 }
 
+// ── Avaliações do Google (ficha do Google Business) ───────────────────────────
+export interface GoogleReviewItem {
+  autor: string | null;
+  nota: number | null;
+  texto: string | null;
+  quando: string | null;
+}
+
+export interface GoogleReviews {
+  rating: number | null;
+  total: number;
+  reviews: GoogleReviewItem[];
+}
+
+export async function getGoogleReviews(): Promise<GoogleReviews> {
+  const data = await serverGet<GoogleReviews>("/google-reviews");
+  return data ?? { rating: null, total: 0, reviews: [] };
+}
+
 // ── Verificação pública de certificado ────────────────────────────────────────
 export interface CertificadoVerificado {
   valido: boolean;

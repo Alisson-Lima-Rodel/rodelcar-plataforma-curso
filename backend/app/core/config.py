@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     # duração, views e likes automaticamente; sem ela, só título/canal via oEmbed.
     YOUTUBE_API_KEY: str = ""
 
+    # Google Places API (opcional) — puxa a nota/avaliações da ficha do Google
+    # (Google Business Profile) para a prova social. Precisa da chave + do Place
+    # ID da ficha. Sem ambos, o bloco simplesmente não aparece.
+    GOOGLE_PLACES_API_KEY: str = ""
+    GOOGLE_PLACE_ID: str = ""
+
     # Supabase Storage (capas de curso). SUPABASE_URL = https://<ref>.supabase.co;
     # SUPABASE_SERVICE_KEY = service_role (só no backend, nunca no front). Bucket
     # público. Sem isso, o upload de imagem fica indisponível (503).

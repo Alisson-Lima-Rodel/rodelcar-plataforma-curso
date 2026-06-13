@@ -26,3 +26,18 @@ class FaqPublico(BaseModel):
     id: uuid.UUID
     pergunta: str
     resposta: str
+
+
+class GoogleReviewItem(BaseModel):
+    autor: str | None = None
+    nota: int | None = None
+    texto: str | None = None
+    quando: str | None = None
+
+
+class GoogleReviewsPublico(BaseModel):
+    """Nota e avaliações da ficha do Google (prova social)."""
+
+    rating: float | None = None
+    total: int = 0
+    reviews: list[GoogleReviewItem] = []

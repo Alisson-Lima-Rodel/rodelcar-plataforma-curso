@@ -2,18 +2,25 @@ import type { Metadata } from "next";
 import { Hero } from "@/components/portal/hero";
 import { SocialProof } from "@/components/portal/social-proof";
 import { Vitrine } from "@/components/portal/vitrine";
-import { getCursos, getDepoimentos, getPlanos, getVideos } from "@/lib/api";
+import {
+  getCursos,
+  getDepoimentos,
+  getGoogleReviews,
+  getPlanos,
+  getVideos,
+} from "@/lib/api";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
 export default async function HomePage() {
-  const [courses, testimonials, videos, planos] = await Promise.all([
+  const [courses, testimonials, videos, planos, google] = await Promise.all([
     getCursos(),
     getDepoimentos(),
     getVideos(),
     getPlanos(),
+    getGoogleReviews(),
   ]);
   // Card Premium vende a assinatura anual (acesso total ao catálogo).
   const planoAnual =
@@ -21,7 +28,11 @@ export default async function HomePage() {
   return (
     <main>
       <Hero />
-      <SocialProof testimonials={testimonials} videos={videos} />
+      <SocialProof
+        testimonials={testimonials}
+        videos={videos}
+        google={google}
+      />
       <Vitrine courses={courses} planoAnual={planoAnual} />
     </main>
   );

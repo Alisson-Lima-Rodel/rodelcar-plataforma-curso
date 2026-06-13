@@ -7,14 +7,17 @@ import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHead } from "@/components/ui/section-head";
 import { BRAND, type Testimonial, type Video } from "@/lib/portal-data";
+import { type GoogleReviews } from "@/lib/api";
 import { youtubeThumb, youtubeWatchUrl } from "@/lib/youtube";
 
 export function SocialProof({
   testimonials = [],
   videos = [],
+  google,
 }: {
   testimonials?: Testimonial[];
   videos?: Video[];
+  google?: GoogleReviews;
 }) {
   const [idx, setIdx] = useState(0);
   const t = testimonials;
@@ -38,6 +41,69 @@ export function SocialProof({
           title="Resultados que falam por nós"
           sub="Conteúdo aberto no YouTube e a palavra de quem aplicou o método na própria bancada."
         />
+
+        {/* Nota do Google (ficha da oficina) */}
+        {google && google.total > 0 && google.rating != null && (
+          <div
+            className="card"
+            style={{
+              padding: "20px 24px",
+              marginBottom: 26,
+              display: "flex",
+              gap: 22,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ textAlign: "center", minWidth: 96 }}>
+              <div
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "2.6rem",
+                  fontWeight: 800,
+                  lineHeight: 1,
+                  color: "var(--primary)",
+                }}
+              >
+                {google.rating.toFixed(1)}
+              </div>
+              <Stars value={google.rating} size={15} />
+              <div className="tag-mono subtle" style={{ marginTop: 6 }}>
+                {google.total} avaliações no Google
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 240, display: "grid", gap: 8 }}>
+              {google.reviews.slice(0, 2).map((r, i) => (
+                <div key={i}>
+                  <div
+                    className="flex center gap-2"
+                    style={{ marginBottom: 2 }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                      {r.autor || "Cliente"}
+                    </span>
+                    {r.nota != null && <Stars value={r.nota} size={11} />}
+                  </div>
+                  {r.texto && (
+                    <p
+                      className="muted"
+                      style={{
+                        fontSize: "0.88rem",
+                        lineHeight: 1.45,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {r.texto}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Video grid */}
         {videos.length > 0 && (

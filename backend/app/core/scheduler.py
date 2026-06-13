@@ -272,6 +272,18 @@ async def _job_limpeza_leads() -> None:
         logger.exception("Erro não tratado no job de expurgo de leads")
 
 
+async def _job_google_reviews() -> None:
+    try:
+        from app.core.google_reviews import atualizar_cache, google_ativo
+
+        if not google_ativo():
+            return
+        async with AsyncSessionLocal() as db:
+            await atualizar_cache(db)
+    except Exception:
+        logger.exception("Erro não tratado no job de avaliações do Google")
+
+
 def iniciar_scheduler() -> None:
     scheduler.add_job(
         _job_vigencia_diaria,
@@ -291,10 +303,16 @@ def iniciar_scheduler() -> None:
         id="limpeza_leads",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _job_google_reviews,
+        CronTrigger(hour=6, minute=30, timezone="UTC"),
+        id="google_reviews",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "Scheduler iniciado — vigência 06:00, limpeza de tokens 06:10, "
-        "expurgo de leads 06:20 (UTC)"
+        "expurgo de leads 06:20, avaliações Google 06:30 (UTC)"
     )
 
 

@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.models import Faq, PlanoAssinatura, Video
+from app.models import Faq, GoogleReviewCache, PlanoAssinatura, Video
 from app.schemas.pagamentos import PlanoPublico
-from app.schemas.portal import FaqPublico, VideoPublico
+from app.schemas.portal import FaqPublico, GoogleReviewsPublico, VideoPublico
 
 router = APIRouter(tags=["conteudo"])
 
@@ -40,6 +40,20 @@ async def listar_planos(db: AsyncSession = Depends(get_db)):
         )
     ).scalars().all()
     return rows
+
+
+@router.get("/google-reviews", response_model=GoogleReviewsPublico)
+async def google_reviews(db: AsyncSession = Depends(get_db)):
+    """Nota e avaliações da ficha do Google (lidas do cache). Vazio se ainda não
+    sincronizou ou se a integração não está configurada."""
+    row = await db.get(GoogleReviewCache, 1)
+    if row is None or not row.total:
+        return GoogleReviewsPublico(rating=None, total=0, reviews=[])
+    return GoogleReviewsPublico(
+        rating=float(row.rating) if row.rating is not None else None,
+        total=row.total,
+        reviews=row.reviews or [],
+    )
 
 
 @router.get("/faq", response_model=list[FaqPublico])

@@ -468,6 +468,22 @@ class Faq(Base):
     criado_em: Mapped[datetime] = _created_at()
 
 
+class GoogleReviewCache(Base):
+    """Cache (linha única, id=1) da nota/avaliações da ficha do Google.
+
+    Um job diário consulta a Places API e grava aqui; o endpoint público lê
+    daqui (sem bater na API a cada visita — cota/custo). Sobrevive a restart e
+    a multi-worker (cache em memória não serviria).
+    """
+    __tablename__ = "google_review_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    rating: Mapped[float | None] = mapped_column(Numeric(2, 1))
+    total: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reviews: Mapped[list] = mapped_column(JSONB, default=list)
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class WebhookEvento(Base):
     """Log de eventos de webhook já processados (idempotência por event.id).
 

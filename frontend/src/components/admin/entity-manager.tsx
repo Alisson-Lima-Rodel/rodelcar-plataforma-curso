@@ -130,6 +130,10 @@ function Cell({ col, item }: { col: Column; item: AdminItem }) {
   }
 }
 
+const IMG_FORMATOS = ["image/png", "image/jpeg", "image/webp"];
+const IMG_MAX_MB = 5;
+const IMG_REGRAS = `PNG, JPG ou WebP · até ${IMG_MAX_MB} MB`;
+
 function ImageField({
   f,
   value,
@@ -148,6 +152,18 @@ function ImageField({
   const escolher = async (file: File | undefined) => {
     if (!file) return;
     setErro("");
+    // Valida no cliente ANTES de enviar (feedback imediato); o backend revalida.
+    if (!IMG_FORMATOS.includes(file.type)) {
+      setErro(`Formato não aceito. Use ${IMG_REGRAS}.`);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    if (file.size > IMG_MAX_MB * 1024 * 1024) {
+      const mb = (file.size / 1024 / 1024).toFixed(1).replace(".", ",");
+      setErro(`Imagem de ${mb} MB excede o limite de ${IMG_MAX_MB} MB.`);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
     setBusy(true);
     try {
       onChange(await uploadImagem(file));
@@ -161,6 +177,7 @@ function ImageField({
       );
     } finally {
       setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
 
@@ -194,7 +211,7 @@ function ImageField({
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp"
             style={{ display: "none" }}
             onChange={(e) => escolher(e.target.files?.[0])}
           />
@@ -230,8 +247,19 @@ function ImageField({
               </button>
             )}
           </div>
+          <span
+            className="tag-mono subtle"
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <Icon name="shield" size={13} />
+            {IMG_REGRAS}
+          </span>
           {erro && (
-            <span className="tag-mono" style={{ color: "var(--danger)" }}>
+            <span
+              className="tag-mono flex center gap-1"
+              style={{ color: "var(--danger)" }}
+            >
+              <Icon name="x" size={13} />
               {erro}
             </span>
           )}

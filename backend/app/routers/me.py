@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -173,6 +173,13 @@ async def cancelar_matricula(
     """Direito de arrependimento (CDC art. 49): até 7 dias após a compra, cancela
     com reembolso INTEGRAL via Stripe. Compra avulsa → estorna e expira o curso;
     assinatura → estorna, cancela a assinatura e revoga o catálogo dela."""
+    # Serializa os cancelamentos do MESMO aluno (lock por transação, liberado no
+    # commit/rollback): evita duplo reembolso por clique-duplo/abas e o bypass do
+    # teto de estornos via duas matrículas canceladas em paralelo.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(:k)"),
+        {"k": int.from_bytes(aluno.id.bytes[:8], "big", signed=True)},
+    )
     mat = (
         await db.execute(
             select(Matricula).where(

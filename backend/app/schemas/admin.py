@@ -66,19 +66,19 @@ class CursoCreate(BaseModel):
     tagline: str | None = Field(default=None, max_length=300)
     descricao: str | None = Field(default=None, max_length=5000)
     tipo: TipoCurso = TipoCurso.avulso
-    preco: float = 0
-    preco_antigo: float | None = None
-    horas: str | None = None
-    aulas_total: int = 0
-    rating: float | None = None
-    alunos: int = 0
-    nivel: str | None = None
-    icon: str | None = None
-    badge_label: str | None = None
-    validade_dias: int = 365
+    preco: float = Field(default=0, ge=0)  # nunca negativo (vai pro Stripe/banco)
+    preco_antigo: float | None = Field(default=None, ge=0)
+    horas: str | None = Field(default=None, max_length=20)
+    aulas_total: int = Field(default=0, ge=0)
+    rating: float | None = Field(default=None, ge=0, le=9.9)  # Numeric(2,1)
+    alunos: int = Field(default=0, ge=0)
+    nivel: str | None = Field(default=None, max_length=40)
+    icon: str | None = Field(default=None, max_length=40)
+    badge_label: str | None = Field(default=None, max_length=40)
+    validade_dias: int = Field(default=365, gt=0)
     destaque: bool = False
-    ordem: int = 0
-    thumbnail_url: str | None = None
+    ordem: int = Field(default=0, ge=0)
+    thumbnail_url: str | None = Field(default=None, max_length=500)
 
 
 class CursoUpdate(BaseModel):
@@ -87,19 +87,19 @@ class CursoUpdate(BaseModel):
     tagline: str | None = Field(default=None, max_length=300)
     descricao: str | None = Field(default=None, max_length=5000)
     tipo: TipoCurso | None = None
-    preco: float | None = None
-    preco_antigo: float | None = None
-    horas: str | None = None
-    aulas_total: int | None = None
-    rating: float | None = None
-    alunos: int | None = None
-    nivel: str | None = None
-    icon: str | None = None
-    badge_label: str | None = None
-    validade_dias: int | None = None
+    preco: float | None = Field(default=None, ge=0)
+    preco_antigo: float | None = Field(default=None, ge=0)
+    horas: str | None = Field(default=None, max_length=20)
+    aulas_total: int | None = Field(default=None, ge=0)
+    rating: float | None = Field(default=None, ge=0, le=9.9)
+    alunos: int | None = Field(default=None, ge=0)
+    nivel: str | None = Field(default=None, max_length=40)
+    icon: str | None = Field(default=None, max_length=40)
+    badge_label: str | None = Field(default=None, max_length=40)
+    validade_dias: int | None = Field(default=None, gt=0)
     destaque: bool | None = None
-    ordem: int | None = None
-    thumbnail_url: str | None = None
+    ordem: int | None = Field(default=None, ge=0)
+    thumbnail_url: str | None = Field(default=None, max_length=500)
 
 
 # ── Depoimentos ───────────────────────────────────────────────────────────────
@@ -152,9 +152,9 @@ class PlanoAssinaturaCreate(BaseModel):
     # Price RECORRENTE do Stripe (price_...). Vazio + Stripe configurado → o
     # backend cria Product+Price automaticamente a partir de nome/intervalo/preco.
     stripe_price_id: str = Field(default="", max_length=255)
-    preco: float = 0
+    preco: float = Field(default=0, ge=0)
     status: StatusAtivo = "Ativo"
-    ordem: int = 0
+    ordem: int = Field(default=0, ge=0)
 
 
 class PlanoAssinaturaUpdate(BaseModel):
@@ -163,9 +163,9 @@ class PlanoAssinaturaUpdate(BaseModel):
     # valor desatualizado apontaria o plano p/ um Price inativo/errado.
     nome: str | None = Field(default=None, max_length=120)
     intervalo: Literal["mensal", "anual"] | None = None
-    preco: float | None = None
+    preco: float | None = Field(default=None, ge=0)
     status: StatusAtivo | None = None
-    ordem: int | None = None
+    ordem: int | None = Field(default=None, ge=0)
 
 
 # ── Vídeos (prova social) ─────────────────────────────────────────────────────

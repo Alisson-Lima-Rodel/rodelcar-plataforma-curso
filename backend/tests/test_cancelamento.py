@@ -178,6 +178,8 @@ class TestCancelamento:
         assert body["cursos_revogados"] == 1
         # Refund do PI da compra; matrícula expirada; pagamento estornado.
         assert stripe_stub["refund"][-1]["payment_intent"].startswith("pi_")
+        # idempotency_key determinística (anti duplo reembolso).
+        assert stripe_stub["refund"][-1].get("idempotency_key", "").startswith("refund_")
         mat = await _mat(cancel_seed["mat_ok"])
         assert mat.status == StatusMatricula.expirado
         async with AsyncSessionLocal() as db:

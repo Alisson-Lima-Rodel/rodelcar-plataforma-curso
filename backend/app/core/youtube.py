@@ -59,6 +59,10 @@ def _fmt_contagem(valor) -> str | None:
 
 
 async def _via_oembed(url: str) -> dict | None:
+    # Só chama o oEmbed se for mesmo uma URL do YouTube (consistente com a Data
+    # API; evita requisição de rede para entradas que não são do YouTube).
+    if youtube_id(url) is None:
+        return None
     try:
         async with httpx.AsyncClient(timeout=6) as client:
             r = await client.get(_OEMBED, params={"url": url, "format": "json"})

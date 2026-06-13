@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.core.storage import storage_ativo, upload_imagem
+from app.core.storage import FORMATOS_SVG, storage_ativo, upload_imagem
 from app.models import Curso
 
 # slug → (sistema em destaque, legenda técnica)
@@ -103,7 +103,7 @@ async def main() -> None:
                 print(f"= {curso.slug}: já tem capa, pulando.")
                 continue
             svg = _capa_svg(curso.slug, curso.titulo)
-            url = await upload_imagem(svg, "image/svg+xml", "cursos")
+            url = await upload_imagem(svg, "image/svg+xml", "cursos", formatos=FORMATOS_SVG)
             curso.thumbnail_url = url
             await s.commit()
             print(f"+ {curso.slug}: {url}")

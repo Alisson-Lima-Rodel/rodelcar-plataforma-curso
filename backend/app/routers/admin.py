@@ -20,7 +20,7 @@ from app.core.stripe_admin import (
     stripe_ativo,
     trocar_preco,
 )
-from app.core.storage import StorageError, storage_ativo, upload_imagem
+from app.core.storage import MAX_BYTES, StorageError, storage_ativo, upload_imagem
 from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
 from app.core.youtube import buscar_metadados
 from app.dependencies import get_current_admin, require_papel
@@ -536,7 +536,13 @@ async def buscar_reembolsos(
 async def cancelar_matricula_admin(
     matricula_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 ):
-    mat = await db.get(Matricula, matricula_id)
+    # Trava a linha (FOR UPDATE) antes de checar o status: dois operadores não
+    # estornam a mesma matrícula em paralelo (anti duplo reembolso).
+    mat = (
+        await db.execute(
+            select(Matricula).where(Matricula.id == matricula_id).with_for_update()
+        )
+    ).scalar_one_or_none()
     if mat is None:
         raise _err(404, "MATRICULA_NAO_ENCONTRADA", "Matrícula não encontrada.")
     if mat.status != StatusMatricula.ativo:
@@ -572,15 +578,23 @@ uploads = APIRouter(prefix="/uploads", dependencies=[Depends(require_papel(*_CON
 
 
 @uploads.post("/imagem")
-async def upload_imagem_admin(arquivo: UploadFile = File(...)):
+@limiter.limit("30/minute")
+async def upload_imagem_admin(request: Request, arquivo: UploadFile = File(...)):
     """Recebe a imagem do painel, sobe ao Supabase Storage e devolve a URL
-    pública (que o admin grava em `thumbnail_url` do curso)."""
+    pública (que o admin grava em `thumbnail_url` do curso).
+
+    Só raster (PNG/JPG/WebP) até 5 MB, validado por magic bytes em `upload_imagem`.
+    A leitura é limitada para não bufferizar um upload gigante na memória.
+    """
     if not storage_ativo():
         raise _err(
             503, "STORAGE_NAO_CONFIGURADO",
             "Upload de imagens indisponível — configure o Supabase Storage.",
         )
-    conteudo = await arquivo.read()
+    # Lê no máximo 5 MB + 1 byte: se vier mais, recusa sem bufferizar o resto.
+    conteudo = await arquivo.read(MAX_BYTES + 1)
+    if len(conteudo) > MAX_BYTES:
+        raise _err(413, "IMAGEM_GRANDE", "Imagem acima de 5 MB.")
     try:
         url = await upload_imagem(conteudo, arquivo.content_type, "cursos")
     except StorageError as exc:

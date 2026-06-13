@@ -128,7 +128,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         label: "Capa do curso",
         type: "image",
         col: "full",
-        hint: "JPG/PNG/WebP até 5 MB. Aparece no card da vitrine e na página do curso.",
+        hint: "Aparece no card da vitrine e na página do curso.",
       },
       { key: "slug", label: "Slug (URL)", type: "text" },
       { key: "titulo", label: "Título do curso", type: "text", col: "full" },

@@ -503,6 +503,25 @@ class TestAdminPlanos:
         resp = await client.get("/api/v1/admin/planos", headers=suporte_headers)
         assert resp.status_code == 403
 
+    async def test_preco_negativo_rejeitado_422(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        # curso com preço negativo é barrado no schema (ge=0), antes da Stripe.
+        pref = uuid.uuid4().hex[:8]
+        resp = await client.post(
+            "/api/v1/admin/cursos",
+            headers=admin_headers,
+            json={"slug": f"neg-{pref}", "titulo": f"Curso Neg {pref}", "preco": -50},
+        )
+        assert resp.status_code == 422
+        # plano com preço negativo idem.
+        resp2 = await client.post(
+            "/api/v1/admin/planos",
+            headers=admin_headers,
+            json={"nome": "Plano Neg", "intervalo": "anual", "preco": -1, "stripe_price_id": "price_x"},
+        )
+        assert resp2.status_code == 422
+
 
 # ── Sincronização admin → Stripe (Products/Prices) ────────────────────────────
 class TestAdminStripeSync:

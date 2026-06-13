@@ -163,7 +163,13 @@ async def reembolsar_payment_intent(pi_id: str) -> str | None:
     objetivo (dinheiro de volta) já foi atingido.
     """
     try:
-        refund = await run_in_threadpool(stripe.Refund.create, payment_intent=pi_id)
+        # idempotency_key determinística: duas chamadas concorrentes/retentadas
+        # com a mesma chave NÃO geram dois refunds (o Stripe devolve o 1º).
+        refund = await run_in_threadpool(
+            stripe.Refund.create,
+            payment_intent=pi_id,
+            idempotency_key=f"refund_{pi_id}",
+        )
         return refund.id
     except stripe.error.InvalidRequestError as exc:
         if "already been refunded" in str(exc).lower():
@@ -190,7 +196,9 @@ async def cancelar_assinatura_stripe(sub_id: str) -> None:
     Já cancelada (retentativa) conta como sucesso.
     """
     try:
-        await run_in_threadpool(stripe.Subscription.cancel, sub_id)
+        await run_in_threadpool(
+            stripe.Subscription.cancel, sub_id, idempotency_key=f"cancel_{sub_id}"
+        )
     except stripe.error.InvalidRequestError as exc:
         if "canceled subscription" in str(exc).lower():
             logger.info("Assinatura %s já cancelada — seguindo.", sub_id)

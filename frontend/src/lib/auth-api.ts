@@ -290,3 +290,40 @@ export const emitirCertificado = (matriculaId: string) =>
 /** Cancela a compra dentro dos 7 dias (reembolso integral via Stripe). */
 export const cancelarMatricula = (matriculaId: string) =>
   authPost<CancelamentoResultado>(`/me/matriculas/${matriculaId}/cancelar`);
+
+/** Baixa o PDF do certificado (autenticado). Faz 1 retry após renovar no 401. */
+export async function baixarCertificadoPdf(matriculaId: string): Promise<Blob> {
+  const buscar = (token: string | null) =>
+    fetch(`${API_URL}/certificados/${matriculaId}/pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  let res: Response;
+  try {
+    res = await buscar(getAccessToken());
+    if (res.status === 401 && (await tryRefresh())) {
+      res = await buscar(getAccessToken());
+    }
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Não foi possível conectar ao servidor.",
+      null,
+    );
+  }
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "ERROR",
+      "Falha ao baixar o certificado.",
+      null,
+    );
+  }
+  return res.blob();
+}
+
+/** Envia o link de verificação do certificado pelo WhatsApp do aluno. */
+export const enviarCertificadoWhatsapp = (matriculaId: string) =>
+  authPost<{ enviado: boolean }>(
+    `/certificados/${matriculaId}/enviar-whatsapp`,
+  );

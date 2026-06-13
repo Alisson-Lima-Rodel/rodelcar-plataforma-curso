@@ -127,6 +127,18 @@ const paths: Record<string, ReactNode> = {
       stroke="none"
     />
   ),
+  whatsapp: (
+    <>
+      <path d="M3 21l1.7-4.1A8 8 0 1 1 8 19.3L3 21z" />
+      <path d="M9 9c0 3 2.5 5.5 5.5 5.5.5 0 .9-.4.9-.8 0-.3-1.2-1-1.5-1-.3 0-.5.4-.7.6-.6-.3-1.2-.9-1.5-1.5.2-.2.6-.4.6-.7 0-.3-.7-1.5-1-1.5-.4 0-.8.4-.8.9z" />
+    </>
+  ),
+  linkedin: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M7.5 10.5V17M7.5 7v.01M11.5 17v-6.5M11.5 13.5a2.2 2.2 0 0 1 4.4 0V17" />
+    </>
+  ),
 };
 
 export interface IconProps {

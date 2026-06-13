@@ -157,6 +157,58 @@ class TestCertificados:
         assert isinstance(v["curso"], str) and len(v["curso"]) > 0
         assert "emitido_em" in v
 
+    async def test_baixar_pdf_retorna_200(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict
+    ):
+        """Com certificado emitido → GET /pdf devolve um PDF de verdade."""
+        resp = await client.get(
+            f"/api/v1/certificados/{test_data['matricula_cert_id']}/pdf",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.content[:5] == b"%PDF-"
+        assert "attachment" in resp.headers.get("content-disposition", "")
+
+    async def test_enviar_whatsapp_sem_telefone_retorna_422(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict
+    ):
+        """Aluno sem telefone cadastrado → 422 (mas o certificado existe)."""
+        resp = await client.post(
+            f"/api/v1/certificados/{test_data['matricula_cert_id']}/enviar-whatsapp",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "TELEFONE_AUSENTE"
+
+    async def test_pdf_sem_certificado_retorna_404(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict
+    ):
+        """Matrícula sem certificado emitido → 404 CERTIFICADO_NAO_EMITIDO."""
+        resp = await client.get(
+            f"/api/v1/certificados/{test_data['matricula_ativa_id']}/pdf",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "CERTIFICADO_NAO_EMITIDO"
+
+    async def test_pdf_matricula_alheia_retorna_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            f"/api/v1/certificados/{uuid.uuid4()}/pdf", headers=auth_headers
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "MATRICULA_NAO_ENCONTRADA"
+
+    async def test_pdf_sem_token_retorna_401(
+        self, client: AsyncClient, test_data: dict
+    ):
+        resp = await client.get(
+            f"/api/v1/certificados/{test_data['matricula_cert_id']}/pdf"
+        )
+        assert resp.status_code == 401
+
     async def test_certificado_duplicado_retorna_409(
         self, client: AsyncClient, auth_headers: dict, test_data: dict
     ):
@@ -190,3 +242,26 @@ class TestCertificados:
         )
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "MATRICULA_NAO_ENCONTRADA"
+
+
+# ── Envio de WhatsApp com texto livre (base reusável) ─────────────────────────
+class TestEnviarWhatsappTexto:
+    async def test_sem_telefone_retorna_none(self):
+        from app.core.notificacoes import enviar_whatsapp_texto
+
+        assert await enviar_whatsapp_texto(None, "oi") is None
+        assert await enviar_whatsapp_texto("", "oi") is None
+
+    async def test_modo_fake_retorna_id(self, monkeypatch):
+        from app.core import notificacoes
+
+        monkeypatch.setattr(notificacoes.settings, "NOTIFICACOES_FAKE", True)
+        msg_id = await notificacoes.enviar_whatsapp_texto("5551999990000", "oi")
+        assert msg_id is not None and msg_id.startswith("fake-wa-")
+
+    async def test_sem_provider_retorna_none(self, monkeypatch):
+        from app.core import notificacoes
+
+        monkeypatch.setattr(notificacoes.settings, "NOTIFICACOES_FAKE", False)
+        monkeypatch.setattr(notificacoes.settings, "WA_PROVIDER", "")
+        assert await notificacoes.enviar_whatsapp_texto("5551999990000", "oi") is None

@@ -227,6 +227,22 @@ export async function getFaq(): Promise<Faq[]> {
   return (data ?? []).map((f) => ({ q: f.pergunta, a: f.resposta }));
 }
 
+// ── Verificação pública de certificado ────────────────────────────────────────
+export interface CertificadoVerificado {
+  valido: boolean;
+  aluno_nome: string;
+  curso: string;
+  emitido_em: string;
+}
+
+export async function verificarCertificado(
+  codigo: string,
+): Promise<CertificadoVerificado | null> {
+  return serverGet<CertificadoVerificado>(
+    `/certificados/${encodeURIComponent(codigo)}/verificar`,
+  );
+}
+
 export async function getCurso(slug: string): Promise<Course | null> {
   const d = await serverGet<ApiCourseDetail>(
     `/cursos/${encodeURIComponent(slug)}`,

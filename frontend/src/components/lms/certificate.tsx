@@ -10,12 +10,15 @@ import { Reveal } from "@/components/ui/reveal";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/providers/auth-provider";
 import {
+  baixarCertificadoPdf,
   emitirCertificado,
+  enviarCertificadoWhatsapp,
   getCursoPlayer,
   getMatriculas,
   type PlayerCurso,
 } from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
+import { SITE_URL } from "@/lib/seo";
 
 function fmtDate(iso: string): string {
   try {
@@ -67,12 +70,57 @@ export function Certificate() {
   });
 
   const cert = data?.certificado ?? null;
+  const [baixando, setBaixando] = useState(false);
+  const [zapMsg, setZapMsg] = useState<string | null>(null);
   const copy = () => {
     if (cert && navigator.clipboard)
       navigator.clipboard.writeText(cert.codigo).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
+
+  // Link público de verificação — destino dos compartilhamentos.
+  const verifyUrl =
+    cert && `${SITE_URL}/verificar/${encodeURIComponent(cert.codigo)}`;
+
+  const baixarPdf = async () => {
+    if (!data) return;
+    setBaixando(true);
+    try {
+      const blob = await baixarCertificadoPdf(data.matricula_id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `certificado-${cert?.codigo ?? "rodelcar"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      /* silencioso: o botão volta ao normal */
+    } finally {
+      setBaixando(false);
+    }
+  };
+
+  const compartilharLinkedIn = () => {
+    if (!verifyUrl) return;
+    window.open(
+      `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(verifyUrl)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
+  const enviarZap = useMutation({
+    mutationFn: (matriculaId: string) => enviarCertificadoWhatsapp(matriculaId),
+    onSuccess: (r) =>
+      setZapMsg(
+        r.enviado
+          ? "Enviamos o link no seu WhatsApp ✅"
+          : "Não foi possível enviar agora. Tente novamente.",
+      ),
+    onError: () =>
+      setZapMsg("Cadastre um telefone no seu perfil para receber."),
+  });
 
   const back = (
     <button
@@ -306,19 +354,53 @@ export function Certificate() {
         className="flex center"
         style={{
           justifyContent: "center",
-          gap: 14,
+          gap: 12,
           marginTop: 28,
           flexWrap: "wrap",
         }}
       >
         <Button
+          variant="primary"
+          icon="download"
+          onClick={baixarPdf}
+          className={baixando ? "is-disabled" : ""}
+        >
+          {baixando ? "Gerando PDF…" : "Baixar PDF"}
+        </Button>
+        <Button
+          variant="secondary"
+          icon="linkedin"
+          onClick={compartilharLinkedIn}
+        >
+          Compartilhar
+        </Button>
+        <Button
+          variant="secondary"
+          icon="whatsapp"
+          onClick={() => enviarZap.mutate(data.matricula_id)}
+          className={enviarZap.isPending ? "is-disabled" : ""}
+        >
+          {enviarZap.isPending ? "Enviando…" : "Enviar no WhatsApp"}
+        </Button>
+        <Button
           variant="ghost"
-          size="lg"
           onClick={() => router.push(lmsHref("dashboard"))}
         >
           Voltar ao painel
         </Button>
       </div>
+      {zapMsg && (
+        <p
+          className="tag-mono"
+          style={{
+            textAlign: "center",
+            marginTop: 14,
+            color: "var(--text-muted)",
+          }}
+        >
+          {zapMsg}
+        </p>
+      )}
     </div>
   );
 }

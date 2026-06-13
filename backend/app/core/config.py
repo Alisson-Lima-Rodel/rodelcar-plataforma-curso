@@ -75,6 +75,9 @@ class Settings(BaseSettings):
 
     # URL de renovação usada nas mensagens de vigência
     RENOVACAO_URL: str = "https://rodelcar.com.br"
+    # Base pública do portal (links de verificação de certificado, compartilhamento).
+    # Tem default — não precisa estar no .env para funcionar.
+    PORTAL_URL: str = "https://rodelcar.com.br"
 
     # YouTube Data API v3 (opcional). Com a chave, o cadastro de vídeo puxa
     # duração, views e likes automaticamente; sem ela, só título/canal via oEmbed.

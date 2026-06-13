@@ -15,3 +15,7 @@ class CertificadoVerificacao(BaseModel):
     aluno_nome: str
     curso: str
     emitido_em: datetime
+
+
+class CertificadoEnvioResponse(BaseModel):
+    enviado: bool

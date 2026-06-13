@@ -2,18 +2,60 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.certificado_pdf import gerar_pdf_certificado
+from app.core.config import settings
 from app.core.db import get_db
+from app.core.notificacoes import enviar_whatsapp_texto
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Aula, Certificado, Matricula, Modulo, Progresso
-from app.schemas.certificados import CertificadoResponse, CertificadoVerificacao
+from app.models import Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso
+from app.schemas.certificados import (
+    CertificadoEnvioResponse,
+    CertificadoResponse,
+    CertificadoVerificacao,
+)
 
 router = APIRouter(prefix="/certificados", tags=["certificados"])
+
+
+def _erro(status: int, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status,
+        detail={"error": {"code": code, "message": message, "details": None}},
+    )
+
+
+async def _carregar_certificado_do_aluno(
+    matricula_id: uuid.UUID, aluno: Aluno, db: AsyncSession
+) -> tuple[Certificado, Matricula, Curso]:
+    """Carrega o certificado emitido de uma matrícula DO aluno logado (ou 404)."""
+    matricula = (
+        await db.execute(
+            select(Matricula)
+            .where(Matricula.id == matricula_id)
+            .options(selectinload(Matricula.curso))
+        )
+    ).scalar_one_or_none()
+    if matricula is None or matricula.aluno_id != aluno.id:
+        raise _erro(404, "MATRICULA_NAO_ENCONTRADA", "Matrícula não encontrada.")
+
+    cert = (
+        await db.execute(
+            select(Certificado).where(Certificado.matricula_id == matricula.id)
+        )
+    ).scalar_one_or_none()
+    if cert is None:
+        raise _erro(404, "CERTIFICADO_NAO_EMITIDO", "Certificado ainda não emitido.")
+    return cert, matricula, matricula.curso
+
+
+def _verify_url(codigo: str) -> str:
+    return f"{settings.PORTAL_URL.rstrip('/')}/verificar/{codigo}"
 
 
 @router.post("/{matricula_id}", response_model=CertificadoResponse, status_code=201)
@@ -129,3 +171,63 @@ async def verificar_certificado(
         curso=cert.matricula.curso.titulo,
         emitido_em=cert.emitido_em,
     )
+
+
+@router.get("/{matricula_id}/pdf")
+async def baixar_certificado_pdf(
+    matricula_id: uuid.UUID,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """PDF do certificado (do próprio aluno). Gerado on-the-fly com reportlab."""
+    cert, _matricula, curso = await _carregar_certificado_do_aluno(
+        matricula_id, aluno, db
+    )
+    pdf = gerar_pdf_certificado(
+        aluno_nome=aluno.nome,
+        curso_titulo=curso.titulo,
+        codigo=cert.codigo_verificacao,
+        emitido_em=cert.emitido_em,
+        horas=curso.horas,
+        verify_url=_verify_url(cert.codigo_verificacao),
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="certificado-{cert.codigo_verificacao}.pdf"'
+            )
+        },
+    )
+
+
+@router.post("/{matricula_id}/enviar-whatsapp", response_model=CertificadoEnvioResponse)
+@limiter.limit("6/minute")
+async def enviar_certificado_whatsapp(
+    request: Request,
+    matricula_id: uuid.UUID,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Envia o link público de verificação do certificado pelo WhatsApp do aluno."""
+    cert, _matricula, curso = await _carregar_certificado_do_aluno(
+        matricula_id, aluno, db
+    )
+    if not aluno.telefone:
+        raise _erro(
+            422,
+            "TELEFONE_AUSENTE",
+            "Cadastre um telefone no seu perfil para receber por WhatsApp.",
+        )
+
+    primeiro_nome = aluno.nome.split()[0] if aluno.nome else "aluno(a)"
+    texto = (
+        f"🎓 Olá {primeiro_nome}! Seu certificado de conclusão do curso "
+        f"*{curso.titulo}* na RödelCar está pronto.\n\n"
+        f"Verifique a autenticidade aqui:\n{_verify_url(cert.codigo_verificacao)}"
+    )
+    msg_id = await enviar_whatsapp_texto(
+        aluno.telefone, texto, log_ref=str(aluno.id)
+    )
+    return CertificadoEnvioResponse(enviado=msg_id is not None)

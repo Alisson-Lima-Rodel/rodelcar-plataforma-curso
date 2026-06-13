@@ -196,35 +196,46 @@ async def _wa_zapi(telefone: str, texto: str) -> str:
         return data.get("zaapId") or data.get("id") or f"zapi-{uuid.uuid4()}"
 
 
-async def enviar_whatsapp(msg: MensagemNotificacao) -> str | None:
-    """Envia WhatsApp via provider configurado. Retorna provedor_msg_id ou None."""
-    if not msg.aluno_telefone:
-        logger.debug("Telefone ausente (aluno=%s) — WhatsApp ignorado", msg.aluno_id)
+async def enviar_whatsapp_texto(
+    telefone: str | None, texto: str, *, log_ref: str = "?"
+) -> str | None:
+    """Envia um texto livre por WhatsApp via provider configurado.
+
+    Base reutilizável (vigência, certificado, etc). `log_ref` aparece nos logs no
+    lugar do telefone (LGPD — nunca logar PII). Retorna provedor_msg_id ou None.
+    """
+    if not telefone:
+        logger.debug("Telefone ausente (ref=%s) — WhatsApp ignorado", log_ref)
         return None
 
     if settings.NOTIFICACOES_FAKE:
-        # Não loga telefone nem o texto da mensagem (PII/conteúdo) — só o id.
-        logger.info("[FAKE WHATSAPP] aluno=%s", msg.aluno_id)
+        # Não loga telefone nem o texto da mensagem (PII/conteúdo) — só o ref.
+        logger.info("[FAKE WHATSAPP] ref=%s", log_ref)
         return f"fake-wa-{uuid.uuid4()}"
 
     if not settings.WA_PROVIDER:
-        logger.debug("WhatsApp não configurado (WA_PROVIDER) — aluno=%s", msg.aluno_id)
+        logger.debug("WhatsApp não configurado (WA_PROVIDER) — ref=%s", log_ref)
         return None
 
-    texto = _build_wa_text(msg)
     provider = settings.WA_PROVIDER.lower()
-
     try:
         if provider == "meta":
-            return await _wa_meta(msg.aluno_telefone, texto)
+            return await _wa_meta(telefone, texto)
         if provider == "twilio":
-            return await _wa_twilio(msg.aluno_telefone, texto)
+            return await _wa_twilio(telefone, texto)
         if provider == "zapi":
-            return await _wa_zapi(msg.aluno_telefone, texto)
+            return await _wa_zapi(telefone, texto)
         logger.warning("WA_PROVIDER desconhecido: %s", settings.WA_PROVIDER)
         return None
     except Exception:
         logger.exception(
-            "Falha ao enviar WhatsApp (aluno=%s) via %s", msg.aluno_id, settings.WA_PROVIDER
+            "Falha ao enviar WhatsApp (ref=%s) via %s", log_ref, settings.WA_PROVIDER
         )
         return None
+
+
+async def enviar_whatsapp(msg: MensagemNotificacao) -> str | None:
+    """Envia o WhatsApp de vigência (texto montado a partir de MensagemNotificacao)."""
+    return await enviar_whatsapp_texto(
+        msg.aluno_telefone, _build_wa_text(msg), log_ref=str(msg.aluno_id)
+    )

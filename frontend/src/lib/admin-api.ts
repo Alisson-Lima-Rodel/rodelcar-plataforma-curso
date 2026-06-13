@@ -161,6 +161,29 @@ export const cancelarMatriculaAdmin = (matriculaId: string) =>
     method: "POST",
   });
 
+// ── Moderação de avaliações ───────────────────────────────────────────────────
+export interface AvaliacaoAdmin {
+  id: string;
+  aluno_nome: string;
+  curso_titulo: string;
+  nota: number;
+  texto: string | null;
+  status: string; // "Aprovado" | "Pendente"
+  criado_em: string;
+}
+
+export const buscarAvaliacoes = () =>
+  adminFetch<AvaliacaoAdmin[]>("/admin/avaliacoes");
+
+export const moderarAvaliacao = (id: string, status: "Aprovado" | "Pendente") =>
+  adminFetch<AvaliacaoAdmin>(`/admin/avaliacoes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+
+export const excluirAvaliacao = (id: string) =>
+  adminFetch<void>(`/admin/avaliacoes/${id}`, { method: "DELETE" });
+
 // ── CRUD genérico ─────────────────────────────────────────────────────────────
 export type AdminRow = Record<string, unknown> & { id: string };
 

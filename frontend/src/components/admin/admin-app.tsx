@@ -11,9 +11,10 @@ import { useAdmin } from "@/components/providers/admin-provider";
 import { AdminSidebar } from "./admin-sidebar";
 import { Overview } from "./overview";
 import { AdminRefunds } from "./refunds";
+import { AdminReviews } from "./reviews-moderation";
 import { RemoteEntityManager } from "./remote-entity-manager";
 
-type View = "overview" | "refunds" | EntityKey;
+type View = "overview" | "refunds" | "reviews" | EntityKey;
 
 const TITLES: Record<View, { title: string; crumb: string }> = {
   overview: { title: "Visão geral", crumb: "ADMIN" },
@@ -22,6 +23,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   testimonials: { title: "Depoimentos", crumb: "ADMIN · CADASTROS" },
   plans: { title: "Planos (assinatura)", crumb: "ADMIN · CADASTROS" },
   refunds: { title: "Reembolsos", crumb: "ADMIN · SUPORTE" },
+  reviews: { title: "Avaliações", crumb: "ADMIN · PORTAL" },
   videos: { title: "Vídeos", crumb: "ADMIN · PORTAL" },
   faq: { title: "FAQ", crumb: "ADMIN · PORTAL" },
   admins: { title: "Administradores", crumb: "ADMIN · EQUIPE" },
@@ -123,6 +125,8 @@ export function AdminApp() {
           <Overview onNav={nav} onNew={newIn} />
         ) : view === "refunds" ? (
           <AdminRefunds onToast={setToast} />
+        ) : view === "reviews" ? (
+          <AdminReviews onToast={setToast} />
         ) : (
           <RemoteEntityManager
             key={view + (pendingNew === view ? "-new" : "")}

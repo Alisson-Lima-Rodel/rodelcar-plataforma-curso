@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     # duração, views e likes automaticamente; sem ela, só título/canal via oEmbed.
     YOUTUBE_API_KEY: str = ""
 
+    # Supabase Storage (capas de curso). SUPABASE_URL = https://<ref>.supabase.co;
+    # SUPABASE_SERVICE_KEY = service_role (só no backend, nunca no front). Bucket
+    # público. Sem isso, o upload de imagem fica indisponível (503).
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_BUCKET: str = "cursos"
+
     # ── Pagamentos — Stripe ───────────────────────────────────────────────────
     # Chave secreta da API (sk_test_... / sk_live_...). Usada só no checkout.
     STRIPE_SECRET_KEY: str = ""

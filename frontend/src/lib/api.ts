@@ -140,6 +140,7 @@ function mapBase(
     level: c.nivel ?? "",
     icon: c.icon ?? "gauge",
     badge: { variant: "", label: c.badge_label ?? "" },
+    cover: c.thumbnail_url ?? undefined,
   };
 }
 

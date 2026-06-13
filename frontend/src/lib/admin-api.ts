@@ -74,6 +74,42 @@ export function adminLogout() {
 
 export const getAdminMe = () => adminFetch<AdminMe>("/admin/auth/me");
 
+// ── Upload de imagem (capa de curso) ──────────────────────────────────────────
+/** Sobe a imagem ao backend (Supabase Storage) e retorna a URL pública. */
+export async function uploadImagem(file: File): Promise<string> {
+  const token = getAdminToken();
+  const fd = new FormData();
+  fd.append("arquivo", file);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/admin/uploads/imagem`, {
+      method: "POST",
+      // NÃO setar Content-Type: o browser define o boundary do multipart.
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Não foi possível conectar ao servidor.",
+      null,
+    );
+  }
+  const text = await res.text();
+  const data = text ? (JSON.parse(text) as unknown) : null;
+  if (!res.ok) {
+    const err = (data as ApiErrorEnvelope | null)?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? "ERROR",
+      err?.message ?? res.statusText,
+      err?.details ?? null,
+    );
+  }
+  return (data as { url: string }).url;
+}
+
 // ── Reembolsos (suporte) ──────────────────────────────────────────────────────
 export interface ReembolsoItem {
   matricula_id: string;

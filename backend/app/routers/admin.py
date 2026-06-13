@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import EmailStr
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from app.core.stripe_admin import (
     stripe_ativo,
     trocar_preco,
 )
+from app.core.storage import StorageError, storage_ativo, upload_imagem
 from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
 from app.core.youtube import buscar_metadados
 from app.dependencies import get_current_admin, require_papel
@@ -564,6 +565,30 @@ async def cancelar_matricula_admin(
 
 
 router.include_router(reembolsos)
+
+
+# ── Upload de imagens (capa de curso → Supabase Storage) ──────────────────────
+uploads = APIRouter(prefix="/uploads", dependencies=[Depends(require_papel(*_CONTEUDO))])
+
+
+@uploads.post("/imagem")
+async def upload_imagem_admin(arquivo: UploadFile = File(...)):
+    """Recebe a imagem do painel, sobe ao Supabase Storage e devolve a URL
+    pública (que o admin grava em `thumbnail_url` do curso)."""
+    if not storage_ativo():
+        raise _err(
+            503, "STORAGE_NAO_CONFIGURADO",
+            "Upload de imagens indisponível — configure o Supabase Storage.",
+        )
+    conteudo = await arquivo.read()
+    try:
+        url = await upload_imagem(conteudo, arquivo.content_type, "cursos")
+    except StorageError as exc:
+        raise _err(400, "UPLOAD_INVALIDO", str(exc))
+    return {"url": url}
+
+
+router.include_router(uploads)
 
 
 # ── Administradores (equipe) — create/patch tratam senha ──────────────────────

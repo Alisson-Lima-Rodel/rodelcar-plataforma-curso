@@ -21,25 +21,41 @@ export function CourseCard({ c }: { c: Course }) {
         color: "inherit",
       }}
     >
-      <div className="thumb" style={{ marginBottom: 14 }}>
-        <Icon
-          name={c.icon}
-          size={34}
-          style={{ color: "var(--border-strong)" }}
-        />
-        <span
-          className="badge"
-          style={{
-            position: "absolute",
-            top: 9,
-            left: 9,
-            padding: "4px 9px",
-            background: "rgba(10,12,16,0.8)",
-          }}
-        >
-          {c.badge.label}
-        </span>
-        <span className="thumb-label">[ capa · {c.id} ]</span>
+      <div
+        className="thumb"
+        style={{
+          marginBottom: 14,
+          ...(c.cover
+            ? {
+                backgroundImage: `url(${c.cover})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : {}),
+        }}
+      >
+        {!c.cover && (
+          <Icon
+            name={c.icon}
+            size={34}
+            style={{ color: "var(--border-strong)" }}
+          />
+        )}
+        {c.badge.label && (
+          <span
+            className="badge"
+            style={{
+              position: "absolute",
+              top: 9,
+              left: 9,
+              padding: "4px 9px",
+              background: "rgba(10,12,16,0.8)",
+            }}
+          >
+            {c.badge.label}
+          </span>
+        )}
+        {!c.cover && <span className="thumb-label">[ capa · {c.id} ]</span>}
       </div>
       <div
         style={{

@@ -20,6 +20,7 @@ export type FieldType =
   | "textarea"
   | "toggle"
   | "stars"
+  | "image"
   | "password";
 
 export interface Column {
@@ -122,6 +123,13 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       { key: "preco", label: "Preço", kind: "price" },
     ],
     fields: [
+      {
+        key: "thumbnail_url",
+        label: "Capa do curso",
+        type: "image",
+        col: "full",
+        hint: "JPG/PNG/WebP até 5 MB. Aparece no card da vitrine e na página do curso.",
+      },
       { key: "slug", label: "Slug (URL)", type: "text" },
       { key: "titulo", label: "Título do curso", type: "text", col: "full" },
       { key: "tagline", label: "Chamada (tagline)", type: "text", col: "full" },
@@ -151,6 +159,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       { key: "ordem", label: "Ordem na vitrine", type: "number" },
     ],
     defaults: {
+      thumbnail_url: "",
       slug: "",
       titulo: "",
       tagline: "",

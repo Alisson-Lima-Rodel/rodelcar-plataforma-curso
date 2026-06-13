@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
+import { ApiError } from "@/lib/api";
+import { uploadImagem } from "@/lib/admin-api";
 import {
   uid,
   type AdminItem,
@@ -128,6 +130,122 @@ function Cell({ col, item }: { col: Column; item: AdminItem }) {
   }
 }
 
+function ImageField({
+  f,
+  value,
+  onChange,
+}: {
+  f: FieldDef;
+  value: string | number | boolean | null | undefined;
+  onChange: (v: string) => void;
+}) {
+  const wrap = f.col === "full" ? "full" : "";
+  const url = typeof value === "string" ? value : "";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const escolher = async (file: File | undefined) => {
+    if (!file) return;
+    setErro("");
+    setBusy(true);
+    try {
+      onChange(await uploadImagem(file));
+    } catch (e) {
+      setErro(
+        e instanceof ApiError && e.code === "STORAGE_NAO_CONFIGURADO"
+          ? "Upload indisponível — storage de imagens não configurado."
+          : e instanceof ApiError
+            ? e.message
+            : "Falha ao enviar a imagem.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={`field ${wrap}`.trim()}>
+      <label>{f.label}</label>
+      <div className="flex center gap-3" style={{ flexWrap: "wrap" }}>
+        <div
+          style={{
+            width: 132,
+            height: 74,
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            background: url
+              ? `center/cover no-repeat url(${url})`
+              : "var(--surface-2)",
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          {!url && (
+            <Icon
+              name="book"
+              size={22}
+              style={{ color: "var(--text-subtle)" }}
+            />
+          )}
+        </div>
+        <div className="flex col gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            style={{ display: "none" }}
+            onChange={(e) => escolher(e.target.files?.[0])}
+          />
+          <div className="flex center gap-2" style={{ flexWrap: "wrap" }}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon="download"
+              onClick={() => inputRef.current?.click()}
+              disabled={busy}
+            >
+              {busy ? "Enviando..." : url ? "Trocar imagem" : "Enviar imagem"}
+            </Button>
+            {url && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-ghost btn-sm"
+              >
+                Ver / baixar
+              </a>
+            )}
+            {url && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => onChange("")}
+                disabled={busy}
+              >
+                Remover
+              </button>
+            )}
+          </div>
+          {erro && (
+            <span className="tag-mono" style={{ color: "var(--danger)" }}>
+              {erro}
+            </span>
+          )}
+        </div>
+      </div>
+      {f.hint && (
+        <span className="tag-mono subtle" style={{ lineHeight: 1.4 }}>
+          {f.hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Field({
   f,
   value,
@@ -138,6 +256,9 @@ function Field({
   onChange: (v: string | number | boolean) => void;
 }) {
   const wrap = f.col === "full" ? "full" : "";
+  if (f.type === "image") {
+    return <ImageField f={f} value={value} onChange={onChange} />;
+  }
   if (f.type === "toggle") {
     const on = value === f.on;
     return (

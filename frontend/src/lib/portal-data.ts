@@ -25,6 +25,7 @@ export interface Course {
   level: string;
   icon: string;
   badge: { variant: string; label: string };
+  cover?: string; // capa (Supabase Storage); sem ela, o card cai no ícone
   desc?: string;
   learn?: string[];
   modules?: CourseModule[];

@@ -264,6 +264,51 @@ class TestAdminVideos:
         await client.delete(f"/api/v1/admin/videos/{v['id']}", headers=admin_headers)
 
 
+# ── Upload de imagem (capa de curso) ──────────────────────────────────────────
+class TestAdminUpload:
+    async def test_upload_imagem_ok(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        monkeypatch.setattr("app.routers.admin.storage_ativo", lambda: True)
+
+        async def fake_upload(conteudo, content_type, prefixo="cursos"):
+            assert content_type == "image/png"
+            assert conteudo  # bytes recebidos
+            return "https://x.supabase.co/storage/v1/object/public/cursos/abc.png"
+
+        monkeypatch.setattr("app.routers.admin.upload_imagem", fake_upload)
+        resp = await client.post(
+            "/api/v1/admin/uploads/imagem",
+            headers=admin_headers,
+            files={"arquivo": ("capa.png", b"\x89PNG\r\n\x1a\n fake", "image/png")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["url"].endswith("/cursos/abc.png")
+
+    async def test_upload_sem_storage_503(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        monkeypatch.setattr("app.routers.admin.storage_ativo", lambda: False)
+        resp = await client.post(
+            "/api/v1/admin/uploads/imagem",
+            headers=admin_headers,
+            files={"arquivo": ("capa.png", b"x", "image/png")},
+        )
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "STORAGE_NAO_CONFIGURADO"
+
+    async def test_upload_suporte_bloqueado(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        # Suporte não cuida de conteúdo (escopo _CONTEUDO) → 403
+        resp = await client.post(
+            "/api/v1/admin/uploads/imagem",
+            headers=suporte_headers,
+            files={"arquivo": ("capa.png", b"x", "image/png")},
+        )
+        assert resp.status_code == 403
+
+
 # ── CRUD de FAQ ───────────────────────────────────────────────────────────────
 class TestAdminFaq:
     async def test_cria_e_exclui(self, client: AsyncClient, admin_headers: dict):

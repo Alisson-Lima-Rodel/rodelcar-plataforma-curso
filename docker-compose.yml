@@ -21,6 +21,11 @@ services:
       # YouTube Data API (opcional) — com a chave, o cadastro de vídeo puxa
       # duração, views e likes; sem ela, só título/canal via oEmbed.
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      # Supabase Storage (capas de curso). Bucket público; service_role key só
+      # no backend. Sem isso, o upload de imagem fica indisponível (503).
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-cursos}
       # Pagamentos — Stripe (vazios em dev; defina no .env para rodar o checkout).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

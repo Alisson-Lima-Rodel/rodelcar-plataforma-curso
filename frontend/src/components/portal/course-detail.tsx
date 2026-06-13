@@ -350,12 +350,21 @@ export function CourseDetail({
                   borderRadius: 0,
                   border: "none",
                   borderBottom: "1px solid var(--border)",
+                  ...(rich.cover
+                    ? {
+                        backgroundImage: `url(${rich.cover})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                      }
+                    : {}),
                 }}
               >
                 <div className="play-btn">
                   <Icon name="play" size={20} />
                 </div>
-                <span className="thumb-label">[ trailer · 16:9 ]</span>
+                {!rich.cover && (
+                  <span className="thumb-label">[ trailer · 16:9 ]</span>
+                )}
               </div>
               <div style={{ padding: 22 }}>
                 <div className="flex center gap-2" style={{ marginBottom: 6 }}>

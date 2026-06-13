@@ -32,11 +32,13 @@ from app.models import (
     Curso,
     Depoimento,
     Faq,
+    MaterialApoio,
     Matricula,
     Modulo,
     Pagamento,
     PapelAdmin,
     PlanoAssinatura,
+    Progresso,
     StatusMatricula,
     StatusPagamento,
     TipoCurso,
@@ -78,6 +80,14 @@ from app.schemas.admin import (
     VideoAdmin,
     VideoCreate,
     VideoUpdate,
+)
+from app.schemas.conteudo_admin import (
+    AulaAdmin,
+    AulaCreate,
+    AulaUpdate,
+    ModuloAdmin,
+    ModuloCreate,
+    ModuloUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -469,6 +479,136 @@ async def excluir_plano(plano_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 router.include_router(planos)
+
+
+# ── Conteúdo do curso (módulos e aulas) ───────────────────────────────────────
+conteudo = APIRouter(dependencies=[Depends(require_papel(*_CONTEUDO))])
+
+
+def _aula_admin(a: Aula) -> AulaAdmin:
+    return AulaAdmin(
+        id=a.id, titulo=a.titulo, panda_video_id=a.panda_video_id,
+        duracao_segundos=a.duracao_segundos, ordem=a.ordem, gratuita=a.gratuita,
+    )
+
+
+def _modulo_admin(m: Modulo, aulas: list[Aula]) -> ModuloAdmin:
+    return ModuloAdmin(
+        id=m.id, titulo=m.titulo, ordem=m.ordem,
+        aulas=[_aula_admin(a) for a in sorted(aulas, key=lambda x: x.ordem)],
+    )
+
+
+async def _aulas_do_modulo(db: AsyncSession, modulo_id: uuid.UUID) -> list[Aula]:
+    return list(
+        (
+            await db.execute(
+                select(Aula).where(Aula.modulo_id == modulo_id).order_by(Aula.ordem)
+            )
+        ).scalars().all()
+    )
+
+
+async def _excluir_aulas(db: AsyncSession, aula_ids: list[uuid.UUID]) -> None:
+    """Remove aulas e o que pende delas (progresso, materiais) — edição de conteúdo."""
+    if not aula_ids:
+        return
+    await db.execute(delete(Progresso).where(Progresso.aula_id.in_(aula_ids)))
+    await db.execute(delete(MaterialApoio).where(MaterialApoio.aula_id.in_(aula_ids)))
+    await db.execute(delete(Aula).where(Aula.id.in_(aula_ids)))
+
+
+@conteudo.get("/cursos/{curso_id}/conteudo", response_model=list[ModuloAdmin])
+async def listar_conteudo(curso_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Curso, curso_id):
+        raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")
+    modulos = (
+        await db.execute(
+            select(Modulo)
+            .where(Modulo.curso_id == curso_id)
+            .options(selectinload(Modulo.aulas))
+            .order_by(Modulo.ordem)
+        )
+    ).scalars().all()
+    return [_modulo_admin(m, m.aulas) for m in modulos]
+
+
+@conteudo.post("/cursos/{curso_id}/modulos", response_model=ModuloAdmin, status_code=201)
+async def criar_modulo(
+    curso_id: uuid.UUID, body: ModuloCreate, db: AsyncSession = Depends(get_db)
+):
+    if not await db.get(Curso, curso_id):
+        raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")
+    m = Modulo(curso_id=curso_id, titulo=body.titulo, ordem=body.ordem)
+    db.add(m)
+    await db.commit()
+    await db.refresh(m)
+    return _modulo_admin(m, [])
+
+
+@conteudo.patch("/modulos/{modulo_id}", response_model=ModuloAdmin)
+async def atualizar_modulo(
+    modulo_id: uuid.UUID, body: ModuloUpdate, db: AsyncSession = Depends(get_db)
+):
+    m = await db.get(Modulo, modulo_id)
+    if m is None:
+        raise _err(404, "NAO_ENCONTRADO", "Módulo não encontrado.")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(m, k, v)
+    await db.commit()
+    return _modulo_admin(m, await _aulas_do_modulo(db, modulo_id))
+
+
+@conteudo.delete("/modulos/{modulo_id}", status_code=204)
+async def excluir_modulo(modulo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    m = await db.get(Modulo, modulo_id)
+    if m is None:
+        raise _err(404, "NAO_ENCONTRADO", "Módulo não encontrado.")
+    aulas = await _aulas_do_modulo(db, modulo_id)
+    await _excluir_aulas(db, [a.id for a in aulas])
+    await db.delete(m)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@conteudo.post("/modulos/{modulo_id}/aulas", response_model=AulaAdmin, status_code=201)
+async def criar_aula(
+    modulo_id: uuid.UUID, body: AulaCreate, db: AsyncSession = Depends(get_db)
+):
+    if not await db.get(Modulo, modulo_id):
+        raise _err(404, "NAO_ENCONTRADO", "Módulo não encontrado.")
+    a = Aula(modulo_id=modulo_id, **body.model_dump())
+    db.add(a)
+    await db.commit()
+    await db.refresh(a)
+    return _aula_admin(a)
+
+
+@conteudo.patch("/aulas/{aula_id}", response_model=AulaAdmin)
+async def atualizar_aula(
+    aula_id: uuid.UUID, body: AulaUpdate, db: AsyncSession = Depends(get_db)
+):
+    a = await db.get(Aula, aula_id)
+    if a is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(a, k, v)
+    await db.commit()
+    await db.refresh(a)
+    return _aula_admin(a)
+
+
+@conteudo.delete("/aulas/{aula_id}", status_code=204)
+async def excluir_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    a = await db.get(Aula, aula_id)
+    if a is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    await _excluir_aulas(db, [aula_id])
+    await db.commit()
+    return Response(status_code=204)
+
+
+router.include_router(conteudo)
 
 
 # ── Avaliações dos alunos (moderação) ─────────────────────────────────────────

@@ -222,6 +222,11 @@ class Aula(Base):
     panda_video_id: Mapped[str | None] = mapped_column(String(120))
     duracao_segundos: Mapped[int] = mapped_column(Integer, default=0)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
+    # Aula liberada como amostra (preview) na página de venda, sem compra. O vídeo
+    # dela é exposto por um endpoint público; as demais NUNCA vazam.
+    gratuita: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     modulo: Mapped[Modulo] = relationship(back_populates="aulas")
     materiais: Mapped[list[MaterialApoio]] = relationship(back_populates="aula")

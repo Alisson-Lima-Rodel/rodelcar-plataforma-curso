@@ -20,6 +20,7 @@ class CursoListItem(BaseModel):
     thumbnail_url: str | None = None
     total_modulos: int
     total_aulas: int
+    tem_preview: bool = False  # tem ao menos uma aula grátis
     destaque: bool
     # marketing / vitrine
     tagline: str | None = None
@@ -46,6 +47,14 @@ class AulaResumo(BaseModel):
     id: uuid.UUID
     titulo: str
     duracao_label: str  # "12:40"
+    gratuita: bool = False  # liberada como preview na página de venda
+
+
+class AulaPreview(BaseModel):
+    """Aula grátis (preview) com o id do vídeo — exposto SÓ para aulas gratuitas."""
+    id: uuid.UUID
+    titulo: str
+    panda_video_id: str | None = None
 
 
 class ModuloDetalhe(BaseModel):

@@ -7,6 +7,7 @@ from app.core.db import get_db
 from app.models import Aula, Curso, Modulo, TipoCurso
 from app.routers.avaliacoes import media_e_total
 from app.schemas.cursos import (
+    AulaPreview,
     AulaResumo,
     CursoDetail,
     CursoListItem,
@@ -56,6 +57,14 @@ async def listar_cursos(
         .correlate(Curso)
         .scalar_subquery()
     )
+    aulas_gratis = (
+        select(func.count(Aula.id))
+        .select_from(Aula)
+        .join(Modulo, Aula.modulo_id == Modulo.id)
+        .where(Modulo.curso_id == Curso.id, Aula.gratuita.is_(True))
+        .correlate(Curso)
+        .scalar_subquery()
+    )
 
     base = select(Curso)
     count_stmt = select(func.count(Curso.id))
@@ -69,6 +78,7 @@ async def listar_cursos(
         base.add_columns(
             total_modulos.label("total_modulos"),
             total_aulas.label("total_aulas"),
+            aulas_gratis.label("aulas_gratis"),
         )
         .order_by(Curso.ordem, Curso.titulo)
         .offset((page - 1) * size)
@@ -89,6 +99,7 @@ async def listar_cursos(
             thumbnail_url=curso.thumbnail_url,
             total_modulos=n_modulos,
             total_aulas=n_aulas,
+            tem_preview=n_gratis > 0,
             destaque=curso.destaque,
             tagline=curso.tagline,
             horas=curso.horas,
@@ -99,9 +110,39 @@ async def listar_cursos(
             icon=curso.icon,
             badge_label=curso.badge_label,
         )
-        for curso, n_modulos, n_aulas in rows
+        for curso, n_modulos, n_aulas, n_gratis in rows
     ]
     return CursoListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get("/{slug}/preview", response_model=list[AulaPreview])
+async def aulas_preview(slug: str, db: AsyncSession = Depends(get_db)):
+    """Aulas grátis do curso, com o id do vídeo — único ponto público que expõe
+    `panda_video_id`, e SÓ de aulas marcadas como gratuitas (as pagas nunca vazam)."""
+    curso = (
+        await db.execute(select(Curso.id).where(Curso.slug == slug))
+    ).scalar_one_or_none()
+    if curso is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {
+                "code": "CURSO_NAO_ENCONTRADO",
+                "message": "Curso não encontrado.",
+                "details": None,
+            }},
+        )
+    rows = (
+        await db.execute(
+            select(Aula)
+            .join(Modulo, Aula.modulo_id == Modulo.id)
+            .where(Modulo.curso_id == curso, Aula.gratuita.is_(True))
+            .order_by(Modulo.ordem, Aula.ordem)
+        )
+    ).scalars().all()
+    return [
+        AulaPreview(id=a.id, titulo=a.titulo, panda_video_id=a.panda_video_id)
+        for a in rows
+    ]
 
 
 @router.get("/{slug}", response_model=CursoDetail)
@@ -132,7 +173,12 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
             ordem=m.ordem,
             total_aulas=len(m.aulas),
             aulas=[
-                AulaResumo(id=a.id, titulo=a.titulo, duracao_label=_dur_label(a.duracao_segundos))
+                AulaResumo(
+                    id=a.id,
+                    titulo=a.titulo,
+                    duracao_label=_dur_label(a.duracao_segundos),
+                    gratuita=a.gratuita,
+                )
                 for a in m.aulas
             ],
         )

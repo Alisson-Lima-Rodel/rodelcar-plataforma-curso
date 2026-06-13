@@ -10,12 +10,14 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.main import app
 from app.models import (
+    Admin,
     Aluno,
     Aula,
     Certificado,
     Curso,
     Matricula,
     Modulo,
+    PapelAdmin,
     Progresso,
     StatusMatricula,
     TipoCurso,
@@ -263,3 +265,37 @@ async def auth_headers(client: AsyncClient, test_aluno: dict) -> dict:
     )
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def admin_token(client: AsyncClient) -> dict:
+    """Admin (Administrador) temporário + Bearer, para rotas do painel."""
+    import uuid as _uuid
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    email = f"admin_{_uuid.uuid4().hex[:8]}@rodelcar.dev"
+    engine = create_async_engine(settings.DATABASE_URL, connect_args=settings.db_connect_args)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        adm = Admin(
+            nome="Admin Teste",
+            email=email,
+            senha_hash=hash_password("AdminTest123!"),
+            papel=PapelAdmin.administrador,
+            ativo=True,
+        )
+        s.add(adm)
+        await s.commit()
+        aid = adm.id
+    resp = await client.post(
+        "/api/v1/admin/auth/login",
+        json={"email": email, "senha": "AdminTest123!"},
+    )
+    yield {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    async with Session() as s:
+        obj = await s.get(Admin, aid)
+        if obj:
+            await s.delete(obj)
+            await s.commit()
+    await engine.dispose()

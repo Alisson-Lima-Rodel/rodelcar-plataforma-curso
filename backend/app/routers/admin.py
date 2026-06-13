@@ -28,6 +28,7 @@ from app.models import (
     Admin,
     Aluno,
     Aula,
+    Avaliacao,
     Curso,
     Depoimento,
     Faq,
@@ -68,6 +69,8 @@ from app.schemas.admin import (
     FaqCreate,
     FaqUpdate,
     AlunoReembolsos,
+    AvaliacaoAdminItem,
+    AvaliacaoStatusUpdate,
     PlanoAssinaturaAdmin,
     PlanoAssinaturaCreate,
     PlanoAssinaturaUpdate,
@@ -466,6 +469,69 @@ async def excluir_plano(plano_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 
 
 router.include_router(planos)
+
+
+# ── Avaliações dos alunos (moderação) ─────────────────────────────────────────
+avaliacoes = APIRouter(prefix="/avaliacoes", dependencies=[Depends(require_papel(*_CONTEUDO))])
+
+
+@avaliacoes.get("", response_model=list[AvaliacaoAdminItem])
+async def listar_avaliacoes_admin(db: AsyncSession = Depends(get_db)):
+    rows = (
+        await db.execute(
+            select(Avaliacao, Aluno.nome, Curso.titulo)
+            .join(Aluno, Avaliacao.aluno_id == Aluno.id)
+            .join(Curso, Avaliacao.curso_id == Curso.id)
+            .order_by(Avaliacao.criado_em.desc())
+        )
+    ).all()
+    return [
+        AvaliacaoAdminItem(
+            id=a.id,
+            aluno_nome=nome,
+            curso_titulo=titulo,
+            nota=a.nota,
+            texto=a.texto,
+            status=a.status,
+            criado_em=a.criado_em,
+        )
+        for a, nome, titulo in rows
+    ]
+
+
+@avaliacoes.patch("/{avaliacao_id}", response_model=AvaliacaoAdminItem)
+async def moderar_avaliacao(
+    avaliacao_id: uuid.UUID,
+    body: AvaliacaoStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aprova ou oculta (Pendente) uma avaliação."""
+    av = await db.get(Avaliacao, avaliacao_id)
+    if av is None:
+        raise _err(404, "NAO_ENCONTRADO", "Avaliação não encontrada.")
+    av.status = body.status
+    await db.commit()
+    aluno = await db.get(Aluno, av.aluno_id)
+    curso = await db.get(Curso, av.curso_id)
+    return AvaliacaoAdminItem(
+        id=av.id,
+        aluno_nome=aluno.nome if aluno else "—",
+        curso_titulo=curso.titulo if curso else "—",
+        nota=av.nota, texto=av.texto, status=av.status, criado_em=av.criado_em,
+    )
+
+
+@avaliacoes.delete("/{avaliacao_id}", status_code=204)
+async def excluir_avaliacao(avaliacao_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    av = await db.get(Avaliacao, avaliacao_id)
+    if av is None:
+        raise _err(404, "NAO_ENCONTRADO", "Avaliação não encontrada.")
+    await db.delete(av)
+    await db.commit()
+    return Response(status_code=204)
+
+
+router.include_router(avaliacoes)
 
 
 # ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────

@@ -13,6 +13,7 @@ import {
   getMatriculas,
   type MatriculaItem,
 } from "@/lib/auth-api";
+import { ReviewForm } from "./review-form";
 
 function fmtData(iso: string): string {
   try {
@@ -231,6 +232,7 @@ export function MyCourses() {
                     {MOTIVO_HINT[m.motivo_bloqueio]}
                   </span>
                 )}
+                <ReviewForm slug={m.curso.slug} />
               </div>
             </div>
           ))}

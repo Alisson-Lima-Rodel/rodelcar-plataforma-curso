@@ -227,6 +227,27 @@ export async function getFaq(): Promise<Faq[]> {
   return (data ?? []).map((f) => ({ q: f.pergunta, a: f.resposta }));
 }
 
+// ── Avaliações públicas do curso (prova social + aggregateRating) ─────────────
+export interface AvaliacaoPublica {
+  autor: string;
+  nota: number;
+  texto: string | null;
+  criado_em: string;
+}
+
+export interface AvaliacoesCurso {
+  items: AvaliacaoPublica[];
+  media: number | null;
+  total: number;
+}
+
+export async function getAvaliacoes(slug: string): Promise<AvaliacoesCurso> {
+  const data = await serverGet<AvaliacoesCurso>(
+    `/cursos/${encodeURIComponent(slug)}/avaliacoes`,
+  );
+  return data ?? { items: [], media: null, total: 0 };
+}
+
 // ── Verificação pública de certificado ────────────────────────────────────────
 export interface CertificadoVerificado {
   valido: boolean;

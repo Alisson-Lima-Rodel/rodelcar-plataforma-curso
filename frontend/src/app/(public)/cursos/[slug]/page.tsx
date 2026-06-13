@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CourseDetail } from "@/components/portal/course-detail";
 import { JsonLd } from "@/components/seo/json-ld";
-import { getCurso, getFaq } from "@/lib/api";
+import { getAvaliacoes, getCurso, getFaq } from "@/lib/api";
 import { SITE_URL } from "@/lib/seo";
 
 interface Params {
@@ -36,7 +36,11 @@ function cargaHoraria(horas: string): string | null {
 }
 
 export default async function CoursePage({ params }: Params) {
-  const [course, faqs] = await Promise.all([getCurso(params.slug), getFaq()]);
+  const [course, faqs, avaliacoes] = await Promise.all([
+    getCurso(params.slug),
+    getFaq(),
+    getAvaliacoes(params.slug),
+  ]);
   if (!course) notFound();
 
   const url = `${SITE_URL}/cursos/${encodeURIComponent(params.slug)}`;
@@ -67,6 +71,19 @@ export default async function CoursePage({ params }: Params) {
               courseWorkload: carga,
             },
           ],
+        }
+      : {}),
+    // aggregateRating só sai com avaliação real (Google rejeita vazio) → estrelas
+    // do resultado de busca aparecem quando há reviews aprovadas.
+    ...(avaliacoes.total > 0 && avaliacoes.media
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: avaliacoes.media,
+            reviewCount: avaliacoes.total,
+            bestRating: 5,
+            worstRating: 1,
+          },
         }
       : {}),
   };
@@ -101,7 +118,7 @@ export default async function CoursePage({ params }: Params) {
       <JsonLd data={cursoLd} />
       <JsonLd data={trilha} />
       {faqLd && <JsonLd data={faqLd} />}
-      <CourseDetail course={course} faqs={faqs} />
+      <CourseDetail course={course} faqs={faqs} avaliacoes={avaliacoes} />
     </main>
   );
 }

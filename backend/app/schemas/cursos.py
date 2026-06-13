@@ -79,3 +79,6 @@ class CursoDetail(BaseModel):
     badge_label: str | None = None
     aprende: list[str] = []
     modulos: list[ModuloDetalhe]
+    # Avaliações reais dos alunos (alimentam aggregateRating no JSON-LD).
+    rating_medio: float | None = None
+    rating_count: int = 0

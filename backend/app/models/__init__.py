@@ -309,6 +309,32 @@ class Certificado(Base):
     matricula: Mapped[Matricula] = relationship(back_populates="certificado")
 
 
+class Avaliacao(Base):
+    """Review de um curso por um aluno matriculado (comprador verificado).
+
+    Vira `aggregateRating` no JSON-LD (estrelas no Google) e prova social na
+    página de venda. Difere de `Depoimento` (curado, sem vínculo a aluno/curso):
+    aqui é avaliação de quem comprou. 1 por (aluno, curso) — reenviar atualiza.
+    """
+    __tablename__ = "avaliacoes"
+    __table_args__ = (
+        UniqueConstraint("aluno_id", "curso_id", name="uq_avaliacao_aluno_curso"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    aluno_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("alunos.id", ondelete="CASCADE"), index=True
+    )
+    curso_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cursos.id", ondelete="CASCADE"), index=True
+    )
+    nota: Mapped[int] = mapped_column(Integer)  # 1..5
+    texto: Mapped[str | None] = mapped_column(Text())
+    # Comprador verificado publica direto; o admin pode ocultar (Pendente/Aprovado).
+    status: Mapped[str] = mapped_column(String(20), default="Aprovado")
+    criado_em: Mapped[datetime] = _created_at()
+
+
 class Lead(Base):
     __tablename__ = "leads"
 

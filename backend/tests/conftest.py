@@ -169,6 +169,7 @@ async def test_data(test_aluno):
         data = {
             # Curso ativo
             "curso_ativo_id": str(curso_ativo.id),
+            "curso_ativo_slug": curso_ativo.slug,
             "modulo_ativo_id": str(modulo_ativo.id),
             "aula_ativa_id": str(aula_ativa.id),
             "matricula_ativa_id": str(matricula_ativa.id),
@@ -179,6 +180,7 @@ async def test_data(test_aluno):
             "matricula_expirada_id": str(matricula_expirada.id),
             # Curso sem matrícula
             "curso_sem_mat_id": str(curso_sem_mat.id),
+            "curso_sem_mat_slug": curso_sem_mat.slug,
             "modulo_sem_mat_id": str(modulo_sem_mat.id),
             "aula_sem_mat_id": str(aula_sem_mat.id),
             # Curso para certificado

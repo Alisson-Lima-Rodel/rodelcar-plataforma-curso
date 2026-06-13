@@ -8,8 +8,20 @@ import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
 import { type Course, type CourseModule, type Faq } from "@/lib/portal-data";
+import { type AvaliacoesCurso } from "@/lib/api";
 import { usePortal } from "./portal-context";
 import { useCompra } from "./use-compra";
+
+function fmtMes(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      month: "short",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
 
 function AccItem({
   m,
@@ -123,9 +135,11 @@ function FaqItem({ f }: { f: Faq }) {
 export function CourseDetail({
   course,
   faqs = [],
+  avaliacoes,
 }: {
   course: Course;
   faqs?: Faq[];
+  avaliacoes?: AvaliacoesCurso;
 }) {
   const { openSchedule } = usePortal();
   const { iniciarCompra, comprando } = useCompra();
@@ -429,6 +443,57 @@ export function CourseDetail({
           </div>
         </div>
       </section>
+
+      {/* Avaliações dos alunos (reais; alimentam aggregateRating no JSON-LD) */}
+      {avaliacoes && avaliacoes.total > 0 && (
+        <section className="section-tight" style={{ paddingTop: 0 }}>
+          <div className="wrap" style={{ maxWidth: 820, marginLeft: 0 }}>
+            <div
+              className="flex center gap-3"
+              style={{ marginBottom: 18, flexWrap: "wrap" }}
+            >
+              <h2 style={{ fontSize: "1.6rem" }}>O que dizem os alunos</h2>
+              {avaliacoes.media != null && (
+                <span className="flex center gap-2">
+                  <Stars value={avaliacoes.media} size={16} />
+                  <span className="tag-mono">
+                    {avaliacoes.media.toFixed(1)} · {avaliacoes.total} avali
+                    {avaliacoes.total > 1 ? "ações" : "ação"}
+                  </span>
+                </span>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {avaliacoes.items.map((a, i) => (
+                <div key={i} className="card" style={{ padding: "16px 20px" }}>
+                  <div
+                    className="flex center between"
+                    style={{ gap: 12, marginBottom: a.texto ? 8 : 0 }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                      {a.autor}
+                    </span>
+                    <span className="flex center gap-2">
+                      <Stars value={a.nota} size={13} />
+                      <span className="tag-mono subtle">
+                        {fmtMes(a.criado_em)}
+                      </span>
+                    </span>
+                  </div>
+                  {a.texto && (
+                    <p
+                      className="muted"
+                      style={{ fontSize: "0.95rem", lineHeight: 1.5 }}
+                    >
+                      {a.texto}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Premium + FAQ */}
       <section className="section-tight" style={{ paddingTop: 0 }}>

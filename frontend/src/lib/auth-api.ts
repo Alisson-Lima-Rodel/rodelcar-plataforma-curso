@@ -327,3 +327,25 @@ export const enviarCertificadoWhatsapp = (matriculaId: string) =>
   authPost<{ enviado: boolean }>(
     `/certificados/${matriculaId}/enviar-whatsapp`,
   );
+
+// ── Avaliações (review do curso) ──────────────────────────────────────────────
+export interface MinhaAvaliacao {
+  nota: number;
+  texto: string | null;
+  status: string;
+}
+
+export const getMinhaAvaliacao = (slug: string) =>
+  authGet<MinhaAvaliacao | null>(
+    `/cursos/${encodeURIComponent(slug)}/avaliacoes/minha`,
+  );
+
+export const enviarAvaliacao = (
+  slug: string,
+  nota: number,
+  texto: string | null,
+) =>
+  authPost<MinhaAvaliacao>(`/cursos/${encodeURIComponent(slug)}/avaliacoes`, {
+    nota,
+    texto,
+  });

@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
 from app.models import Aula, Curso, Modulo, TipoCurso
+from app.routers.avaliacoes import media_e_total
 from app.schemas.cursos import (
     AulaResumo,
     CursoDetail,
@@ -138,6 +139,8 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         for m in curso.modulos
     ]
 
+    rating_medio, rating_count = await media_e_total(db, curso.id)
+
     return CursoDetail(
         id=curso.id,
         slug=curso.slug,
@@ -158,4 +161,6 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         badge_label=curso.badge_label,
         aprende=curso.aprende or [],
         modulos=modulos,
+        rating_medio=rating_medio,
+        rating_count=rating_count,
     )

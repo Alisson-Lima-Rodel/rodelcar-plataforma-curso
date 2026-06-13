@@ -252,6 +252,21 @@ class FaqUpdate(BaseModel):
     ordem: int | None = None
 
 
+# ── Avaliações dos alunos (moderação) ─────────────────────────────────────────
+class AvaliacaoAdminItem(BaseModel):
+    id: uuid.UUID
+    aluno_nome: str
+    curso_titulo: str
+    nota: int
+    texto: str | None
+    status: str
+    criado_em: datetime
+
+
+class AvaliacaoStatusUpdate(BaseModel):
+    status: StatusAprovacao  # "Aprovado" | "Pendente"
+
+
 # ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────
 class ReembolsoItem(BaseModel):
     matricula_id: uuid.UUID

@@ -11,6 +11,7 @@ import { type Course, type CourseModule, type Faq } from "@/lib/portal-data";
 import { type AvaliacoesCurso } from "@/lib/api";
 import { usePortal } from "./portal-context";
 import { useCompra } from "./use-compra";
+import { PreviewModal } from "./preview-modal";
 
 function fmtMes(iso: string): string {
   try {
@@ -148,12 +149,16 @@ export function CourseDetail({
   const learn = rich.learn ?? [];
   const [openMod, setOpenMod] = useState(0);
   const [tab, setTab] = useState<"conteudo" | "aprende">("conteudo");
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Course.id carrega o slug do curso (mapBase em lib/api.ts).
   const enroll = () => iniciarCompra({ tipo: "curso", slug: rich.id });
   const discount = rich.old ? Math.round((1 - rich.price / rich.old) * 100) : 0;
 
   return (
     <div>
+      {previewOpen && (
+        <PreviewModal slug={rich.id} onClose={() => setPreviewOpen(false)} />
+      )}
       {/* breadcrumb + hero */}
       <section
         className="blueprint"
@@ -410,6 +415,16 @@ export function CourseDetail({
                 >
                   {comprando ? "Abrindo pagamento..." : "Comprar agora"}
                 </Button>
+                {rich.hasPreview && (
+                  <Button
+                    variant="secondary"
+                    block
+                    icon="play"
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    Assistir aula grátis
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   block

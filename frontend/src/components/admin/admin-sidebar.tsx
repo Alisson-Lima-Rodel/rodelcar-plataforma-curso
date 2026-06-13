@@ -9,6 +9,7 @@ const NAV: { id: string; label: string; icon: string }[] = [
   { id: "overview", label: "Visão geral", icon: "gauge" },
   { id: "students", label: "Alunos", icon: "users" },
   { id: "courses", label: "Cursos", icon: "book" },
+  { id: "content", label: "Conteúdo", icon: "play" },
   { id: "testimonials", label: "Depoimentos", icon: "message" },
   { id: "plans", label: "Planos", icon: "infinity" },
   { id: "refunds", label: "Reembolsos", icon: "arrowLeft" },

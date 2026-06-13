@@ -109,6 +109,7 @@ interface ApiCourseListItem extends ApiCourseBase {
   descricao_curta?: string | null;
   total_modulos: number;
   total_aulas: number;
+  tem_preview?: boolean;
   destaque: boolean;
 }
 
@@ -120,7 +121,12 @@ interface ApiCourseDetail extends ApiCourseBase {
     titulo: string;
     ordem: number;
     total_aulas: number;
-    aulas: { id: string; titulo: string; duracao_label: string }[];
+    aulas: {
+      id: string;
+      titulo: string;
+      duracao_label: string;
+      gratuita?: boolean;
+    }[];
   }[];
 }
 
@@ -158,8 +164,22 @@ export async function getCursos(): Promise<Course[]> {
   const data = await serverGet<{ items: ApiCourseListItem[] }>(
     "/cursos?size=100",
   );
-  return (data?.items ?? []).map(mapBase);
+  return (data?.items ?? []).map((c) => ({
+    ...mapBase(c),
+    hasPreview: !!c.tem_preview,
+  }));
 }
+
+// ── Aulas grátis (preview) — id do vídeo só das gratuitas ─────────────────────
+export interface AulaPreview {
+  id: string;
+  titulo: string;
+  panda_video_id: string | null;
+}
+
+/** Client-side (chamado quando o aluno abre o preview). */
+export const getPreview = (slug: string) =>
+  api.get<AulaPreview[]>(`/cursos/${encodeURIComponent(slug)}/preview`);
 
 // ── Planos de assinatura (card Premium da vitrine) ────────────────────────────
 export interface PlanoPublico {
@@ -290,6 +310,9 @@ export async function getCurso(slug: string): Promise<Course | null> {
   if (!d) return null;
   return {
     ...mapBase(d),
+    hasPreview: (d.modulos ?? []).some((m) =>
+      m.aulas.some((a) => a.gratuita),
+    ),
     desc: d.descricao ?? undefined,
     learn: d.aprende ?? [],
     modules: (d.modulos ?? []).map((m) => ({

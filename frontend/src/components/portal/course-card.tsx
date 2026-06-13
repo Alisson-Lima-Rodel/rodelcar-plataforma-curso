@@ -55,6 +55,23 @@ export function CourseCard({ c }: { c: Course }) {
             {c.badge.label}
           </span>
         )}
+        {c.hasPreview && (
+          <span
+            className="badge"
+            style={{
+              position: "absolute",
+              top: 9,
+              right: 9,
+              padding: "4px 9px",
+              background: "rgba(34,197,94,0.18)",
+              borderColor: "rgba(34,197,94,0.5)",
+              color: "var(--success)",
+              fontWeight: 600,
+            }}
+          >
+            ▶ Aula grátis
+          </span>
+        )}
         {!c.cover && <span className="thumb-label">[ capa · {c.id} ]</span>}
       </div>
       <div

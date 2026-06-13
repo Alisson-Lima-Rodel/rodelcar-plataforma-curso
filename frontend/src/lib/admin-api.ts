@@ -184,6 +184,56 @@ export const moderarAvaliacao = (id: string, status: "Aprovado" | "Pendente") =>
 export const excluirAvaliacao = (id: string) =>
   adminFetch<void>(`/admin/avaliacoes/${id}`, { method: "DELETE" });
 
+// ── Conteúdo do curso (módulos / aulas) ───────────────────────────────────────
+export interface AdminAula {
+  id: string;
+  titulo: string;
+  panda_video_id: string | null;
+  duracao_segundos: number;
+  ordem: number;
+  gratuita: boolean;
+}
+
+export interface AdminModulo {
+  id: string;
+  titulo: string;
+  ordem: number;
+  aulas: AdminAula[];
+}
+
+export const listarConteudo = (cursoId: string) =>
+  adminFetch<AdminModulo[]>(`/admin/cursos/${cursoId}/conteudo`);
+
+export const criarModulo = (cursoId: string, data: Record<string, unknown>) =>
+  adminFetch<AdminModulo>(`/admin/cursos/${cursoId}/modulos`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const atualizarModulo = (id: string, data: Record<string, unknown>) =>
+  adminFetch<AdminModulo>(`/admin/modulos/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+export const excluirModulo = (id: string) =>
+  adminFetch<void>(`/admin/modulos/${id}`, { method: "DELETE" });
+
+export const criarAula = (moduloId: string, data: Record<string, unknown>) =>
+  adminFetch<AdminAula>(`/admin/modulos/${moduloId}/aulas`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const atualizarAula = (id: string, data: Record<string, unknown>) =>
+  adminFetch<AdminAula>(`/admin/aulas/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+export const excluirAula = (id: string) =>
+  adminFetch<void>(`/admin/aulas/${id}`, { method: "DELETE" });
+
 // ── CRUD genérico ─────────────────────────────────────────────────────────────
 export type AdminRow = Record<string, unknown> & { id: string };
 

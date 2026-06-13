@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.core.certificado_pdf import gerar_pdf_certificado
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.notificacoes import enviar_whatsapp_texto
+from app.core.email_transacional import email_certificado
+from app.core.notificacoes import enviar_email_bruto, enviar_whatsapp_texto
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
 from app.models import Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso
@@ -129,6 +130,17 @@ async def emitir_certificado(
     db.add(cert)
     await db.commit()
     await db.refresh(cert)
+
+    # E-mail do certificado (best-effort, fora da transação). Emissão é única por
+    # matrícula (idempotência via unique), então não há e-mail duplicado.
+    curso = await db.get(Curso, matricula.curso_id)
+    if aluno.email:
+        assunto, corpo = email_certificado(
+            aluno.nome,
+            curso.titulo if curso else "seu curso",
+            _verify_url(cert.codigo_verificacao),
+        )
+        await enviar_email_bruto(aluno.email, assunto, corpo, log_ref=str(aluno.id))
 
     return CertificadoResponse(
         id=cert.id,

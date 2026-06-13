@@ -25,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.email_transacional import email_assinatura, email_compra_avulsa
+from app.core.notificacoes import enviar_email_bruto
 from app.core.ratelimit import limiter
 from app.models import (
     Aluno,
@@ -154,11 +156,16 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
     # mesmo gateway_transaction_id concorrentemente. O unique constraint garante
     # que não há dupla concessão; aqui tratamos o IntegrityError como no-op (o
     # evento concorrente já concedeu) em vez de devolver 500.
+    #
+    # E-mails pós-compra: enfileirados pelos handlers em `outbox` e enviados SÓ
+    # após o commit durável (fora da transação). Como cada event.id chega aqui
+    # uma única vez (1ª camada de idempotência), não há e-mail duplicado.
+    outbox: list[tuple[str, str, str, str]] = []
     try:
         if tipo in _EVENTOS_CONCESSAO:
-            await _conceder_acesso(db, event, obj, tipo)
+            await _conceder_acesso(db, event, obj, tipo, outbox)
         elif tipo == "invoice.paid":
-            await _conceder_assinatura(db, event, obj)
+            await _conceder_assinatura(db, event, obj, outbox)
         elif tipo == "customer.subscription.deleted":
             await _revogar_assinatura(db, obj)
         elif tipo in _EVENTOS_FALHA:
@@ -166,6 +173,8 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
         else:
             logger.debug("Evento Stripe sem ação: %s", tipo)
         await db.commit()
+        for para, assunto, corpo, ref in outbox:
+            await enviar_email_bruto(para, assunto, corpo, log_ref=ref)
     except IntegrityError:
         await db.rollback()
         logger.info(
@@ -175,7 +184,11 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
 
 
 async def _conceder_acesso(
-    db: AsyncSession, event: dict[str, Any], session_obj: dict[str, Any], tipo: str
+    db: AsyncSession,
+    event: dict[str, Any],
+    session_obj: dict[str, Any],
+    tipo: str,
+    outbox: list[tuple[str, str, str, str]],
 ) -> None:
     # Cartão confirma já no completed (payment_status == "paid"). Pix chega como
     # completed NÃO pago e confirma depois em async_payment_succeeded.
@@ -233,6 +246,9 @@ async def _conceder_acesso(
         return
 
     await _criar_ou_renovar_matricula(db, aluno.id, curso, pag.id)
+    if aluno.email:
+        assunto, corpo = email_compra_avulsa(aluno.nome, curso.titulo)
+        outbox.append((aluno.email, assunto, corpo, str(aluno.id)))
 
 
 async def _registrar_falha(
@@ -284,7 +300,10 @@ def _sub_id_do_invoice(invoice: dict[str, Any]) -> str | None:
 
 
 async def _conceder_assinatura(
-    db: AsyncSession, event: dict[str, Any], invoice: dict[str, Any]
+    db: AsyncSession,
+    event: dict[str, Any],
+    invoice: dict[str, Any],
+    outbox: list[tuple[str, str, str, str]],
 ) -> None:
     """invoice.paid → libera/renova acesso ao catálogo inteiro até o fim do ciclo."""
     sub_id = _sub_id_do_invoice(invoice)
@@ -328,6 +347,11 @@ async def _conceder_assinatura(
         return
 
     await _liberar_catalogo(db, aluno.id, sub_id, pag.id, _fim_periodo(invoice))
+    # Boas-vindas só na 1ª fatura (subscription_create); renovações mensais não
+    # reenviam para não virar spam.
+    if invoice.get("billing_reason") == "subscription_create" and aluno.email:
+        assunto, corpo = email_assinatura(aluno.nome)
+        outbox.append((aluno.email, assunto, corpo, str(aluno.id)))
 
 
 async def _revogar_assinatura(db: AsyncSession, sub: dict[str, Any]) -> None:

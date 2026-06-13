@@ -442,6 +442,34 @@ class TestWebhookStripe:
         assert resp.json()["error"]["code"] == "EVENTO_SEM_ID"
         assert len(await _matriculas(seed["aluno_id"])) == 0
 
+    async def test_compra_envia_email_uma_vez(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        """Compra aprovada dispara 1 e-mail de confirmação; reentrega não duplica."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        import app.routers.webhooks_pagamento as wp
+
+        enviados: list[tuple[str, str]] = []
+
+        async def fake_email(para, assunto, corpo, *, log_ref="?"):
+            enviados.append((para, assunto))
+            return "fake-id"
+
+        monkeypatch.setattr(wp, "enviar_email_bruto", fake_email)
+        pref = seed["pref"]
+        event = _session_event(
+            "checkout.session.completed",
+            event_id=f"evt_{pref}_mail",
+            pi_id=f"pi_{pref}_mail",
+            aluno_id=seed["aluno_id"],
+            curso_slug=seed["curso_slug"],
+        )
+        await _post(client, event)
+        await _post(client, event)  # reentrega do mesmo evento → no-op, sem 2º e-mail
+        assert len(enviados) == 1
+        assert pref in enviados[0][0]  # foi para o e-mail do aluno
+        assert "Compra confirmada" in enviados[0][1]
+
     async def test_payload_nao_guarda_pii(self, client: AsyncClient, seed, monkeypatch):
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
         pref = seed["pref"]
@@ -589,6 +617,39 @@ class TestWebhookAssinatura:
         assert resp.status_code == 200
         mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
         assert mat.status == StatusMatricula.expirado
+
+    async def test_assinatura_envia_boas_vindas_so_na_criacao(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        """invoice.paid com billing_reason=subscription_create manda boas-vindas;
+        renovação (subscription_cycle) não reenvia."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        import app.routers.webhooks_pagamento as wp
+
+        enviados: list[str] = []
+
+        async def fake_email(para, assunto, corpo, *, log_ref="?"):
+            enviados.append(assunto)
+            return "fake-id"
+
+        monkeypatch.setattr(wp, "enviar_email_bruto", fake_email)
+        pref = seed["pref"]
+        # 1ª fatura (criação) → boas-vindas
+        ev1 = _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_sc", invoice_id=f"in_{pref}_sc",
+            sub_id=f"sub_{pref}_sc", aluno_id=seed["aluno_id"],
+        )
+        ev1["data"]["object"]["billing_reason"] = "subscription_create"
+        await _post(client, ev1)
+        # renovação → sem e-mail
+        ev2 = _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_cy", invoice_id=f"in_{pref}_cy",
+            sub_id=f"sub_{pref}_sc", aluno_id=seed["aluno_id"],
+        )
+        ev2["data"]["object"]["billing_reason"] = "subscription_cycle"
+        await _post(client, ev2)
+        assert len(enviados) == 1
+        assert "Assinatura" in enviados[0]
 
     async def test_invoice_paid_duplicado(self, client: AsyncClient, seed, monkeypatch):
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)

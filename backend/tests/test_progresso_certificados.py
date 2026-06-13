@@ -115,9 +115,20 @@ class TestCertificados:
         assert resp.json()["error"]["code"] == "CURSO_NAO_CONCLUIDO"
 
     async def test_fluxo_completo_emitir_e_verificar(
-        self, client: AsyncClient, auth_headers: dict, test_data: dict
+        self, client: AsyncClient, auth_headers: dict, test_data: dict, monkeypatch
     ):
         """Conclui a única aula → emite certificado → verifica código publicamente."""
+        # Grava o e-mail de certificado disparado na emissão (best-effort).
+        import app.routers.certificados as cert_router
+
+        emails: list[str] = []
+
+        async def fake_email(para, assunto, corpo, *, log_ref="?"):
+            emails.append(assunto)
+            return "fake-id"
+
+        monkeypatch.setattr(cert_router, "enviar_email_bruto", fake_email)
+
         # 1. Marca aula_cert como 100 % concluída
         prog_resp = await client.post(
             "/api/v1/progresso",
@@ -138,6 +149,8 @@ class TestCertificados:
         )
         assert cert_resp.status_code == 201
         cert = cert_resp.json()
+        # E-mail de certificado foi disparado na emissão
+        assert len(emails) == 1 and "certificado" in emails[0].lower()
         assert "id" in cert
         assert "codigo_verificacao" in cert
         assert "emitido_em" in cert
@@ -265,3 +278,22 @@ class TestEnviarWhatsappTexto:
         monkeypatch.setattr(notificacoes.settings, "NOTIFICACOES_FAKE", False)
         monkeypatch.setattr(notificacoes.settings, "WA_PROVIDER", "")
         assert await notificacoes.enviar_whatsapp_texto("5551999990000", "oi") is None
+
+
+# ── E-mails transacionais (escaping anti-injeção) ─────────────────────────────
+class TestEmailTransacional:
+    def test_escapa_html_no_corpo(self):
+        from app.core.email_transacional import email_compra_avulsa
+
+        assunto, corpo = email_compra_avulsa("<script>evil</script>", "Curso <b>X</b>")
+        assert "<script>" not in corpo
+        assert "<b>X</b>" not in corpo
+        assert "&lt;" in corpo  # foi escapado
+        assert "Compra confirmada" in assunto
+
+    def test_certificado_inclui_link(self):
+        from app.core.email_transacional import email_certificado
+
+        url = "https://rodelcar.com.br/verificar/RC-2026-ABC"
+        _assunto, corpo = email_certificado("Maria", "Curso DSG", url)
+        assert url in corpo

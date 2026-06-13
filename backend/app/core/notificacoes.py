@@ -101,23 +101,25 @@ def _build_wa_text(msg: MensagemNotificacao) -> str:
 
 # ── Envio de e-mail ────────────────────────────────────────────────────────────
 
-async def enviar_email(msg: MensagemNotificacao) -> str | None:
-    """Envia e-mail via SMTP. Retorna identificador ou None em falha."""
+async def enviar_email_bruto(
+    para: str, assunto: str, corpo_html: str, *, log_ref: str = "?"
+) -> str | None:
+    """Envia um e-mail HTML qualquer via SMTP. Base reutilizável (vigência,
+    boas-vindas, certificado…). `log_ref` aparece nos logs no lugar do e-mail
+    (LGPD). Retorna identificador ou None em falha/ausência de config."""
     if settings.NOTIFICACOES_FAKE:
-        logger.info(
-            "[FAKE EMAIL] aluno=%s assunto=%r", msg.aluno_id, _build_email_subject(msg)
-        )
+        logger.info("[FAKE EMAIL] ref=%s assunto=%r", log_ref, assunto)
         return f"fake-email-{uuid.uuid4()}"
 
     if not settings.SMTP_HOST:
-        logger.debug("SMTP_HOST não configurado — e-mail ignorado (aluno=%s)", msg.aluno_id)
+        logger.debug("SMTP_HOST não configurado — e-mail ignorado (ref=%s)", log_ref)
         return None
 
     em = EmailMessage()
     em["From"] = settings.EMAIL_FROM
-    em["To"] = msg.aluno_email
-    em["Subject"] = _build_email_subject(msg)
-    em.add_alternative(_build_email_body(msg), subtype="html")
+    em["To"] = para
+    em["Subject"] = assunto
+    em.add_alternative(corpo_html, subtype="html")
 
     use_tls = settings.SMTP_PORT == 465
     try:
@@ -133,8 +135,18 @@ async def enviar_email(msg: MensagemNotificacao) -> str | None:
             await smtp.send_message(em)
         return f"smtp-{uuid.uuid4()}"
     except Exception:
-        logger.exception("Falha ao enviar e-mail (aluno=%s)", msg.aluno_id)
+        logger.exception("Falha ao enviar e-mail (ref=%s)", log_ref)
         return None
+
+
+async def enviar_email(msg: MensagemNotificacao) -> str | None:
+    """Envia o e-mail de vigência (montado a partir de MensagemNotificacao)."""
+    return await enviar_email_bruto(
+        msg.aluno_email,
+        _build_email_subject(msg),
+        _build_email_body(msg),
+        log_ref=str(msg.aluno_id),
+    )
 
 
 # ── Provedores de WhatsApp ─────────────────────────────────────────────────────

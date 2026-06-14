@@ -6,7 +6,7 @@ from httpx import AsyncClient
 
 class TestConteudoAdmin:
     async def test_fluxo_completo_e_preview(
-        self, client: AsyncClient, admin_token: dict
+        self, client: AsyncClient, admin_token: dict, auth_headers: dict
     ):
         slug = f"prev-{uuid.uuid4().hex[:6]}"
         # 1. cria curso (premium evita sync Stripe)
@@ -55,8 +55,10 @@ class TestConteudoAdmin:
             mods = cont.json()
             assert len(mods) == 1 and len(mods[0]["aulas"]) == 2
 
-            # 5. preview público: SÓ a grátis, e a paga NUNCA vaza o video id
-            prev = await client.get(f"/api/v1/cursos/{slug}/preview")
+            # 5. preview exige login: SÓ a grátis, e a paga NUNCA vaza o video id
+            prev = await client.get(
+                f"/api/v1/cursos/{slug}/preview", headers=auth_headers
+            )
             assert prev.status_code == 200
             pv = prev.json()
             assert len(pv) == 1 and pv[0]["panda_video_id"] == "FREE456"
@@ -80,7 +82,11 @@ class TestConteudoAdmin:
                 headers=admin_token,
                 json={"gratuita": False},
             )
-            assert (await client.get(f"/api/v1/cursos/{slug}/preview")).json() == []
+            assert (
+                await client.get(
+                    f"/api/v1/cursos/{slug}/preview", headers=auth_headers
+                )
+            ).json() == []
 
             # 9. excluir o módulo (cascata nas aulas)
             d = await client.delete(
@@ -182,6 +188,17 @@ class TestConteudoAdmin:
         )
         assert resp.status_code in (401, 403)
 
-    async def test_preview_curso_inexistente_404(self, client: AsyncClient):
-        resp = await client.get("/api/v1/cursos/nao-existe-xyz/preview")
+    async def test_preview_exige_login(self, client: AsyncClient, test_data: dict):
+        """Sem token, a prévia não libera o vídeo (captura o lead antes)."""
+        resp = await client.get(
+            f"/api/v1/cursos/{test_data['curso_ativo_slug']}/preview"
+        )
+        assert resp.status_code == 401
+
+    async def test_preview_curso_inexistente_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/api/v1/cursos/nao-existe-xyz/preview", headers=auth_headers
+        )
         assert resp.status_code == 404

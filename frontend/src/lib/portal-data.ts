@@ -27,6 +27,7 @@ export interface Course {
   badge: { variant: string; label: string };
   cover?: string; // capa (Supabase Storage); sem ela, o card cai no ícone
   hasPreview?: boolean; // tem ao menos uma aula grátis (preview)
+  gratuito?: boolean; // curso 100% grátis (matrícula free)
   desc?: string;
   learn?: string[];
   modules?: CourseModule[];

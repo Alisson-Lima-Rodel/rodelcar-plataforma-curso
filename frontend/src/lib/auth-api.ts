@@ -349,3 +349,26 @@ export const enviarAvaliacao = (
     nota,
     texto,
   });
+
+// ── Aula grátis (preview) — exige login (captura o lead) ──────────────────────
+export interface AulaPreview {
+  id: string;
+  titulo: string;
+  panda_video_id: string | null;
+}
+
+export const getPreview = (slug: string) =>
+  authGet<AulaPreview[]>(`/cursos/${encodeURIComponent(slug)}/preview`);
+
+// ── Matrícula gratuita (curso marcado como gratuito) ──────────────────────────
+export interface MatriculaGratis {
+  matricula_id: string;
+  slug: string;
+  status: string;
+  ja_matriculado: boolean;
+}
+
+export const matricularGratis = (slug: string) =>
+  authPost<MatriculaGratis>(
+    `/me/matriculas/gratis/${encodeURIComponent(slug)}`,
+  );

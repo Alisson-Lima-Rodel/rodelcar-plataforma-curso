@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/icon";
-import { getPreview, type AulaPreview } from "@/lib/api";
+import { getPreview, type AulaPreview } from "@/lib/auth-api";
 import { PandaPlayer } from "./panda-player";
 
 /** Modal "Assistir aula grátis": carrega as aulas gratuitas do curso e toca. */
@@ -51,7 +51,11 @@ export function PreviewModal({
             <Icon name="bolt" size={16} style={{ color: "var(--primary)" }} />
             Aula grátis
           </span>
-          <button onClick={onClose} className="btn btn-ghost btn-sm" aria-label="Fechar">
+          <button
+            onClick={onClose}
+            className="btn btn-ghost btn-sm"
+            aria-label="Fechar"
+          >
             <Icon name="x" size={18} />
           </button>
         </div>

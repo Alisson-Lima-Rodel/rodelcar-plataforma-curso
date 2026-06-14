@@ -69,6 +69,7 @@ class CursoAdmin(BaseModel):
     badge_label: str | None = None
     validade_dias: int
     destaque: bool
+    gratuito: bool
     ordem: int
     thumbnail_url: str | None = None
 
@@ -90,6 +91,7 @@ class CursoCreate(BaseModel):
     badge_label: str | None = Field(default=None, max_length=40)
     validade_dias: int = Field(default=365, gt=0)
     destaque: bool = False
+    gratuito: bool = False
     ordem: int = Field(default=0, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
 
@@ -111,6 +113,7 @@ class CursoUpdate(BaseModel):
     badge_label: str | None = Field(default=None, max_length=40)
     validade_dias: int | None = Field(default=None, gt=0)
     destaque: bool | None = None
+    gratuito: bool | None = None
     ordem: int | None = Field(default=None, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
 

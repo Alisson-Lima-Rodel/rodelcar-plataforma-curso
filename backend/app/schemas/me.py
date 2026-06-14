@@ -42,6 +42,13 @@ class CancelamentoResultado(BaseModel):
     cursos_revogados: int
 
 
+class MatriculaGratuitaResponse(BaseModel):
+    matricula_id: uuid.UUID
+    slug: str
+    status: str
+    ja_matriculado: bool  # já tinha matrícula (reativada) vs. nova
+
+
 class UltimaAula(BaseModel):
     aula_id: uuid.UUID
     titulo: str

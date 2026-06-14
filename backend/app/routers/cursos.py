@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
-from app.models import Aula, Curso, Modulo, TipoCurso
+from app.dependencies import get_current_aluno
+from app.models import Aluno, Aula, Curso, Modulo, TipoCurso
 from app.routers.avaliacoes import media_e_total
 from app.schemas.cursos import (
     AulaPreview,
@@ -97,6 +98,7 @@ async def listar_cursos(
             preco_antigo=curso.preco_antigo,
             validade_dias=curso.validade_dias,
             thumbnail_url=curso.thumbnail_url,
+            gratuito=curso.gratuito,
             total_modulos=n_modulos,
             total_aulas=n_aulas,
             tem_preview=n_gratis > 0,
@@ -116,9 +118,14 @@ async def listar_cursos(
 
 
 @router.get("/{slug}/preview", response_model=list[AulaPreview])
-async def aulas_preview(slug: str, db: AsyncSession = Depends(get_db)):
-    """Aulas grátis do curso, com o id do vídeo — único ponto público que expõe
-    `panda_video_id`, e SÓ de aulas marcadas como gratuitas (as pagas nunca vazam)."""
+async def aulas_preview(
+    slug: str,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aulas grátis do curso, com o id do vídeo. Exige LOGIN (captura o lead antes
+    de liberar a amostra) — expõe `panda_video_id` SÓ de aulas marcadas como
+    gratuitas, e só para aluno cadastrado (as pagas nunca vazam)."""
     curso = (
         await db.execute(select(Curso.id).where(Curso.slug == slug))
     ).scalar_one_or_none()
@@ -197,6 +204,7 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         preco_antigo=curso.preco_antigo,
         validade_dias=curso.validade_dias,
         thumbnail_url=curso.thumbnail_url,
+        gratuito=curso.gratuito,
         tagline=curso.tagline,
         horas=curso.horas,
         aulas_total=curso.aulas_total,

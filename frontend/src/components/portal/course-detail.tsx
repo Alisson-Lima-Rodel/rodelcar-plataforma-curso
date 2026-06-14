@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
 import { Reveal } from "@/components/ui/reveal";
+import { useRouter } from "next/navigation";
 import { type Course, type CourseModule, type Faq } from "@/lib/portal-data";
 import { type AvaliacoesCurso } from "@/lib/api";
+import { useAuth } from "@/components/providers/auth-provider";
 import { usePortal } from "./portal-context";
 import { useCompra } from "./use-compra";
 import { PreviewModal } from "./preview-modal";
@@ -142,6 +144,8 @@ export function CourseDetail({
   faqs?: Faq[];
   avaliacoes?: AvaliacoesCurso;
 }) {
+  const router = useRouter();
+  const { aluno } = useAuth();
   const { openSchedule } = usePortal();
   const { iniciarCompra, comprando } = useCompra();
   const rich = course;
@@ -151,7 +155,17 @@ export function CourseDetail({
   const [tab, setTab] = useState<"conteudo" | "aprende">("conteudo");
   const [previewOpen, setPreviewOpen] = useState(false);
   // Course.id carrega o slug do curso (mapBase em lib/api.ts).
-  const enroll = () => iniciarCompra({ tipo: "curso", slug: rich.id });
+  const ehGratis = !!rich.gratuito;
+  // Curso grátis → matrícula gratuita (mesmo fluxo de resume pós-login); pago → checkout.
+  const enroll = () =>
+    iniciarCompra(
+      ehGratis
+        ? { tipo: "gratis", slug: rich.id }
+        : { tipo: "curso", slug: rich.id },
+    );
+  // Prévia exige login (captura o lead): sem aluno, manda pro cadastro/login.
+  const abrirPreview = () =>
+    aluno ? setPreviewOpen(true) : router.push("/login");
   const discount = rich.old ? Math.round((1 - rich.price / rich.old) * 100) : 0;
 
   return (
@@ -387,40 +401,56 @@ export function CourseDetail({
               </div>
               <div style={{ padding: 22 }}>
                 <div className="flex center gap-2" style={{ marginBottom: 6 }}>
-                  <span className="price" style={{ fontSize: "2.2rem" }}>
-                    R$ {rich.price}
-                  </span>
-                  {rich.old && (
-                    <span className="strike tag-mono">R$ {rich.old}</span>
-                  )}
-                  {discount > 0 && (
-                    <Badge variant="success" style={{ marginLeft: "auto" }}>
-                      -{discount}%
-                    </Badge>
+                  {ehGratis ? (
+                    <span className="price" style={{ fontSize: "2.2rem" }}>
+                      Grátis
+                    </span>
+                  ) : (
+                    <>
+                      <span className="price" style={{ fontSize: "2.2rem" }}>
+                        R$ {rich.price}
+                      </span>
+                      {rich.old && (
+                        <span className="strike tag-mono">R$ {rich.old}</span>
+                      )}
+                      {discount > 0 && (
+                        <Badge variant="success" style={{ marginLeft: "auto" }}>
+                          -{discount}%
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <span
                   className="tag-mono"
                   style={{ display: "block", marginBottom: 18 }}
                 >
-                  ou 12x de R$ {(rich.price / 12).toFixed(2).replace(".", ",")}
+                  {ehGratis
+                    ? "Cadastre-se e estude sem pagar"
+                    : `ou 12x de R$ ${(rich.price / 12).toFixed(2).replace(".", ",")}`}
                 </span>
                 <Button
                   variant="primary"
                   size="lg"
                   block
-                  icon="bolt"
+                  icon={ehGratis ? "award" : "bolt"}
                   onClick={enroll}
                   disabled={comprando}
                 >
-                  {comprando ? "Abrindo pagamento..." : "Comprar agora"}
+                  {comprando
+                    ? ehGratis
+                      ? "Matriculando..."
+                      : "Abrindo pagamento..."
+                    : ehGratis
+                      ? "Matricular grátis"
+                      : "Comprar agora"}
                 </Button>
-                {rich.hasPreview && (
+                {rich.hasPreview && !ehGratis && (
                   <Button
                     variant="secondary"
                     block
                     icon="play"
-                    onClick={() => setPreviewOpen(true)}
+                    onClick={abrirPreview}
                   >
                     Assistir aula grátis
                   </Button>
@@ -600,13 +630,17 @@ export function CourseDetail({
                 <Button
                   variant="primary"
                   size="lg"
-                  icon="bolt"
+                  icon={ehGratis ? "award" : "bolt"}
                   onClick={enroll}
                   disabled={comprando}
                 >
                   {comprando
-                    ? "Abrindo pagamento..."
-                    : `Comprar por R$ ${rich.price}`}
+                    ? ehGratis
+                      ? "Matriculando..."
+                      : "Abrindo pagamento..."
+                    : ehGratis
+                      ? "Matricular grátis"
+                      : `Comprar por R$ ${rich.price}`}
                 </Button>
                 <Button
                   variant="secondary"

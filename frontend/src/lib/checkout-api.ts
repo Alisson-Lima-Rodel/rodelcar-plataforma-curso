@@ -5,7 +5,7 @@
    (entrar OU criar conta) e a compra é retomada automaticamente no sucesso. */
 
 import { ApiError, API_URL, type ApiErrorEnvelope } from "./api";
-import { getAccessToken } from "./auth-api";
+import { getAccessToken, matricularGratis } from "./auth-api";
 
 export interface CheckoutCriado {
   checkout_url: string;
@@ -58,7 +58,8 @@ const INTENT_KEY = "rodelcar_compra_pendente";
 
 export type CompraIntent =
   | { tipo: "curso"; slug: string }
-  | { tipo: "plano"; planoId: string };
+  | { tipo: "plano"; planoId: string }
+  | { tipo: "gratis"; slug: string }; // matrícula gratuita (curso grátis)
 
 export function salvarCompraPendente(intent: CompraIntent) {
   if (typeof window === "undefined") return;
@@ -81,8 +82,15 @@ export function limparCompraPendente() {
   sessionStorage.removeItem(INTENT_KEY);
 }
 
-/** Executa a intenção: cria a sessão na Stripe e redireciona o navegador. */
+/** Executa a intenção: curso grátis matricula e vai pro player; pago cria a
+ *  sessão na Stripe e redireciona. Reusa o mesmo fluxo de resume pós-login. */
 export async function executarCompra(intent: CompraIntent): Promise<void> {
+  if (intent.tipo === "gratis") {
+    await matricularGratis(intent.slug);
+    limparCompraPendente();
+    window.location.assign(`/curso?slug=${encodeURIComponent(intent.slug)}`);
+    return;
+  }
   const sessao =
     intent.tipo === "curso"
       ? await comprarCurso(intent.slug)

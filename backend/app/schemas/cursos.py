@@ -18,6 +18,7 @@ class CursoListItem(BaseModel):
     preco_antigo: float | None = None
     validade_dias: int
     thumbnail_url: str | None = None
+    gratuito: bool = False  # curso 100% grátis (matrícula free)
     total_modulos: int
     total_aulas: int
     tem_preview: bool = False  # tem ao menos uma aula grátis
@@ -77,6 +78,7 @@ class CursoDetail(BaseModel):
     preco_antigo: float | None = None
     validade_dias: int
     thumbnail_url: str | None = None
+    gratuito: bool = False  # curso 100% grátis (matrícula free)
     # marketing / vitrine
     tagline: str | None = None
     horas: str | None = None

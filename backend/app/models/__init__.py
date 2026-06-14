@@ -193,6 +193,11 @@ class Curso(Base):
     icon: Mapped[str | None] = mapped_column(String(40))
     badge_label: Mapped[str | None] = mapped_column(String(40))
     aprende: Mapped[list] = mapped_column(JSONB, default=list)
+    # Curso 100% gratuito: o aluno cadastrado se matricula de graça (sem Stripe) e
+    # acessa todas as aulas. Ímã de leads. Difere de Aula.gratuita (amostra avulsa).
+    gratuito: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     modulos: Mapped[list[Modulo]] = relationship(
         back_populates="curso", order_by="Modulo.ordem"

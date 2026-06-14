@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import stripe
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,6 +37,7 @@ from app.schemas.me import (
     CertificadoResumo,
     CursoResumo,
     DashboardResponse,
+    MatriculaGratuitaResponse,
     MatriculaItem,
     MatriculaListResponse,
     PlayerAula,
@@ -245,6 +247,70 @@ def _err(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status,
         detail={"error": {"code": code, "message": message, "details": None}},
+    )
+
+
+@router.post(
+    "/matriculas/gratis/{slug}",
+    response_model=MatriculaGratuitaResponse,
+    status_code=201,
+)
+async def matricular_gratis(
+    slug: str,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Matrícula GRATUITA: aluno cadastrado entra num curso marcado como `gratuito`
+    sem Stripe. Ímã de leads. Idempotente: re-chamar reativa/renova a vigência."""
+    curso = (
+        await db.execute(select(Curso).where(Curso.slug == slug))
+    ).scalar_one_or_none()
+    if curso is None:
+        raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")
+    if not curso.gratuito:
+        raise _err(403, "CURSO_NAO_GRATUITO", "Este curso não é gratuito.")
+
+    nova_exp = datetime.now(timezone.utc) + timedelta(days=curso.validade_dias)
+
+    async def _carrega() -> Matricula | None:
+        return (
+            await db.execute(
+                select(Matricula).where(
+                    Matricula.aluno_id == aluno.id, Matricula.curso_id == curso.id
+                )
+            )
+        ).scalar_one_or_none()
+
+    mat = await _carrega()
+    ja = mat is not None
+    if mat is None:
+        mat = Matricula(
+            aluno_id=aluno.id,
+            curso_id=curso.id,
+            status=StatusMatricula.ativo,
+            data_expiracao=nova_exp,
+        )
+        db.add(mat)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Corrida: dois cliques simultâneos. O unique (aluno,curso) garante 1;
+            # cai no caminho de reativação em vez de 500.
+            await db.rollback()
+            mat = await _carrega()
+            ja = True
+            if mat is None:  # pragma: no cover (defensivo)
+                raise _err(409, "MATRICULA_CONFLITO", "Tente novamente.")
+            mat.status = StatusMatricula.ativo
+            mat.data_expiracao = nova_exp
+            await db.commit()
+    else:
+        mat.status = StatusMatricula.ativo
+        mat.data_expiracao = nova_exp
+        await db.commit()
+    await db.refresh(mat)
+    return MatriculaGratuitaResponse(
+        matricula_id=mat.id, slug=curso.slug, status=mat.status.value, ja_matriculado=ja
     )
 
 

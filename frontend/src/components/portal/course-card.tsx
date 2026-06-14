@@ -130,13 +130,24 @@ export function CourseCard({ c }: { c: Course }) {
         <div className="hr" style={{ marginBottom: 14 }} />
         <div className="flex center between">
           <div className="flex center gap-2">
-            <span className="price" style={{ fontSize: "1.5rem" }}>
-              R$ {c.price}
-            </span>
-            {c.old && (
-              <span className="strike tag-mono" style={{ fontSize: "0.82rem" }}>
-                R$ {c.old}
+            {c.gratuito ? (
+              <span className="price" style={{ fontSize: "1.5rem" }}>
+                Grátis
               </span>
+            ) : (
+              <>
+                <span className="price" style={{ fontSize: "1.5rem" }}>
+                  R$ {c.price}
+                </span>
+                {c.old && (
+                  <span
+                    className="strike tag-mono"
+                    style={{ fontSize: "0.82rem" }}
+                  >
+                    R$ {c.old}
+                  </span>
+                )}
+              </>
             )}
           </div>
           <span className="btn btn-secondary btn-sm">

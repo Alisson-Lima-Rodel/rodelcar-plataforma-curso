@@ -14,7 +14,9 @@ from app.core.email_transacional import email_certificado
 from app.core.notificacoes import enviar_email_bruto, enviar_whatsapp_texto
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso
+from app.models import (
+    Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso, StatusMatricula,
+)
 from app.schemas.certificados import (
     CertificadoEnvioResponse,
     CertificadoResponse,
@@ -77,6 +79,15 @@ async def emitir_certificado(
                 "message": "Matrícula não encontrada.",
                 "details": None,
             }},
+        )
+
+    # Vigência: certificado é prova de conclusão COM acesso legítimo. Matrícula
+    # revogada/expirada (ex.: reembolso) não emite — senão um aluno estornado
+    # geraria prova de conclusão falsa.
+    if matricula.status != StatusMatricula.ativo:
+        raise _erro(
+            409, "MATRICULA_NAO_ATIVA",
+            "Matrícula não está ativa — certificado indisponível.",
         )
 
     # Idempotência: já existe certificado?

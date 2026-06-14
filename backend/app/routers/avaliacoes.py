@@ -8,11 +8,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Avaliacao, Curso, Matricula
+from app.models import Aluno, Avaliacao, Curso, Matricula, StatusMatricula
 from app.schemas.avaliacoes import (
     AvaliacaoCreate,
     AvaliacaoMinha,
@@ -112,25 +113,32 @@ async def avaliar_curso(
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cria/atualiza a avaliação do aluno. Exige matrícula (comprador verificado)."""
+    """Cria/atualiza a avaliação do aluno. Exige matrícula ATIVA (comprador com
+    acesso vigente) — espelha a checagem de /aulas e /progresso. Bloqueado/expirado
+    não avalia (anti-fraude na prova social que vira aggregateRating)."""
     curso = await _curso_por_slug(slug, db)
-    tem_matricula = await db.scalar(
+    matricula_ativa = await db.scalar(
         select(Matricula.id).where(
-            Matricula.aluno_id == aluno.id, Matricula.curso_id == curso.id
+            Matricula.aluno_id == aluno.id,
+            Matricula.curso_id == curso.id,
+            Matricula.status == StatusMatricula.ativo,
         )
     )
-    if not tem_matricula:
+    if not matricula_ativa:
         raise _err(
-            403, "PRECISA_MATRICULA", "Só quem tem o curso pode avaliá-lo."
+            403, "PRECISA_MATRICULA", "Só quem tem o curso ativo pode avaliá-lo."
         )
 
-    av = (
-        await db.execute(
-            select(Avaliacao).where(
-                Avaliacao.aluno_id == aluno.id, Avaliacao.curso_id == curso.id
+    async def _carrega() -> Avaliacao | None:
+        return (
+            await db.execute(
+                select(Avaliacao).where(
+                    Avaliacao.aluno_id == aluno.id, Avaliacao.curso_id == curso.id
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
+
+    av = await _carrega()
     if av is None:
         av = Avaliacao(
             aluno_id=aluno.id,
@@ -139,10 +147,22 @@ async def avaliar_curso(
             texto=(body.texto or None),
         )
         db.add(av)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Corrida: dois POST simultâneos do mesmo (aluno, curso). O unique
+            # garante 1 linha; aqui caímos no caminho de update em vez de 500.
+            await db.rollback()
+            av = await _carrega()
+            if av is None:  # pragma: no cover (defensivo)
+                raise _err(409, "AVALIACAO_CONFLITO", "Tente novamente.")
+            av.nota = body.nota
+            av.texto = body.texto or None
+            await db.commit()
     else:
         # Re-avaliar atualiza nota/texto; o status (moderação) é preservado.
         av.nota = body.nota
         av.texto = body.texto or None
-    await db.commit()
+        await db.commit()
     await db.refresh(av)
     return AvaliacaoMinha(nota=av.nota, texto=av.texto, status=av.status)

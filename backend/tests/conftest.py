@@ -177,6 +177,7 @@ async def test_data(test_aluno):
             "matricula_ativa_id": str(matricula_ativa.id),
             # Curso expirado
             "curso_expirado_id": str(curso_expirado.id),
+            "curso_expirado_slug": curso_expirado.slug,
             "modulo_expirado_id": str(modulo_expirado.id),
             "aula_expirada_id": str(aula_expirada.id),
             "matricula_expirada_id": str(matricula_expirada.id),

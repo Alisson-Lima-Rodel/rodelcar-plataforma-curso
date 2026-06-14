@@ -53,6 +53,16 @@ class TestAvaliacaoAluno:
         )
         assert resp.status_code == 401
 
+    async def test_matricula_expirada_403(self, client, auth_headers, test_data):
+        """Matrícula expirada não avalia (anti-fraude na prova social)."""
+        resp = await client.post(
+            f"/api/v1/cursos/{test_data['curso_expirado_slug']}/avaliacoes",
+            json={"nota": 5, "texto": "deixa eu fraudar"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "PRECISA_MATRICULA"
+
     async def test_nota_invalida_422(self, client, auth_headers, test_data):
         resp = await client.post(
             f"/api/v1/cursos/{test_data['curso_ativo_slug']}/avaliacoes",

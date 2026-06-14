@@ -509,8 +509,22 @@ async def _aulas_do_modulo(db: AsyncSession, modulo_id: uuid.UUID) -> list[Aula]
     )
 
 
+async def _tem_progresso(db: AsyncSession, aula_ids: list[uuid.UUID]) -> bool:
+    """Algum aluno já registrou progresso nestas aulas? Trava destrutiva: excluir
+    aula/módulo apagaria irreversivelmente o histórico do aluno (espelha a trava de
+    matrícula em excluir_curso)."""
+    if not aula_ids:
+        return False
+    return bool(
+        await db.scalar(
+            select(Progresso.id).where(Progresso.aula_id.in_(aula_ids)).limit(1)
+        )
+    )
+
+
 async def _excluir_aulas(db: AsyncSession, aula_ids: list[uuid.UUID]) -> None:
-    """Remove aulas e o que pende delas (progresso, materiais) — edição de conteúdo."""
+    """Remove aulas e o que pende delas (materiais, progresso). Só é chamada após
+    a trava _tem_progresso — então Progresso aqui está vazio (defesa em profundidade)."""
     if not aula_ids:
         return
     await db.execute(delete(Progresso).where(Progresso.aula_id.in_(aula_ids)))
@@ -565,7 +579,13 @@ async def excluir_modulo(modulo_id: uuid.UUID, db: AsyncSession = Depends(get_db
     if m is None:
         raise _err(404, "NAO_ENCONTRADO", "Módulo não encontrado.")
     aulas = await _aulas_do_modulo(db, modulo_id)
-    await _excluir_aulas(db, [a.id for a in aulas])
+    aula_ids = [a.id for a in aulas]
+    if await _tem_progresso(db, aula_ids):
+        raise _err(
+            409, "MODULO_COM_PROGRESSO",
+            "Há alunos com progresso em aulas deste módulo — não é possível excluir.",
+        )
+    await _excluir_aulas(db, aula_ids)
     await db.delete(m)
     await db.commit()
     return Response(status_code=204)
@@ -603,6 +623,11 @@ async def excluir_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     a = await db.get(Aula, aula_id)
     if a is None:
         raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    if await _tem_progresso(db, [aula_id]):
+        raise _err(
+            409, "AULA_COM_PROGRESSO",
+            "Há alunos com progresso nesta aula — não é possível excluir.",
+        )
     await _excluir_aulas(db, [aula_id])
     await db.commit()
     return Response(status_code=204)

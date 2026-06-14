@@ -94,6 +94,88 @@ class TestConteudoAdmin:
         finally:
             await client.delete(f"/api/v1/admin/cursos/{curso_id}", headers=admin_token)
 
+    async def test_excluir_com_progresso_bloqueia(
+        self, client: AsyncClient, admin_token: dict, test_aluno: dict
+    ):
+        """Excluir aula/módulo com progresso de aluno é bloqueado (409) — não apaga
+        histórico de aprendizado silenciosamente."""
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select
+
+        from app.core.db import AsyncSessionLocal
+        from app.models import Matricula, Progresso, StatusMatricula
+
+        slug = f"prog-{uuid.uuid4().hex[:6]}"
+        c = await client.post(
+            "/api/v1/admin/cursos",
+            headers=admin_token,
+            json={"slug": slug, "titulo": "Curso Prog", "tipo": "premium", "preco": 0},
+        )
+        curso_id = c.json()["id"]
+        curso_uuid = uuid.UUID(curso_id)
+        try:
+            m = await client.post(
+                f"/api/v1/admin/cursos/{curso_id}/modulos",
+                headers=admin_token,
+                json={"titulo": "M1", "ordem": 1},
+            )
+            modulo_id = m.json()["id"]
+            a = await client.post(
+                f"/api/v1/admin/modulos/{modulo_id}/aulas",
+                headers=admin_token,
+                json={"titulo": "Aula", "panda_video_id": "X", "ordem": 1},
+            )
+            aula_id = a.json()["id"]
+
+            # matrícula + progresso direto no banco
+            async with AsyncSessionLocal() as db:
+                mat = Matricula(
+                    aluno_id=uuid.UUID(test_aluno["id"]),
+                    curso_id=curso_uuid,
+                    status=StatusMatricula.ativo,
+                    data_expiracao=datetime.now(timezone.utc) + timedelta(days=30),
+                )
+                db.add(mat)
+                await db.flush()
+                db.add(Progresso(
+                    matricula_id=mat.id, aula_id=uuid.UUID(aula_id),
+                    concluida=True, percentual=100,
+                ))
+                await db.commit()
+
+            # excluir aula → 409
+            da = await client.delete(
+                f"/api/v1/admin/aulas/{aula_id}", headers=admin_token
+            )
+            assert da.status_code == 409
+            assert da.json()["error"]["code"] == "AULA_COM_PROGRESSO"
+
+            # excluir módulo → 409
+            dm = await client.delete(
+                f"/api/v1/admin/modulos/{modulo_id}", headers=admin_token
+            )
+            assert dm.status_code == 409
+            assert dm.json()["error"]["code"] == "MODULO_COM_PROGRESSO"
+        finally:
+            # Remove progresso+matrícula (senão a exclusão do curso é bloqueada).
+            async with AsyncSessionLocal() as db:
+                mat_ids = (
+                    await db.execute(
+                        select(Matricula.id).where(Matricula.curso_id == curso_uuid)
+                    )
+                ).scalars().all()
+                if mat_ids:
+                    await db.execute(
+                        sa_delete(Progresso).where(Progresso.matricula_id.in_(mat_ids))
+                    )
+                await db.execute(
+                    sa_delete(Matricula).where(Matricula.curso_id == curso_uuid)
+                )
+                await db.commit()
+            await client.delete(f"/api/v1/admin/cursos/{curso_id}", headers=admin_token)
+
     async def test_conteudo_exige_admin(self, client: AsyncClient, auth_headers: dict):
         resp = await client.get(
             f"/api/v1/admin/cursos/{uuid.uuid4()}/conteudo", headers=auth_headers

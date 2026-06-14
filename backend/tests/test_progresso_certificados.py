@@ -114,6 +114,18 @@ class TestCertificados:
         assert resp.status_code == 409
         assert resp.json()["error"]["code"] == "CURSO_NAO_CONCLUIDO"
 
+    async def test_matricula_expirada_nao_emite_409(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict
+    ):
+        """Matrícula não-ativa (expirada/revogada) não emite certificado — senão um
+        aluno estornado geraria prova de conclusão falsa."""
+        resp = await client.post(
+            f"/api/v1/certificados/{test_data['matricula_expirada_id']}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "MATRICULA_NAO_ATIVA"
+
     async def test_fluxo_completo_emitir_e_verificar(
         self, client: AsyncClient, auth_headers: dict, test_data: dict, monkeypatch
     ):

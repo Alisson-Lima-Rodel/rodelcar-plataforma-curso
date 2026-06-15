@@ -51,6 +51,7 @@ from app.models import (
     Quiz,
     StatusMatricula,
     StatusPagamento,
+    TentativaQuiz,
     TipoCurso,
     Video,
 )
@@ -727,7 +728,11 @@ async def upsert_quiz(
             nota_corte=body.nota_corte, ativo=body.ativo,
         )
         db.add(quiz)
-        await db.flush()
+        try:
+            await db.flush()  # uq_quiz_modulo: corrida de 2 admins criando o mesmo
+        except IntegrityError:
+            await db.rollback()
+            raise _err(409, "QUIZ_JA_EXISTE", "Este módulo já tem um quiz.")
     else:
         quiz.titulo = body.titulo
         quiz.nota_corte = body.nota_corte
@@ -750,7 +755,18 @@ async def upsert_quiz(
 async def excluir_quiz(modulo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     quiz = await db.scalar(select(Quiz).where(Quiz.modulo_id == modulo_id))
     if quiz is not None:
-        await db.delete(quiz)  # cascateia questões/alternativas/tentativas
+        # Trava defensiva (igual a excluir_aula/excluir_modulo): excluir o quiz
+        # CASCATEIA as tentativas dos alunos — apagaria provas já aprovadas e
+        # poderia rebloquear certificados. Se há histórico, exija desativar.
+        tem_tentativa = await db.scalar(
+            select(TentativaQuiz.id).where(TentativaQuiz.quiz_id == quiz.id).limit(1)
+        )
+        if tem_tentativa is not None:
+            raise _err(
+                409, "QUIZ_COM_TENTATIVAS",
+                "Há alunos com tentativas neste quiz — desative-o em vez de excluir.",
+            )
+        await db.delete(quiz)  # cascateia questões/alternativas
         await db.commit()
     return Response(status_code=204)
 

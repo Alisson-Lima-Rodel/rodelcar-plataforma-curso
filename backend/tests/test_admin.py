@@ -455,6 +455,19 @@ class TestAdminRBAC:
         )
         assert resp.status_code == 403
 
+    async def test_suporte_bloqueado_no_quiz(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        # Quiz é conteúdo (Administrador/Editor); Suporte não gerencia. O RBAC
+        # do router roda antes do 404, então um modulo_id qualquer já dá 403.
+        import uuid as _uuid
+
+        resp = await client.get(
+            f"/api/v1/admin/modulos/{_uuid.uuid4()}/quiz", headers=suporte_headers
+        )
+        assert resp.status_code == 403
+        assert resp.json()["error"]["code"] == "PERMISSAO_NEGADA"
+
     async def test_suporte_acessa_alunos(
         self, client: AsyncClient, suporte_headers: dict
     ):

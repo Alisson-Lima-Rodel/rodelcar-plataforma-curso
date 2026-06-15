@@ -582,9 +582,17 @@ async def player_curso(
         )
 
     pct_curso = round(soma_pct / total, 1) if total else 0.0
-    # Concluído = todas as aulas feitas E todos os quizzes ativos aprovados.
+    # Concluído = matrícula ATIVA + todas as aulas feitas + todos os quizzes ativos
+    # aprovados. O status ativo entra aqui para casar com o gate do certificado
+    # (que recusa matrícula inativa): sem isso, um aluno expirado veria "concluído"
+    # e o botão de certificado, mas tomaria 409 ao emitir.
     quizzes_ok = all(q.id in aprovados for q in quiz_rows)
-    concluido = total > 0 and concluidas == total and quizzes_ok
+    concluido = (
+        matricula.status == StatusMatricula.ativo
+        and total > 0
+        and concluidas == total
+        and quizzes_ok
+    )
 
     cert = (
         await db.execute(

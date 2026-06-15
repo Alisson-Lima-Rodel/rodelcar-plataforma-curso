@@ -6,12 +6,13 @@ das alternativas e a correção é feita no servidor no POST da tentativa.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
+from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
 from app.models import (
     Alternativa,
@@ -116,7 +117,9 @@ async def obter_quiz(
 
 
 @router.post("/{quiz_id}/tentativas", response_model=TentativaResultado)
+@limiter.limit("20/minute")
 async def responder_quiz(
+    request: Request,
     quiz_id: uuid.UUID,
     body: TentativaInput,
     aluno: Aluno = Depends(get_current_aluno),
@@ -131,8 +134,16 @@ async def responder_quiz(
         q.id: next((a.id for a in q.alternativas if a.correta), None)
         for q in quiz.questoes
     }
+    # Alternativas válidas por questão (só do PRÓPRIO quiz).
+    alts_de = {q.id: {a.id for a in q.alternativas} for q in quiz.questoes}
     # Resposta do aluno: {questao_id: alternativa_id} (última vence se repetir).
-    escolha = {r.questao_id: r.alternativa_id for r in body.respostas}
+    # Filtra pares que não pertencem a este quiz — não muda a nota (calculada
+    # contra `correta_de`) e impede gravar UUIDs arbitrários no JSONB.
+    escolha = {
+        r.questao_id: r.alternativa_id
+        for r in body.respostas
+        if r.alternativa_id in alts_de.get(r.questao_id, ())
+    }
 
     total = len(quiz.questoes)
     corretas = sum(

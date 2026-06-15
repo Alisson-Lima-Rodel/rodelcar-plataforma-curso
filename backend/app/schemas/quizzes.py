@@ -31,7 +31,10 @@ class RespostaItem(BaseModel):
 
 
 class TentativaInput(BaseModel):
-    respostas: list[RespostaItem]
+    # Teto = nº máximo de questões de um quiz (QuizUpsert.questoes max_length).
+    # Sem isso, o aluno podia enviar uma lista gigante de UUIDs e inflar o JSONB
+    # gravado em TentativaQuiz.respostas (abuso de armazenamento).
+    respostas: list[RespostaItem] = Field(max_length=50)
 
 
 class TentativaResultado(BaseModel):
@@ -56,7 +59,10 @@ class QuizUpsert(BaseModel):
     titulo: str = Field(min_length=2, max_length=200)
     nota_corte: float = Field(default=70, ge=1, le=100)
     ativo: bool = True
-    questoes: list[QuestaoAdmin] = Field(default_factory=list, max_length=50)
+    # min_length=1: um quiz ATIVO sem questões nunca pode ser "passado" pelo aluno
+    # (responder_quiz devolve 409), mas o gate do certificado o contaria — travando
+    # o certificado para sempre. Exigir ao menos 1 questão fecha esse buraco.
+    questoes: list[QuestaoAdmin] = Field(min_length=1, max_length=50)
 
 
 class AlternativaAdminOut(AlternativaAdmin):

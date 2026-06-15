@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -172,7 +173,16 @@ async def emitir_certificado(
 
     cert = Certificado(matricula_id=matricula.id, codigo_verificacao=codigo)
     db.add(cert)
-    await db.commit()
+    try:
+        # uq Certificado.matricula_id: 2 POSTs concorrentes passam pelo check de
+        # existência juntos; o 2º insert viola a unique → 409 limpo, não 500.
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise _erro(
+            409, "CERTIFICADO_JA_EMITIDO",
+            "Certificado já emitido para esta matrícula.",
+        )
     await db.refresh(cert)
 
     # E-mail do certificado (best-effort, fora da transação). Emissão é única por

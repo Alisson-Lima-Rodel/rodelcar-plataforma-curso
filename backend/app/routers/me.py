@@ -286,6 +286,17 @@ async def matricular_gratis(
             )
         ).scalar_one_or_none()
 
+    def _renovar_se_preciso(m: Matricula) -> None:
+        # Já vigente → NÃO estende: senão o aluno renovaria infinitamente (reset da
+        # expiração a cada chamada) e o curso gratuito nunca venceria.
+        vigente = (
+            m.status == StatusMatricula.ativo
+            and _exp_aware(m.data_expiracao) > datetime.now(timezone.utc)
+        )
+        if not vigente:
+            m.status = StatusMatricula.ativo
+            m.data_expiracao = nova_exp
+
     mat = await _carrega()
     ja = mat is not None
     if mat is None:
@@ -306,12 +317,10 @@ async def matricular_gratis(
             ja = True
             if mat is None:  # pragma: no cover (defensivo)
                 raise _err(409, "MATRICULA_CONFLITO", "Tente novamente.")
-            mat.status = StatusMatricula.ativo
-            mat.data_expiracao = nova_exp
+            _renovar_se_preciso(mat)
             await db.commit()
     else:
-        mat.status = StatusMatricula.ativo
-        mat.data_expiracao = nova_exp
+        _renovar_se_preciso(mat)
         await db.commit()
     await db.refresh(mat)
     return MatriculaGratuitaResponse(
@@ -328,7 +337,13 @@ async def minhas_indicacoes(
     Gera o código na hora para contas antigas (criadas antes do recurso)."""
     if not aluno.codigo_indicacao:
         aluno.codigo_indicacao = await codigo_unico_indicacao(db)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Dois GETs simultâneos geraram códigos diferentes p/ o mesmo aluno; o
+            # unique barra o 2º. Recarrega o que ficou (sem 500 num GET).
+            await db.rollback()
+            await db.refresh(aluno)
 
     total = await db.scalar(
         select(func.count(Indicacao.id)).where(Indicacao.indicador_id == aluno.id)

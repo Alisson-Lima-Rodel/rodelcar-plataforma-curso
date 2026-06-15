@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -98,14 +99,29 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
             )
         )
 
-    aluno = Aluno(
-        nome=body.nome,
-        email=body.email,
-        senha_hash=hash_password(body.senha),
-        codigo_indicacao=await codigo_unico_indicacao(db),
-    )
-    db.add(aluno)
-    await db.flush()  # gera aluno.id
+    # Cria a conta com retry: a corrida no `codigo_indicacao` (TOCTOU do SELECT de
+    # unicidade) ou um e-mail tomado em paralelo viram IntegrityError — tratamos
+    # em vez de estourar 500.
+    senha_hash = hash_password(body.senha)
+    aluno = None
+    for _ in range(3):
+        aluno = Aluno(
+            nome=body.nome,
+            email=body.email,
+            senha_hash=senha_hash,
+            codigo_indicacao=await codigo_unico_indicacao(db),
+        )
+        db.add(aluno)
+        try:
+            await db.flush()  # gera aluno.id; dispara unique de email/codigo
+            break
+        except IntegrityError:
+            await db.rollback()
+            if await db.scalar(select(Aluno.id).where(Aluno.email == body.email)):
+                raise _err(409, "EMAIL_JA_CADASTRADO", "Já existe uma conta com esse e-mail.")
+            aluno = None  # colisão de código → tenta de novo
+    if aluno is None:  # pragma: no cover (colisão repetida é praticamente impossível)
+        raise _err(409, "CADASTRO_CONFLITO", "Não foi possível concluir. Tente novamente.")
     if indicador_id is not None and indicador_id != aluno.id:
         db.add(Indicacao(indicador_id=indicador_id, indicado_id=aluno.id))
     return await _emitir_tokens(str(aluno.id), aluno.token_version, db)

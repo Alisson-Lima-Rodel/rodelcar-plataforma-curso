@@ -284,6 +284,20 @@ async def _job_google_reviews() -> None:
         logger.exception("Erro não tratado no job de avaliações do Google")
 
 
+async def _job_recompensar_indicacoes() -> None:
+    """Retoma recompensas de indicação que ficaram presas (ex.: Stripe fora no
+    webhook). De hora em hora p/ o aluno não esperar demais pelo cupom."""
+    try:
+        from app.core.referral import processar_recompensas_pendentes
+
+        async with AsyncSessionLocal() as db:
+            feitas = await processar_recompensas_pendentes(db)
+        if feitas:
+            logger.info("Recompensas de indicação retomadas: %d", feitas)
+    except Exception:
+        logger.exception("Erro não tratado no job de recompensas de indicação")
+
+
 def iniciar_scheduler() -> None:
     scheduler.add_job(
         _job_vigencia_diaria,
@@ -309,10 +323,17 @@ def iniciar_scheduler() -> None:
         id="google_reviews",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _job_recompensar_indicacoes,
+        CronTrigger(minute=45, timezone="UTC"),  # de hora em hora
+        id="recompensar_indicacoes",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "Scheduler iniciado — vigência 06:00, limpeza de tokens 06:10, "
-        "expurgo de leads 06:20, avaliações Google 06:30 (UTC)"
+        "expurgo de leads 06:20, avaliações Google 06:30, recompensas de "
+        "indicação a cada hora (UTC)"
     )
 
 

@@ -5,6 +5,7 @@ import stripe
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import EmailStr
 from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -173,11 +174,26 @@ async def criar_curso(body: CursoCreate, db: AsyncSession = Depends(get_db)):
 
 
 @cursos.patch("/{curso_id}", response_model=CursoAdmin)
-async def atualizar_curso(curso_id: uuid.UUID, body: CursoUpdate, db: AsyncSession = Depends(get_db)):
+async def atualizar_curso(
+    curso_id: uuid.UUID,
+    body: CursoUpdate,
+    atual: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
     curso = await db.get(Curso, curso_id)
     if curso is None:
         raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")
     data = body.model_dump(exclude_unset=True)
+    # Marcar/desmarcar um curso como GRATUITO afeta receita → só Administrador.
+    if (
+        "gratuito" in data
+        and data["gratuito"] != curso.gratuito
+        and atual.papel != PapelAdmin.administrador
+    ):
+        raise _err(
+            403, "SO_ADMIN_GRATUITO",
+            "Só um Administrador pode marcar/desmarcar um curso como gratuito.",
+        )
     if "slug" in data and data["slug"] != curso.slug:
         if await db.scalar(select(Curso.id).where(Curso.slug == data["slug"])):
             raise _err(409, "SLUG_EM_USO", "Já existe um curso com esse slug.")
@@ -709,7 +725,9 @@ router.include_router(avaliacoes)
 
 
 # ── Cupons de desconto (Stripe Coupon + Promotion Code) ───────────────────────
-cupons = APIRouter(prefix="/cupons", dependencies=[Depends(require_papel(*_CONTEUDO))])
+# Só Administrador: cupom mexe em RECEITA (desconto). Editor cuida de conteúdo,
+# não de descontos — reduz o risco de insider dar desconto preferencial.
+cupons = APIRouter(prefix="/cupons", dependencies=[Depends(require_papel(*_SO_ADMIN))])
 
 
 @cupons.get("", response_model=list[CupomAdmin])
@@ -721,13 +739,21 @@ async def listar_cupons(db: AsyncSession = Depends(get_db)):
 
 @cupons.post("", response_model=CupomAdmin, status_code=201)
 async def criar_cupom(body: CupomCreate, db: AsyncSession = Depends(get_db)):
-    if await db.scalar(select(Cupom.id).where(Cupom.codigo == body.codigo)):
-        raise _err(409, "CODIGO_EM_USO", "Já existe um cupom com esse código.")
     if not stripe_ativo():
         raise _err(
             400, "STRIPE_NAO_CONFIGURADO",
             "Sem Stripe configurado: o cupom não teria efeito no checkout.",
         )
+    # RESERVA o código no banco ANTES de tocar a Stripe: assim uma corrida no
+    # `codigo` (unique) é barrada aqui (409) sem deixar um Coupon órfão na Stripe.
+    obj = Cupom(**body.model_dump())
+    db.add(obj)
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise _err(409, "CODIGO_EM_USO", "Já existe um cupom com esse código.")
+
     validade_ts = int(body.validade.timestamp()) if body.validade else None
     try:
         coupon_id, promo_id = await criar_cupom_stripe(
@@ -735,13 +761,10 @@ async def criar_cupom(body: CupomCreate, db: AsyncSession = Depends(get_db)):
             max_resgates=body.max_resgates, validade_ts=validade_ts,
         )
     except stripe.error.StripeError:
+        await db.rollback()  # desfaz a reserva — nada commitado
         raise _err(502, "STRIPE_ERRO", "Falha ao criar o cupom na Stripe — nada salvo.")
-    obj = Cupom(
-        **body.model_dump(),
-        stripe_coupon_id=coupon_id,
-        stripe_promotion_code_id=promo_id,
-    )
-    db.add(obj)
+    obj.stripe_coupon_id = coupon_id
+    obj.stripe_promotion_code_id = promo_id
     await db.commit()
     await db.refresh(obj)
     return obj

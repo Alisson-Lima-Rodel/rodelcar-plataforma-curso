@@ -61,21 +61,31 @@ class TestMatriculaGratis:
             det = (await client.get(f"/api/v1/cursos/{slug}")).json()
             assert det["gratuito"] is True
 
-            # 2ª chamada → idempotente (reativa), ja_matriculado=true
+            # expiração após a 1ª matrícula
+            def _exp(mats_json):
+                m = next(m for m in mats_json["items"] if m["curso"]["slug"] == slug)
+                return m["data_expiracao"]
+
+            exp1 = _exp(
+                (await client.get("/api/v1/me/matriculas", headers=auth_headers)).json()
+            )
+
+            # 2ª chamada → idempotente, ja_matriculado=true
             r2 = await client.post(
                 f"/api/v1/me/matriculas/gratis/{slug}", headers=auth_headers
             )
             assert r2.status_code == 201
             assert r2.json()["ja_matriculado"] is True
 
-            # aparece em /me/matriculas como ativo
-            mats = (
+            # ainda ativo, e a expiração NÃO foi estendida (anti renovação infinita)
+            mats2 = (
                 await client.get("/api/v1/me/matriculas", headers=auth_headers)
             ).json()
             assert any(
                 m["curso"]["slug"] == slug and m["status"] == "ativo"
-                for m in mats["items"]
+                for m in mats2["items"]
             )
+            assert _exp(mats2) == exp1
         finally:
             async with AsyncSessionLocal() as db:
                 await db.execute(

@@ -304,7 +304,8 @@ class CupomCreate(BaseModel):
     @field_validator("valor")
     @classmethod
     def _valor_ok(cls, v: float, info) -> float:
-        if info.data.get("tipo") == "percentual" and not (0 < v <= 100):
+        # Stripe rejeita percent_off < 1; barra aqui (422) em vez de 502 depois.
+        if info.data.get("tipo") == "percentual" and not (1 <= v <= 100):
             raise ValueError("Percentual deve estar entre 1 e 100.")
         return v
 

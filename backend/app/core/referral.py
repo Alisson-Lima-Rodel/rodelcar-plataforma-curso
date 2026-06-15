@@ -13,7 +13,13 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.stripe_coupons import criar_cupom_stripe, stripe_ativo
+from sqlalchemy.exc import IntegrityError
+
+from app.core.stripe_coupons import (
+    arquivar_cupom_stripe,
+    criar_cupom_stripe,
+    stripe_ativo,
+)
 from app.models import Aluno, Cupom, Indicacao
 
 logger = logging.getLogger(__name__)
@@ -42,8 +48,12 @@ async def codigo_unico_indicacao(db: AsyncSession) -> str:
     return gerar_codigo() + secrets.token_hex(2).upper()  # praticamente impossível
 
 
-async def _cupom_recompensa(db: AsyncSession, aluno_id: uuid.UUID) -> Cupom | None:
-    """Cria 1 cupom de recompensa (Stripe + banco) para um aluno. None se falhar."""
+async def _cupom_recompensa(
+    db: AsyncSession, aluno_id: uuid.UUID, promos_criados: list[str]
+) -> Cupom | None:
+    """Cria 1 cupom de recompensa (Stripe + banco) para um aluno. Registra o
+    promotion_code em `promos_criados` p/ o caller arquivar se algo falhar depois.
+    None se a Stripe falhar."""
     codigo = gerar_codigo("INDICA-")
     validade = datetime.now(timezone.utc) + timedelta(days=RECOMPENSA_VALIDADE_DIAS)
     try:
@@ -54,6 +64,7 @@ async def _cupom_recompensa(db: AsyncSession, aluno_id: uuid.UUID) -> Cupom | No
     except Exception:
         logger.exception("Falha ao criar cupom de indicação na Stripe (aluno=%s)", aluno_id)
         return None
+    promos_criados.append(promo_id)
     cupom = Cupom(
         codigo=codigo,
         descricao="Recompensa indique-e-ganhe",
@@ -71,7 +82,9 @@ async def _cupom_recompensa(db: AsyncSession, aluno_id: uuid.UUID) -> Cupom | No
 
 async def processar_recompensa(db: AsyncSession, indicacao_id: uuid.UUID) -> bool:
     """Gera os cupons de AMBOS e marca a indicação como recompensada. Idempotente
-    (só age em status='compra_confirmada'). Best-effort: sem Stripe, não faz nada."""
+    (só age em status='compra_confirmada'). Best-effort: sem Stripe, não faz nada.
+    Em falha (Stripe down, colisão de código), arquiva os cupons já criados na
+    Stripe (sem órfãos) e deixa a indicação em 'compra_confirmada' p/ o job retomar."""
     indicacao = await db.get(Indicacao, indicacao_id)
     if indicacao is None or indicacao.status != "compra_confirmada":
         return False
@@ -79,15 +92,40 @@ async def processar_recompensa(db: AsyncSession, indicacao_id: uuid.UUID) -> boo
         logger.info("Stripe inativo — recompensa de indicação adiada (%s).", indicacao_id)
         return False
 
-    cupom_ind = await _cupom_recompensa(db, indicacao.indicador_id)
-    cupom_indicado = await _cupom_recompensa(db, indicacao.indicado_id)
-    if cupom_ind is None or cupom_indicado is None:
+    promos_criados: list[str] = []
+    try:
+        cupom_ind = await _cupom_recompensa(db, indicacao.indicador_id, promos_criados)
+        cupom_indicado = await _cupom_recompensa(db, indicacao.indicado_id, promos_criados)
+        if cupom_ind is None or cupom_indicado is None:
+            raise RuntimeError("cupom de recompensa nao criado")
+        await db.flush()  # colisão de código (improvável) -> IntegrityError aqui
+        indicacao.cupom_indicador_id = cupom_ind.id
+        indicacao.cupom_indicado_id = cupom_indicado.id
+        indicacao.status = "recompensado"
+        indicacao.recompensado_em = datetime.now(timezone.utc)
+        await db.commit()
+        return True
+    except (IntegrityError, RuntimeError, Exception):
         await db.rollback()
+        # Arquiva na Stripe os cupons que chegaram a ser criados (evita órfãos).
+        for promo_id in promos_criados:
+            await arquivar_cupom_stripe(promo_id)
+        logger.warning("Recompensa da indicação %s adiada (sera retentada).", indicacao_id)
         return False
-    await db.flush()
-    indicacao.cupom_indicador_id = cupom_ind.id
-    indicacao.cupom_indicado_id = cupom_indicado.id
-    indicacao.status = "recompensado"
-    indicacao.recompensado_em = datetime.now(timezone.utc)
-    await db.commit()
-    return True
+
+
+async def processar_recompensas_pendentes(db: AsyncSession, limite: int = 100) -> int:
+    """Retoma recompensas presas em 'compra_confirmada' (ex.: Stripe fora no
+    webhook). Idempotente. Roda no scheduler. Retorna quantas foram recompensadas."""
+    ids = (
+        await db.execute(
+            select(Indicacao.id)
+            .where(Indicacao.status == "compra_confirmada")
+            .limit(limite)
+        )
+    ).scalars().all()
+    feitas = 0
+    for indicacao_id in ids:
+        if await processar_recompensa(db, indicacao_id):
+            feitas += 1
+    return feitas

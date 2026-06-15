@@ -270,6 +270,51 @@ class AvaliacaoStatusUpdate(BaseModel):
     status: StatusAprovacao  # "Aprovado" | "Pendente"
 
 
+# ── Cupons de desconto (Stripe Coupon + Promotion Code) ───────────────────────
+class CupomAdmin(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    codigo: str
+    descricao: str | None = None
+    tipo: str
+    valor: float
+    ativo: bool
+    max_resgates: int | None = None
+    validade: datetime | None = None
+    criado_em: datetime
+
+
+class CupomCreate(BaseModel):
+    codigo: str = Field(min_length=3, max_length=40)
+    descricao: str | None = Field(default=None, max_length=200)
+    tipo: Literal["percentual", "valor"] = "percentual"
+    valor: float = Field(gt=0)  # % (1-100) ou R$
+    max_resgates: int | None = Field(default=None, ge=0)  # 0/None = ilimitado
+    validade: datetime | None = None
+
+    @field_validator("codigo")
+    @classmethod
+    def _codigo_limpo(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Código só pode ter letras, números, '-' e '_'.")
+        return v
+
+    @field_validator("valor")
+    @classmethod
+    def _valor_ok(cls, v: float, info) -> float:
+        if info.data.get("tipo") == "percentual" and not (0 < v <= 100):
+            raise ValueError("Percentual deve estar entre 1 e 100.")
+        return v
+
+
+class CupomUpdate(BaseModel):
+    # Desconto/código são IMUTÁVEIS na Stripe — só descrição e ativo mudam.
+    descricao: str | None = Field(default=None, max_length=200)
+    ativo: bool | None = None
+
+
 # ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────
 class ReembolsoItem(BaseModel):
     matricula_id: uuid.UUID

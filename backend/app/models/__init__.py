@@ -526,3 +526,28 @@ class PlanoAssinatura(Base):
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = _created_at()
+
+
+class Cupom(Base):
+    """Cupom de desconto. Espelha um Coupon + Promotion Code da Stripe: o cliente
+    digita o `codigo` na tela hospedada do Checkout (allow_promotion_codes). O
+    desconto (% ou R$) é IMUTÁVEL na Stripe — editar troca só `ativo`/descrição.
+    Também é a recompensa do indique-e-ganhe (gerado por aluno).
+    """
+    __tablename__ = "cupons"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    codigo: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    descricao: Mapped[str | None] = mapped_column(String(200))
+    tipo: Mapped[str] = mapped_column(String(20))  # percentual | valor
+    valor: Mapped[float] = mapped_column(Numeric(10, 2))  # 20 (%) ou 50.00 (R$)
+    stripe_coupon_id: Mapped[str | None] = mapped_column(String(255))
+    stripe_promotion_code_id: Mapped[str | None] = mapped_column(String(255))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    max_resgates: Mapped[int | None] = mapped_column(Integer)
+    validade: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Origem: NULL = criado pelo admin; senão o aluno que ganhou (referral).
+    aluno_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("alunos.id", ondelete="SET NULL"), index=True
+    )
+    criado_em: Mapped[datetime] = _created_at()

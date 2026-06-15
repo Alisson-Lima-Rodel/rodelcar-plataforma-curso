@@ -24,11 +24,17 @@ from app.core.storage import MAX_BYTES, StorageError, storage_ativo, upload_imag
 from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
 from app.core.youtube import buscar_metadados
 from app.dependencies import get_current_admin, require_papel
+from app.core.stripe_coupons import (
+    arquivar_cupom_stripe,
+    criar_cupom_stripe,
+    set_cupom_ativo,
+)
 from app.models import (
     Admin,
     Aluno,
     Aula,
     Avaliacao,
+    Cupom,
     Curso,
     Depoimento,
     Faq,
@@ -73,6 +79,9 @@ from app.schemas.admin import (
     AlunoReembolsos,
     AvaliacaoAdminItem,
     AvaliacaoStatusUpdate,
+    CupomAdmin,
+    CupomCreate,
+    CupomUpdate,
     PlanoAssinaturaAdmin,
     PlanoAssinaturaCreate,
     PlanoAssinaturaUpdate,
@@ -697,6 +706,81 @@ async def excluir_avaliacao(avaliacao_id: uuid.UUID, db: AsyncSession = Depends(
 
 
 router.include_router(avaliacoes)
+
+
+# ── Cupons de desconto (Stripe Coupon + Promotion Code) ───────────────────────
+cupons = APIRouter(prefix="/cupons", dependencies=[Depends(require_papel(*_CONTEUDO))])
+
+
+@cupons.get("", response_model=list[CupomAdmin])
+async def listar_cupons(db: AsyncSession = Depends(get_db)):
+    return (
+        await db.execute(select(Cupom).order_by(Cupom.criado_em.desc()))
+    ).scalars().all()
+
+
+@cupons.post("", response_model=CupomAdmin, status_code=201)
+async def criar_cupom(body: CupomCreate, db: AsyncSession = Depends(get_db)):
+    if await db.scalar(select(Cupom.id).where(Cupom.codigo == body.codigo)):
+        raise _err(409, "CODIGO_EM_USO", "Já existe um cupom com esse código.")
+    if not stripe_ativo():
+        raise _err(
+            400, "STRIPE_NAO_CONFIGURADO",
+            "Sem Stripe configurado: o cupom não teria efeito no checkout.",
+        )
+    validade_ts = int(body.validade.timestamp()) if body.validade else None
+    try:
+        coupon_id, promo_id = await criar_cupom_stripe(
+            body.codigo, body.tipo, float(body.valor),
+            max_resgates=body.max_resgates, validade_ts=validade_ts,
+        )
+    except stripe.error.StripeError:
+        raise _err(502, "STRIPE_ERRO", "Falha ao criar o cupom na Stripe — nada salvo.")
+    obj = Cupom(
+        **body.model_dump(),
+        stripe_coupon_id=coupon_id,
+        stripe_promotion_code_id=promo_id,
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@cupons.patch("/{cupom_id}", response_model=CupomAdmin)
+async def atualizar_cupom(
+    cupom_id: uuid.UUID, body: CupomUpdate, db: AsyncSession = Depends(get_db)
+):
+    obj = await db.get(Cupom, cupom_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Cupom não encontrado.")
+    data = body.model_dump(exclude_unset=True)
+    # ativo sincroniza com o Promotion Code (liga/desliga o uso no checkout).
+    if "ativo" in data and obj.stripe_promotion_code_id and stripe_ativo():
+        try:
+            await set_cupom_ativo(obj.stripe_promotion_code_id, bool(data["ativo"]))
+        except stripe.error.StripeError:
+            raise _err(502, "STRIPE_ERRO", "Falha ao sincronizar com a Stripe.")
+    for k, v in data.items():
+        setattr(obj, k, v)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@cupons.delete("/{cupom_id}", status_code=204)
+async def excluir_cupom(cupom_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    obj = await db.get(Cupom, cupom_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Cupom não encontrado.")
+    if stripe_ativo():
+        await arquivar_cupom_stripe(obj.stripe_promotion_code_id)  # best-effort
+    await db.delete(obj)
+    await db.commit()
+    return Response(status_code=204)
+
+
+router.include_router(cupons)
 
 
 # ── Reembolsos (cancelamento pelo suporte) ────────────────────────────────────

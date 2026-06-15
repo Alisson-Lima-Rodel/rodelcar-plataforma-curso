@@ -57,6 +57,7 @@ export type EntityKey =
   | "courses"
   | "testimonials"
   | "plans"
+  | "cupons"
   | "videos"
   | "faq"
   | "admins";
@@ -262,6 +263,68 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       intervalo: "anual",
       preco: 499,
       status: "Ativo",
+    },
+  },
+  cupons: {
+    label: "Cupons",
+    singular: "cupom",
+    icon: "spark",
+    title: (it) => String(it.codigo),
+    search: (it) => `${it.codigo} ${it.descricao ?? ""}`,
+    filter: { key: "tipo", options: ["Todos", "percentual", "valor"] },
+    columns: [
+      { key: "codigo", label: "Código", kind: "strong" },
+      { key: "tipo", label: "Tipo", kind: "muted" },
+      { key: "valor", label: "Desconto", kind: "center" },
+      { key: "max_resgates", label: "Máx. usos", kind: "center" },
+      { key: "ativo", label: "Ativo", kind: "badgeAtivo" },
+    ],
+    fields: [
+      {
+        key: "codigo",
+        label: "Código",
+        type: "text",
+        col: "full",
+        hint: "Ex.: BEMVINDO20. Letras/números. Imutável depois de criado.",
+      },
+      {
+        key: "descricao",
+        label: "Descrição (interna)",
+        type: "text",
+        col: "full",
+      },
+      {
+        key: "tipo",
+        label: "Tipo de desconto",
+        type: "select",
+        options: ["percentual", "valor"],
+      },
+      {
+        key: "valor",
+        label: "Valor",
+        type: "number",
+        hint: "Percentual: 1 a 100. Valor: em reais. Imutável depois de criado.",
+      },
+      {
+        key: "max_resgates",
+        label: "Máximo de usos (0 = ilimitado)",
+        type: "number",
+      },
+      {
+        key: "ativo",
+        label: "Ativo (aceito no checkout)",
+        type: "toggle",
+        on: true,
+        off: false,
+      },
+    ],
+    defaults: {
+      codigo: "",
+      descricao: "",
+      tipo: "percentual",
+      valor: 10,
+      max_resgates: 0,
+      ativo: true,
     },
   },
   videos: {

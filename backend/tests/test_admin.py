@@ -27,6 +27,7 @@ def stripe_stub(monkeypatch):
         "product_create": [], "price_create": [],
         "price_modify": [], "product_modify": [],
         "refund": [], "sub_cancel": [],
+        "coupon_create": [], "promo_create": [], "promo_modify": [],
     }
 
     class _Stub:
@@ -63,6 +64,18 @@ def stripe_stub(monkeypatch):
     def invoice_payment_list(**kw):
         return {"data": [{"payment": {"type": "payment_intent", "payment_intent": "pi_da_invoice"}}]}
 
+    def coupon_create(**kw):
+        chamadas["coupon_create"].append(kw)
+        return _Stub(id=f"coup_stub_{len(chamadas['coupon_create'])}")
+
+    def promo_create(**kw):
+        chamadas["promo_create"].append(kw)
+        return _Stub(id=f"promo_stub_{len(chamadas['promo_create'])}")
+
+    def promo_modify(promo_id, **kw):
+        chamadas["promo_modify"].append((promo_id, kw))
+        return _Stub(id=promo_id)
+
     monkeypatch.setattr(stripe.Product, "create", product_create)
     monkeypatch.setattr(stripe.Product, "modify", product_modify)
     monkeypatch.setattr(stripe.Price, "create", price_create)
@@ -71,6 +84,9 @@ def stripe_stub(monkeypatch):
     monkeypatch.setattr(stripe.Refund, "create", refund_create)
     monkeypatch.setattr(stripe.Subscription, "cancel", sub_cancel)
     monkeypatch.setattr(stripe.InvoicePayment, "list", invoice_payment_list)
+    monkeypatch.setattr(stripe.Coupon, "create", coupon_create)
+    monkeypatch.setattr(stripe.PromotionCode, "create", promo_create)
+    monkeypatch.setattr(stripe.PromotionCode, "modify", promo_modify)
     return chamadas
 
 
@@ -764,3 +780,111 @@ class TestAdminReembolsos:
             headers=suporte_headers,
         )
         assert resp.status_code == 200
+
+
+# ── Cupons de desconto (Stripe Coupon + Promotion Code) ───────────────────────
+class TestAdminCupons:
+    async def test_criar_percentual_sincroniza_stripe(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        codigo = f"OFF{uuid.uuid4().hex[:6].upper()}"
+        resp = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": codigo, "tipo": "percentual", "valor": 20},
+        )
+        assert resp.status_code == 201
+        c = resp.json()
+        assert c["codigo"] == codigo and c["tipo"] == "percentual"
+        # Stripe: Coupon com percent_off e Promotion Code com o código
+        assert stripe_stub["coupon_create"][-1]["percent_off"] == 20.0
+        assert stripe_stub["promo_create"][-1]["code"] == codigo
+        await client.delete(f"/api/v1/admin/cupons/{c['id']}", headers=admin_headers)
+
+    async def test_criar_valor_fixo(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        codigo = f"REAIS{uuid.uuid4().hex[:5].upper()}"
+        resp = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": codigo, "tipo": "valor", "valor": 50},
+        )
+        assert resp.status_code == 201
+        # amount_off em centavos
+        assert stripe_stub["coupon_create"][-1]["amount_off"] == 5000
+        assert stripe_stub["coupon_create"][-1]["currency"] == "brl"
+        await client.delete(
+            f"/api/v1/admin/cupons/{resp.json()['id']}", headers=admin_headers
+        )
+
+    async def test_codigo_minusculo_vira_maiusculo(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        codigo = f"low{uuid.uuid4().hex[:6]}"
+        resp = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": codigo, "tipo": "percentual", "valor": 10},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["codigo"] == codigo.upper()
+        await client.delete(
+            f"/api/v1/admin/cupons/{resp.json()['id']}", headers=admin_headers
+        )
+
+    async def test_codigo_duplicado_409(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        codigo = f"DUP{uuid.uuid4().hex[:6].upper()}"
+        r1 = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": codigo, "tipo": "percentual", "valor": 10},
+        )
+        assert r1.status_code == 201
+        r2 = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": codigo, "tipo": "percentual", "valor": 15},
+        )
+        assert r2.status_code == 409
+        assert r2.json()["error"]["code"] == "CODIGO_EM_USO"
+        await client.delete(
+            f"/api/v1/admin/cupons/{r1.json()['id']}", headers=admin_headers
+        )
+
+    async def test_percentual_acima_de_100_422(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        resp = await client.post(
+            "/api/v1/admin/cupons",
+            headers=admin_headers,
+            json={"codigo": "ABSURDO", "tipo": "percentual", "valor": 150},
+        )
+        assert resp.status_code == 422
+
+    async def test_desativar_sincroniza_promo(
+        self, client: AsyncClient, admin_headers: dict, stripe_stub
+    ):
+        codigo = f"ON{uuid.uuid4().hex[:6].upper()}"
+        c = (
+            await client.post(
+                "/api/v1/admin/cupons",
+                headers=admin_headers,
+                json={"codigo": codigo, "tipo": "percentual", "valor": 10},
+            )
+        ).json()
+        resp = await client.patch(
+            f"/api/v1/admin/cupons/{c['id']}",
+            headers=admin_headers,
+            json={"ativo": False},
+        )
+        assert resp.status_code == 200 and resp.json()["ativo"] is False
+        # promo desativado na Stripe
+        assert stripe_stub["promo_modify"][-1][1] == {"active": False}
+        await client.delete(f"/api/v1/admin/cupons/{c['id']}", headers=admin_headers)
+
+    async def test_cupom_exige_admin(self, client: AsyncClient, auth_headers: dict):
+        resp = await client.get("/api/v1/admin/cupons", headers=auth_headers)
+        assert resp.status_code in (401, 403)

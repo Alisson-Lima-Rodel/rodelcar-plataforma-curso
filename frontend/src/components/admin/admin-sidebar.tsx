@@ -12,6 +12,7 @@ const NAV: { id: string; label: string; icon: string }[] = [
   { id: "content", label: "Conteúdo", icon: "play" },
   { id: "testimonials", label: "Depoimentos", icon: "message" },
   { id: "plans", label: "Planos", icon: "infinity" },
+  { id: "cupons", label: "Cupons", icon: "spark" },
   { id: "refunds", label: "Reembolsos", icon: "arrowLeft" },
   { id: "reviews", label: "Avaliações", icon: "star" },
   { id: "videos", label: "Vídeos", icon: "play" },

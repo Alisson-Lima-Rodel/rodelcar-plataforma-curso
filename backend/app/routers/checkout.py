@@ -109,6 +109,8 @@ async def checkout_avulso(
         customer=customer_id,
         line_items=[{"price": curso.stripe_price_id, "quantity": 1}],
         metadata={"app_user_id": str(aluno.id), "curso_slug": curso.slug},
+        # Cliente digita o cupom na tela hospedada (admin cria em /admin/cupons).
+        allow_promotion_codes=True,
         success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=settings.STRIPE_CANCEL_URL,
     )
@@ -169,6 +171,7 @@ async def checkout_assinatura_cartao(
             customer=customer_id,
             line_items=[{"price": plano.stripe_price_id, "quantity": 1}],
             payment_method_types=["card"],
+            allow_promotion_codes=True,
             metadata={"app_user_id": str(aluno.id), "plano_id": str(plano.id)},
             subscription_data={"metadata": {"app_user_id": str(aluno.id)}},
             success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
@@ -201,6 +204,7 @@ async def checkout_assinatura_pix(
             customer=customer_id,
             line_items=[{"price": plano.stripe_price_id, "quantity": 1}],
             payment_method_types=["pix"],
+            allow_promotion_codes=True,
             payment_method_options={
                 "pix": {
                     "mandate_options": {

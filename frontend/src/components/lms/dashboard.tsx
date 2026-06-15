@@ -10,6 +10,7 @@ import { Reveal } from "@/components/ui/reveal";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getDashboard, getMatriculas } from "@/lib/auth-api";
+import { ReferralCard } from "./referral-card";
 import { lmsHref } from "@/lib/lms-nav";
 import type { Kpi as KpiType } from "@/lib/student-data";
 import { Kpi } from "./kpi";
@@ -325,6 +326,10 @@ export function Dashboard() {
           })}
         </Reveal>
       )}
+
+      <div style={{ marginTop: 28 }}>
+        <ReferralCard />
+      </div>
     </div>
   );
 }

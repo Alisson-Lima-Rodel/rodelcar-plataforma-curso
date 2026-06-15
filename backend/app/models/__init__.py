@@ -139,6 +139,10 @@ class Aluno(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
     )
+    # Código pessoal do indique-e-ganhe (gerado no cadastro; lazy p/ contas antigas).
+    codigo_indicacao: Mapped[str | None] = mapped_column(
+        String(20), unique=True, index=True
+    )
     criado_em: Mapped[datetime] = _created_at()
 
     matriculas: Mapped[list[Matricula]] = relationship(back_populates="aluno")
@@ -551,3 +555,35 @@ class Cupom(Base):
         ForeignKey("alunos.id", ondelete="SET NULL"), index=True
     )
     criado_em: Mapped[datetime] = _created_at()
+
+
+class Indicacao(Base):
+    """Indique-e-ganhe: liga o indicador (dono do código) ao indicado (quem se
+    cadastrou com ele). Quando o indicado faz a 1ª compra confirmada, AMBOS ganham
+    um cupom. 1 atribuição por indicado (não dá p/ ser indicado duas vezes).
+
+    Estados: pendente → compra_confirmada (webhook) → recompensado (cupons gerados).
+    """
+    __tablename__ = "indicacoes"
+    __table_args__ = (
+        UniqueConstraint("indicado_id", name="uq_indicacao_indicado"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    indicador_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("alunos.id", ondelete="CASCADE"), index=True
+    )
+    indicado_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("alunos.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pendente", server_default="pendente"
+    )
+    cupom_indicador_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cupons.id", ondelete="SET NULL")
+    )
+    cupom_indicado_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cupons.id", ondelete="SET NULL")
+    )
+    criado_em: Mapped[datetime] = _created_at()
+    recompensado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -17,9 +17,10 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.referral import codigo_unico_indicacao
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Matricula, RefreshToken, StatusMatricula
+from app.models import Aluno, Indicacao, Matricula, RefreshToken, StatusMatricula
 from app.schemas.auth import (
     LoginRequest,
     MeResponse,
@@ -85,9 +86,28 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     existe = await db.scalar(select(Aluno.id).where(Aluno.email == body.email))
     if existe is not None:
         raise _err(409, "EMAIL_JA_CADASTRADO", "Já existe uma conta com esse e-mail.")
-    aluno = Aluno(nome=body.nome, email=body.email, senha_hash=hash_password(body.senha))
+
+    # Resolve o indicador ANTES de criar a conta (código inválido = ignora, não
+    # bloqueia o cadastro). Auto-indicação é impossível: o indicador é uma conta
+    # pré-existente e o novo aluno ainda não tem código.
+    indicador_id = None
+    if body.codigo_indicacao:
+        indicador_id = await db.scalar(
+            select(Aluno.id).where(
+                Aluno.codigo_indicacao == body.codigo_indicacao.strip().upper()
+            )
+        )
+
+    aluno = Aluno(
+        nome=body.nome,
+        email=body.email,
+        senha_hash=hash_password(body.senha),
+        codigo_indicacao=await codigo_unico_indicacao(db),
+    )
     db.add(aluno)
     await db.flush()  # gera aluno.id
+    if indicador_id is not None and indicador_id != aluno.id:
+        db.add(Indicacao(indicador_id=indicador_id, indicado_id=aluno.id))
     return await _emitir_tokens(str(aluno.id), aluno.token_version, db)
 
 

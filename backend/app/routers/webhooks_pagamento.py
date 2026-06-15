@@ -28,9 +28,11 @@ from app.core.db import get_db
 from app.core.email_transacional import email_assinatura, email_compra_avulsa
 from app.core.notificacoes import enviar_email_bruto
 from app.core.ratelimit import limiter
+from app.core.referral import processar_recompensa
 from app.models import (
     Aluno,
     Curso,
+    Indicacao,
     Matricula,
     Pagamento,
     StatusMatricula,
@@ -160,12 +162,16 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
     # E-mails pós-compra: enfileirados pelos handlers em `outbox` e enviados SÓ
     # após o commit durável (fora da transação). Como cada event.id chega aqui
     # uma única vez (1ª camada de idempotência), não há e-mail duplicado.
+    # Referral: na 1ª compra do indicado, a indicação vira `compra_confirmada`
+    # (barato, na transação); os cupons de recompensa são gerados após o commit
+    # (best-effort, fora do caminho de pagamento).
     outbox: list[tuple[str, str, str, str]] = []
+    recompensas: list[uuid.UUID] = []
     try:
         if tipo in _EVENTOS_CONCESSAO:
-            await _conceder_acesso(db, event, obj, tipo, outbox)
+            await _conceder_acesso(db, event, obj, tipo, outbox, recompensas)
         elif tipo == "invoice.paid":
-            await _conceder_assinatura(db, event, obj, outbox)
+            await _conceder_assinatura(db, event, obj, outbox, recompensas)
         elif tipo == "customer.subscription.deleted":
             await _revogar_assinatura(db, obj)
         elif tipo in _EVENTOS_FALHA:
@@ -175,6 +181,11 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
         await db.commit()
         for para, assunto, corpo, ref in outbox:
             await enviar_email_bruto(para, assunto, corpo, log_ref=ref)
+        for indicacao_id in recompensas:
+            try:
+                await processar_recompensa(db, indicacao_id)
+            except Exception:
+                logger.exception("Falha ao recompensar indicação %s", indicacao_id)
     except IntegrityError:
         await db.rollback()
         logger.info(
@@ -183,12 +194,29 @@ async def _processar_stripe(db: AsyncSession, event: dict[str, Any]) -> None:
         )
 
 
+async def _marcar_indicacao(
+    db: AsyncSession, aluno_id: uuid.UUID, recompensas: list[uuid.UUID]
+) -> None:
+    """1ª compra do indicado → marca a indicação p/ recompensar (após o commit)."""
+    ind = (
+        await db.execute(
+            select(Indicacao).where(
+                Indicacao.indicado_id == aluno_id, Indicacao.status == "pendente"
+            )
+        )
+    ).scalar_one_or_none()
+    if ind is not None:
+        ind.status = "compra_confirmada"
+        recompensas.append(ind.id)
+
+
 async def _conceder_acesso(
     db: AsyncSession,
     event: dict[str, Any],
     session_obj: dict[str, Any],
     tipo: str,
     outbox: list[tuple[str, str, str, str]],
+    recompensas: list[uuid.UUID],
 ) -> None:
     # Cartão confirma já no completed (payment_status == "paid"). Pix chega como
     # completed NÃO pago e confirma depois em async_payment_succeeded.
@@ -249,6 +277,7 @@ async def _conceder_acesso(
     if aluno.email:
         assunto, corpo = email_compra_avulsa(aluno.nome, curso.titulo)
         outbox.append((aluno.email, assunto, corpo, str(aluno.id)))
+    await _marcar_indicacao(db, aluno.id, recompensas)
 
 
 async def _registrar_falha(
@@ -304,6 +333,7 @@ async def _conceder_assinatura(
     event: dict[str, Any],
     invoice: dict[str, Any],
     outbox: list[tuple[str, str, str, str]],
+    recompensas: list[uuid.UUID],
 ) -> None:
     """invoice.paid → libera/renova acesso ao catálogo inteiro até o fim do ciclo."""
     sub_id = _sub_id_do_invoice(invoice)
@@ -352,6 +382,8 @@ async def _conceder_assinatura(
     if invoice.get("billing_reason") == "subscription_create" and aluno.email:
         assunto, corpo = email_assinatura(aluno.nome)
         outbox.append((aluno.email, assunto, corpo, str(aluno.id)))
+    # Referral: a indicação pendente (status guard evita repetir em renovações).
+    await _marcar_indicacao(db, aluno.id, recompensas)
 
 
 async def _revogar_assinatura(db: AsyncSession, sub: dict[str, Any]) -> None:

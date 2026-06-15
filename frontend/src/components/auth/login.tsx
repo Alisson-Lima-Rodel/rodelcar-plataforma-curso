@@ -46,11 +46,21 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [ref, setRef] = useState<string | null>(null);
 
   // Compra iniciada no portal sem login: avisa e retoma após entrar/cadastrar.
+  // Link de indicação (?ref=): já abre no cadastro e guarda o código.
   useEffect(() => {
     if (lerCompraPendente()) {
       setNotice("Entre ou crie sua conta para concluir a compra.");
+    }
+    const r = new URLSearchParams(window.location.search).get("ref");
+    if (r) {
+      setRef(r);
+      setMode("signup");
+      setNotice(
+        "Você foi indicado! Crie sua conta e ganhe um cupom na 1ª compra.",
+      );
     }
   }, []);
 
@@ -82,7 +92,7 @@ export function Login() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        await register(nome.trim(), email.trim(), senha);
+        await register(nome.trim(), email.trim(), senha, ref);
         await concluirEntrada();
       } else {
         // Uma única tela de login: tenta admin primeiro; se a conta não for

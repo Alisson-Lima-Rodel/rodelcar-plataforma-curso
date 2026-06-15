@@ -49,6 +49,20 @@ class MatriculaGratuitaResponse(BaseModel):
     ja_matriculado: bool  # já tinha matrícula (reativada) vs. nova
 
 
+class CupomResumo(BaseModel):
+    codigo: str
+    tipo: str  # percentual | valor
+    valor: float
+    validade: datetime | None = None
+
+
+class IndicacaoResponse(BaseModel):
+    codigo: str  # código pessoal do aluno (para compartilhar)
+    total_indicados: int
+    total_recompensados: int
+    cupons: list[CupomResumo]  # cupons ganhos (recompensas), ainda ativos
+
+
 class UltimaAula(BaseModel):
     aula_id: uuid.UUID
     titulo: str

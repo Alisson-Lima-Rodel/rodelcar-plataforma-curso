@@ -20,11 +20,14 @@ from app.core.stripe_refunds import (
 )
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
+from app.core.referral import codigo_unico_indicacao
 from app.models import (
     Aluno,
     Aula,
     Certificado,
+    Cupom,
     Curso,
+    Indicacao,
     Matricula,
     Modulo,
     Pagamento,
@@ -35,8 +38,10 @@ from app.schemas.me import (
     Alerta,
     CancelamentoResultado,
     CertificadoResumo,
+    CupomResumo,
     CursoResumo,
     DashboardResponse,
+    IndicacaoResponse,
     MatriculaGratuitaResponse,
     MatriculaItem,
     MatriculaListResponse,
@@ -311,6 +316,48 @@ async def matricular_gratis(
     await db.refresh(mat)
     return MatriculaGratuitaResponse(
         matricula_id=mat.id, slug=curso.slug, status=mat.status.value, ja_matriculado=ja
+    )
+
+
+@router.get("/indicacoes", response_model=IndicacaoResponse)
+async def minhas_indicacoes(
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Indique-e-ganhe: código pessoal, total de indicados e cupons ganhos.
+    Gera o código na hora para contas antigas (criadas antes do recurso)."""
+    if not aluno.codigo_indicacao:
+        aluno.codigo_indicacao = await codigo_unico_indicacao(db)
+        await db.commit()
+
+    total = await db.scalar(
+        select(func.count(Indicacao.id)).where(Indicacao.indicador_id == aluno.id)
+    )
+    recompensados = await db.scalar(
+        select(func.count(Indicacao.id)).where(
+            Indicacao.indicador_id == aluno.id, Indicacao.status == "recompensado"
+        )
+    )
+    agora = datetime.now(timezone.utc)
+    cupons = (
+        await db.execute(
+            select(Cupom)
+            .where(Cupom.aluno_id == aluno.id, Cupom.ativo.is_(True))
+            .order_by(Cupom.criado_em.desc())
+        )
+    ).scalars().all()
+    cupons_validos = [
+        CupomResumo(
+            codigo=c.codigo, tipo=c.tipo, valor=float(c.valor), validade=c.validade
+        )
+        for c in cupons
+        if c.validade is None or _exp_aware(c.validade) > agora
+    ]
+    return IndicacaoResponse(
+        codigo=aluno.codigo_indicacao,
+        total_indicados=total or 0,
+        total_recompensados=recompensados or 0,
+        cupons=cupons_validos,
     )
 
 

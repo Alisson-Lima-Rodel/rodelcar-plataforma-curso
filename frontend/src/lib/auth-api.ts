@@ -56,11 +56,13 @@ export async function register(
   nome: string,
   email: string,
   senha: string,
+  codigoIndicacao?: string | null,
 ): Promise<void> {
   const t = await postJson<TokenResponse>("/auth/register", {
     nome,
     email,
     senha,
+    codigo_indicacao: codigoIndicacao || undefined,
   });
   setTokens(t.access_token, t.refresh_token);
 }
@@ -372,3 +374,20 @@ export const matricularGratis = (slug: string) =>
   authPost<MatriculaGratis>(
     `/me/matriculas/gratis/${encodeURIComponent(slug)}`,
   );
+
+// ── Indique e ganhe (referral) ────────────────────────────────────────────────
+export interface CupomGanho {
+  codigo: string;
+  tipo: string;
+  valor: number;
+  validade: string | null;
+}
+
+export interface Indicacoes {
+  codigo: string;
+  total_indicados: number;
+  total_recompensados: number;
+  cupons: CupomGanho[];
+}
+
+export const getIndicacoes = () => authGet<Indicacoes>("/me/indicacoes");

@@ -14,6 +14,8 @@ class RegisterRequest(BaseModel):
     # max 72: o bcrypt trunca silenciosamente em 72 bytes — alinhar o limite evita
     # que parte da senha seja ignorada sem o usuário saber. min 8: piso razoável.
     senha: str = Field(min_length=8, max_length=72)
+    # Indique-e-ganhe: código de quem indicou (opcional; vem do ?ref= no cadastro).
+    codigo_indicacao: str | None = Field(default=None, max_length=20)
 
 
 class TokenResponse(BaseModel):

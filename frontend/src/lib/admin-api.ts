@@ -234,6 +234,46 @@ export const atualizarAula = (id: string, data: Record<string, unknown>) =>
 export const excluirAula = (id: string) =>
   adminFetch<void>(`/admin/aulas/${id}`, { method: "DELETE" });
 
+// ── Quiz do módulo (com gabarito) ─────────────────────────────────────────────
+export interface AdminAlternativa {
+  id?: string;
+  texto: string;
+  correta: boolean;
+}
+export interface AdminQuestao {
+  id?: string;
+  enunciado: string;
+  alternativas: AdminAlternativa[];
+}
+export interface AdminQuiz {
+  id: string;
+  modulo_id: string;
+  titulo: string;
+  nota_corte: number;
+  ativo: boolean;
+  questoes: AdminQuestao[];
+}
+
+export const getQuizAdmin = (moduloId: string) =>
+  adminFetch<AdminQuiz | null>(`/admin/modulos/${moduloId}/quiz`);
+
+export const salvarQuiz = (
+  moduloId: string,
+  data: {
+    titulo: string;
+    nota_corte: number;
+    ativo: boolean;
+    questoes: AdminQuestao[];
+  },
+) =>
+  adminFetch<AdminQuiz>(`/admin/modulos/${moduloId}/quiz`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const excluirQuiz = (moduloId: string) =>
+  adminFetch<void>(`/admin/modulos/${moduloId}/quiz`, { method: "DELETE" });
+
 // ── CRUD genérico ─────────────────────────────────────────────────────────────
 export type AdminRow = Record<string, unknown> & { id: string };
 

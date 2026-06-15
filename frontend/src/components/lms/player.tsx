@@ -16,17 +16,20 @@ import {
   type PlayerModulo,
 } from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
+import { QuizTaker } from "./quiz-taker";
 
 function ModuleNav({
   modules,
   currentId,
   initialOpen,
   onPick,
+  onQuiz,
 }: {
   modules: PlayerModulo[];
   currentId: string | null;
   initialOpen: number;
   onPick: (id: string) => void;
+  onQuiz: (quizId: string) => void;
 }) {
   const [open, setOpen] = useState(initialOpen);
   useEffect(() => setOpen(initialOpen), [initialOpen]);
@@ -80,7 +83,11 @@ function ModuleNav({
             </button>
             <div
               className="acc-body"
-              style={{ maxHeight: isOpen ? m.aulas.length * 56 + 8 : 0 }}
+              style={{
+                maxHeight: isOpen
+                  ? (m.aulas.length + (m.quiz ? 1 : 0)) * 56 + 8
+                  : 0,
+              }}
             >
               <div style={{ padding: "4px 8px 8px" }}>
                 {m.aulas.map((a) => {
@@ -118,6 +125,43 @@ function ModuleNav({
                     </div>
                   );
                 })}
+                {m.quiz && (
+                  <div
+                    className="lesson"
+                    onClick={() => onQuiz(m.quiz!.id)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <span
+                      className={`lesson-check ${m.quiz.aprovado ? "done" : ""}`.trim()}
+                    >
+                      {m.quiz.aprovado ? (
+                        <Icon name="check" size={13} stroke={3} />
+                      ) : (
+                        <Icon name="star" size={11} />
+                      )}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: "0.88rem",
+                        fontWeight: 600,
+                        color: "var(--text)",
+                      }}
+                    >
+                      {m.quiz.titulo}
+                    </span>
+                    <span
+                      className="tag-mono"
+                      style={{
+                        color: m.quiz.aprovado
+                          ? "var(--success)"
+                          : "var(--primary)",
+                      }}
+                    >
+                      {m.quiz.aprovado ? "aprovado" : "fazer"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -233,6 +277,7 @@ export function Player() {
   );
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [tab, setTab] = useState("materiais");
+  const [quizId, setQuizId] = useState<string | null>(null);
 
   // slug vem de ?slug= ; na falta, usa a primeira matrícula do aluno.
   useEffect(() => {
@@ -531,10 +576,21 @@ export function Player() {
               currentId={currentId}
               initialOpen={currentLesson?.mi ?? 0}
               onPick={setCurrentId}
+              onQuiz={setQuizId}
             />
           </div>
         </aside>
       </div>
+      {quizId && (
+        <QuizTaker
+          quizId={quizId}
+          onClose={() => setQuizId(null)}
+          onPassed={() => {
+            qc.invalidateQueries({ queryKey: ["me", "player", slug] });
+            qc.invalidateQueries({ queryKey: ["quiz", quizId] });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   type AdminAula,
   type AdminModulo,
 } from "@/lib/admin-api";
+import { QuizEditor } from "./quiz-editor";
 
 function durLabel(seg: number): string {
   const m = Math.floor(seg / 60);
@@ -116,6 +117,10 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
     moduloId: string;
     aula?: AdminAula;
   } | null>(null);
+  const [quizModulo, setQuizModulo] = useState<{
+    id: string;
+    titulo: string;
+  } | null>(null);
 
   useEffect(() => {
     ADMIN_CRUD.courses
@@ -206,6 +211,14 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
       className="content blueprint"
       style={{ maxWidth: 980, position: "relative" }}
     >
+      {quizModulo && (
+        <QuizEditor
+          moduloId={quizModulo.id}
+          moduloTitulo={quizModulo.titulo}
+          onClose={() => setQuizModulo(null)}
+          onToast={onToast}
+        />
+      )}
       <div
         className="flex center gap-3"
         style={{ marginBottom: 20, flexWrap: "wrap" }}
@@ -254,6 +267,15 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
                 <span className="tag-mono subtle">
                   {m.aulas.length} aula(s)
                 </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon="star"
+                  onClick={() => setQuizModulo({ id: m.id, titulo: m.titulo })}
+                  disabled={busy}
+                >
+                  Quiz
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"

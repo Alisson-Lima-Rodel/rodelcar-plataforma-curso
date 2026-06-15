@@ -241,11 +241,18 @@ export interface PlayerAula {
   percentual: number;
 }
 
+export interface PlayerQuizResumo {
+  id: string;
+  titulo: string;
+  aprovado: boolean;
+}
+
 export interface PlayerModulo {
   id: string;
   titulo: string;
   ordem: number;
   aulas: PlayerAula[];
+  quiz: PlayerQuizResumo | null;
 }
 
 export interface PlayerCurso {
@@ -391,3 +398,36 @@ export interface Indicacoes {
 }
 
 export const getIndicacoes = () => authGet<Indicacoes>("/me/indicacoes");
+
+// ── Quiz (aluno) ──────────────────────────────────────────────────────────────
+export interface QuizAlternativa {
+  id: string;
+  texto: string;
+}
+export interface QuizQuestao {
+  id: string;
+  enunciado: string;
+  alternativas: QuizAlternativa[];
+}
+export interface QuizAluno {
+  id: string;
+  titulo: string;
+  nota_corte: number;
+  aprovado: boolean;
+  melhor_nota: number | null;
+  questoes: QuizQuestao[];
+}
+export interface QuizResultado {
+  nota: number;
+  aprovado: boolean;
+  corretas: number;
+  total: number;
+}
+
+export const getQuiz = (quizId: string) =>
+  authGet<QuizAluno>(`/quizzes/${quizId}`);
+
+export const responderQuiz = (
+  quizId: string,
+  respostas: { questao_id: string; alternativa_id: string }[],
+) => authPost<QuizResultado>(`/quizzes/${quizId}/tentativas`, { respostas });

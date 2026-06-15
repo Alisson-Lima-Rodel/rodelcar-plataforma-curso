@@ -1,0 +1,19 @@
+# Config-as-code do serviço de backend no Railway.
+# Pré-requisito no dashboard: defina "Root Directory" = backend (monorepo), para
+# que o contexto de build seja esta pasta e o Dockerfile seja encontrado.
+#
+# O start fica a cargo do ENTRYPOINT do Dockerfile (entrypoint.sh): em produção
+# sobe uvicorn sem --reload, honrando $PORT (injetado pelo Railway).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# O job de vigência (APScheduler) precisa de UM processo vivo e único. Mantenha
+# 1 réplica no lançamento; escalar exige Redis no rate limit + trava no scheduler.
+numReplicas = 1
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

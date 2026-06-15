@@ -29,11 +29,13 @@ if [ "$IS_PROD" = "true" ]; then
     echo "      Sem isso o rate limit por IP pode ser burlado via X-Forwarded-For." >&2
     exit 1
   fi
+  # PORT: hosts gerenciados (Railway/Render) injetam a porta de escuta. Cai em
+  # 8000 quando não vem (Docker local / compose).
   exec uvicorn app.main:app \
-    --host 0.0.0.0 --port 8000 \
+    --host 0.0.0.0 --port "${PORT:-8000}" \
     --workers "${WEB_CONCURRENCY:-2}" \
     --proxy-headers --forwarded-allow-ips "$FORWARDED_ALLOW_IPS" \
     --no-server-header
 else
-  exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --reload
 fi

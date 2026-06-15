@@ -55,6 +55,11 @@ de admin não é público. Depois disso, gerencie a equipe pelo painel `/admin`.
 1. **New Project → Deploy from GitHub** → selecione o repositório.
 2. No serviço, **Settings → Root Directory = `backend`** (monorepo). O Railway lê o
    `backend/Dockerfile` e o `backend/railway.toml` (healthcheck `/health`, 1 réplica).
+   > ⚠️ **Sem isso o build falha** com `Railpack could not determine how to build the app`
+   > (ele tentou a raiz, que não tem Dockerfile). Se o log mostrar `using ... railpack` e
+   > listar `frontend/ backend/ docs/`, o Root Directory não foi aplicado. Com `backend`
+   > configurado, o log mostra `using Dockerfile`. Se ainda assim usar Railpack, em
+   > **Settings → Build** force **Builder = Dockerfile**.
 3. **Variables** — defina (⚠️ = obrigatória; o backend recusa subir sem/ com valor fraco):
 
    **Núcleo / segurança**

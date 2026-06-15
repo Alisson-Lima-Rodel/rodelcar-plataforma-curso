@@ -32,6 +32,7 @@ from app.core.stripe_coupons import (
 )
 from app.models import (
     Admin,
+    Alternativa,
     Aluno,
     Aula,
     Avaliacao,
@@ -46,12 +47,20 @@ from app.models import (
     PapelAdmin,
     PlanoAssinatura,
     Progresso,
+    Questao,
+    Quiz,
     StatusMatricula,
     StatusPagamento,
     TipoCurso,
     Video,
 )
 from app.schemas.me import CancelamentoResultado
+from app.schemas.quizzes import (
+    AlternativaAdminOut,
+    QuestaoAdminOut,
+    QuizAdmin,
+    QuizUpsert,
+)
 
 # Escopos de papel (RBAC). Administrador faz tudo; Editor cuida de conteúdo
 # (cursos/planos/depoimentos/vídeos/FAQ); Suporte cuida de alunos.
@@ -655,6 +664,94 @@ async def excluir_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         )
     await _excluir_aulas(db, [aula_id])
     await db.commit()
+    return Response(status_code=204)
+
+
+# ── Quiz do módulo (com gabarito) ─────────────────────────────────────────────
+def _quiz_admin(quiz: Quiz) -> QuizAdmin:
+    return QuizAdmin(
+        id=quiz.id,
+        modulo_id=quiz.modulo_id,
+        titulo=quiz.titulo,
+        nota_corte=float(quiz.nota_corte),
+        ativo=quiz.ativo,
+        questoes=[
+            QuestaoAdminOut(
+                id=q.id,
+                enunciado=q.enunciado,
+                alternativas=[
+                    AlternativaAdminOut(id=a.id, texto=a.texto, correta=a.correta)
+                    for a in q.alternativas
+                ],
+            )
+            for q in quiz.questoes
+        ],
+    )
+
+
+async def _carregar_quiz(db: AsyncSession, modulo_id: uuid.UUID) -> Quiz | None:
+    return (
+        await db.execute(
+            select(Quiz)
+            .where(Quiz.modulo_id == modulo_id)
+            .options(selectinload(Quiz.questoes).selectinload(Questao.alternativas))
+        )
+    ).scalar_one_or_none()
+
+
+@conteudo.get("/modulos/{modulo_id}/quiz", response_model=QuizAdmin | None)
+async def obter_quiz_admin(modulo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    quiz = await _carregar_quiz(db, modulo_id)
+    return _quiz_admin(quiz) if quiz else None
+
+
+@conteudo.put("/modulos/{modulo_id}/quiz", response_model=QuizAdmin)
+async def upsert_quiz(
+    modulo_id: uuid.UUID, body: QuizUpsert, db: AsyncSession = Depends(get_db)
+):
+    """Cria ou substitui (full replace das questões) o quiz do módulo. Preserva o
+    id do quiz (e as tentativas dos alunos) — só troca o conjunto de questões."""
+    if not await db.get(Modulo, modulo_id):
+        raise _err(404, "NAO_ENCONTRADO", "Módulo não encontrado.")
+    for q in body.questoes:
+        if sum(1 for a in q.alternativas if a.correta) != 1:
+            raise _err(
+                422, "QUESTAO_SEM_GABARITO",
+                "Cada questão precisa de exatamente UMA alternativa correta.",
+            )
+
+    quiz = await _carregar_quiz(db, modulo_id)
+    if quiz is None:
+        quiz = Quiz(
+            modulo_id=modulo_id, titulo=body.titulo,
+            nota_corte=body.nota_corte, ativo=body.ativo,
+        )
+        db.add(quiz)
+        await db.flush()
+    else:
+        quiz.titulo = body.titulo
+        quiz.nota_corte = body.nota_corte
+        quiz.ativo = body.ativo
+        await db.execute(delete(Questao).where(Questao.quiz_id == quiz.id))
+        await db.flush()
+    for i, q in enumerate(body.questoes):
+        questao = Questao(quiz_id=quiz.id, enunciado=q.enunciado, ordem=i)
+        db.add(questao)
+        await db.flush()
+        for j, a in enumerate(q.alternativas):
+            db.add(Alternativa(
+                questao_id=questao.id, texto=a.texto, correta=a.correta, ordem=j
+            ))
+    await db.commit()
+    return _quiz_admin(await _carregar_quiz(db, modulo_id))
+
+
+@conteudo.delete("/modulos/{modulo_id}/quiz", status_code=204)
+async def excluir_quiz(modulo_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    quiz = await db.scalar(select(Quiz).where(Quiz.modulo_id == modulo_id))
+    if quiz is not None:
+        await db.delete(quiz)  # cascateia questões/alternativas/tentativas
+        await db.commit()
     return Response(status_code=204)
 
 

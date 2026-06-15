@@ -32,7 +32,9 @@ from app.models import (
     Modulo,
     Pagamento,
     Progresso,
+    Quiz,
     StatusMatricula,
+    TentativaQuiz,
 )
 from app.schemas.me import (
     Alerta,
@@ -48,6 +50,7 @@ from app.schemas.me import (
     PlayerAula,
     PlayerCursoResponse,
     PlayerModulo,
+    PlayerQuizResumo,
     ResumoDashboard,
     UltimaAula,
 )
@@ -517,6 +520,31 @@ async def player_curso(
     ).scalars().all()
     pmap = {p.aula_id: p for p in progs}
 
+    # Quizzes ATIVOS do curso (por módulo) + quais a matrícula já passou.
+    quiz_rows = (
+        await db.execute(
+            select(Quiz)
+            .join(Modulo, Quiz.modulo_id == Modulo.id)
+            .where(Modulo.curso_id == curso.id, Quiz.ativo.is_(True))
+        )
+    ).scalars().all()
+    quiz_por_modulo = {q.modulo_id: q for q in quiz_rows}
+    aprovados: set = set()
+    if quiz_rows:
+        aprovados = set(
+            (
+                await db.execute(
+                    select(TentativaQuiz.quiz_id)
+                    .where(
+                        TentativaQuiz.matricula_id == matricula.id,
+                        TentativaQuiz.quiz_id.in_([q.id for q in quiz_rows]),
+                        TentativaQuiz.aprovado.is_(True),
+                    )
+                    .distinct()
+                )
+            ).scalars().all()
+        )
+
     modulos: list[PlayerModulo] = []
     total = 0
     concluidas = 0
@@ -539,12 +567,24 @@ async def player_curso(
                     percentual=pct,
                 )
             )
+        quiz_m = quiz_por_modulo.get(m.id)
         modulos.append(
-            PlayerModulo(id=m.id, titulo=m.titulo, ordem=m.ordem, aulas=aulas)
+            PlayerModulo(
+                id=m.id, titulo=m.titulo, ordem=m.ordem, aulas=aulas,
+                quiz=(
+                    PlayerQuizResumo(
+                        id=quiz_m.id, titulo=quiz_m.titulo,
+                        aprovado=quiz_m.id in aprovados,
+                    )
+                    if quiz_m is not None else None
+                ),
+            )
         )
 
     pct_curso = round(soma_pct / total, 1) if total else 0.0
-    concluido = total > 0 and concluidas == total
+    # Concluído = todas as aulas feitas E todos os quizzes ativos aprovados.
+    quizzes_ok = all(q.id in aprovados for q in quiz_rows)
+    concluido = total > 0 and concluidas == total and quizzes_ok
 
     cert = (
         await db.execute(

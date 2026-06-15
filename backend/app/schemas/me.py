@@ -97,11 +97,18 @@ class PlayerAula(BaseModel):
     percentual: float
 
 
+class PlayerQuizResumo(BaseModel):
+    id: uuid.UUID
+    titulo: str
+    aprovado: bool  # o aluno já passou neste quiz?
+
+
 class PlayerModulo(BaseModel):
     id: uuid.UUID
     titulo: str
     ordem: int
     aulas: list[PlayerAula]
+    quiz: PlayerQuizResumo | None = None  # quiz ATIVO do módulo (se houver)
 
 
 class CertificadoResumo(BaseModel):

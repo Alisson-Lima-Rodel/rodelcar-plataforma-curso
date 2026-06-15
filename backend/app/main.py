@@ -11,7 +11,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.core.scheduler import iniciar_scheduler, parar_scheduler
-from app.routers import admin, auth, aulas, avaliacoes, certificados, checkout, conteudo, cursos, depoimentos, internal, leads, me, progresso, webhooks_pagamento, webhooks_wa
+from app.routers import admin, auth, aulas, avaliacoes, certificados, checkout, conteudo, cursos, depoimentos, internal, leads, me, progresso, quizzes, webhooks_pagamento, webhooks_wa
 
 
 @asynccontextmanager
@@ -122,6 +122,7 @@ app.include_router(admin.router, prefix="/api/v1")
 app.include_router(me.router, prefix="/api/v1")
 app.include_router(aulas.router, prefix="/api/v1")
 app.include_router(progresso.router, prefix="/api/v1")
+app.include_router(quizzes.router, prefix="/api/v1")
 app.include_router(certificados.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
 app.include_router(webhooks_wa.router, prefix="/api/v1")

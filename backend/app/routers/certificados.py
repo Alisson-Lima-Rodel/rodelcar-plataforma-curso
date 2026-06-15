@@ -15,7 +15,8 @@ from app.core.notificacoes import enviar_email_bruto, enviar_whatsapp_texto
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
 from app.models import (
-    Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso, StatusMatricula,
+    Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso, Quiz,
+    StatusMatricula, TentativaQuiz,
 )
 from app.schemas.certificados import (
     CertificadoEnvioResponse,
@@ -131,6 +132,38 @@ async def emitir_certificado(
                 "details": None,
             }},
         )
+
+    # Gate de quiz: todo módulo do curso com quiz ATIVO precisa de uma tentativa
+    # aprovada nesta matrícula (assistir não basta; o aluno tem de PASSAR).
+    quizzes_ativos = set(
+        (
+            await db.execute(
+                select(Quiz.id)
+                .join(Modulo, Quiz.modulo_id == Modulo.id)
+                .where(Modulo.curso_id == matricula.curso_id, Quiz.ativo.is_(True))
+            )
+        ).scalars().all()
+    )
+    if quizzes_ativos:
+        aprovados = set(
+            (
+                await db.execute(
+                    select(TentativaQuiz.quiz_id)
+                    .where(
+                        TentativaQuiz.matricula_id == matricula.id,
+                        TentativaQuiz.quiz_id.in_(quizzes_ativos),
+                        TentativaQuiz.aprovado.is_(True),
+                    )
+                    .distinct()
+                )
+            ).scalars().all()
+        )
+        if aprovados != quizzes_ativos:
+            raise _erro(
+                409, "QUIZ_PENDENTE",
+                f"Você precisa passar em todos os quizzes "
+                f"({len(aprovados)}/{len(quizzes_ativos)} concluídos).",
+            )
 
     # Código não enumerável: token de 64 bits evita varredura do endpoint público
     # de verificação (que expõe nome do titular).

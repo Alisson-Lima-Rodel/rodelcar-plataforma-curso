@@ -587,3 +587,77 @@ class Indicacao(Base):
     )
     criado_em: Mapped[datetime] = _created_at()
     recompensado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Quiz(Base):
+    """Prova de um módulo. Para emitir o certificado, o aluno precisa assistir as
+    aulas E passar (nota >= nota_corte) nos quizzes ATIVOS de cada módulo do curso.
+    1 quiz por módulo.
+    """
+    __tablename__ = "quizzes"
+    __table_args__ = (UniqueConstraint("modulo_id", name="uq_quiz_modulo"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    modulo_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("modulos.id", ondelete="CASCADE"), index=True
+    )
+    titulo: Mapped[str] = mapped_column(String(200))
+    nota_corte: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=70, server_default="70"
+    )
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    criado_em: Mapped[datetime] = _created_at()
+
+    questoes: Mapped[list[Questao]] = relationship(
+        back_populates="quiz", order_by="Questao.ordem", cascade="all, delete-orphan"
+    )
+
+
+class Questao(Base):
+    __tablename__ = "questoes"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("quizzes.id", ondelete="CASCADE"), index=True
+    )
+    enunciado: Mapped[str] = mapped_column(Text())
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+    quiz: Mapped[Quiz] = relationship(back_populates="questoes")
+    alternativas: Mapped[list[Alternativa]] = relationship(
+        back_populates="questao",
+        order_by="Alternativa.ordem",
+        cascade="all, delete-orphan",
+    )
+
+
+class Alternativa(Base):
+    __tablename__ = "alternativas"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    questao_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("questoes.id", ondelete="CASCADE"), index=True
+    )
+    texto: Mapped[str] = mapped_column(String(500))
+    correta: Mapped[bool] = mapped_column(Boolean, default=False)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+    questao: Mapped[Questao] = relationship(back_populates="alternativas")
+
+
+class TentativaQuiz(Base):
+    """Tentativa de um quiz por uma matrícula. Guarda o histórico; o gate do
+    certificado olha se HÁ ao menos uma tentativa aprovada por (matrícula, quiz)."""
+    __tablename__ = "tentativas_quiz"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    matricula_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("matriculas.id", ondelete="CASCADE"), index=True
+    )
+    quiz_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("quizzes.id", ondelete="CASCADE"), index=True
+    )
+    nota: Mapped[float] = mapped_column(Numeric(5, 2))
+    aprovado: Mapped[bool] = mapped_column(Boolean, default=False)
+    respostas: Mapped[dict] = mapped_column(JSONB, default=dict)
+    criado_em: Mapped[datetime] = _created_at()

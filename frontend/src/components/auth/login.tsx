@@ -210,6 +210,20 @@ export function Login() {
             submit();
           }}
         >
+          {/* Topo só no mobile: o aside (com marca + "voltar") fica oculto,
+              então repõe aqui a logo e a saída para o site. */}
+          <div className="auth-mobile-top">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="btn btn-ghost btn-sm"
+              style={{ paddingLeft: 0 }}
+            >
+              <Icon name="arrowLeft" size={16} /> Voltar ao site
+            </button>
+            <Logo size="sm" tagline={false} />
+          </div>
+
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: "1.7rem", marginBottom: 6 }}>
               {TITLES[mode].h}

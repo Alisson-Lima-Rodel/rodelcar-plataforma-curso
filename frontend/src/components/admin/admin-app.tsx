@@ -47,14 +47,24 @@ export function AdminApp() {
   const [view, setView] = useState<View>("overview");
   const [toast, setToast] = useState<string | null>(null);
   const [pendingNew, setPendingNew] = useState<EntityKey | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (status === "unauthed") router.replace("/login");
   }, [status, router]);
 
+  // Trava o scroll do corpo enquanto a gaveta (mobile) está aberta.
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [navOpen]);
+
   const nav = (v: string) => {
     setPendingNew(null);
     setView(v as View);
+    setNavOpen(false);
     window.scrollTo(0, 0);
   };
   const newIn = (key: EntityKey) => {
@@ -85,11 +95,23 @@ export function AdminApp() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${navOpen ? " nav-open" : ""}`}>
+      <div
+        className="nav-scrim"
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
+      />
       <AdminSidebar view={view} onNav={nav} />
       <main style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div className="topbar">
-          <div>
+          <button
+            className="topbar-burger"
+            onClick={() => setNavOpen(true)}
+            aria-label="Abrir menu"
+          >
+            <Icon name="menu" size={20} />
+          </button>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div className="tag-mono" style={{ marginBottom: 3 }}>
               {t.crumb}
             </div>

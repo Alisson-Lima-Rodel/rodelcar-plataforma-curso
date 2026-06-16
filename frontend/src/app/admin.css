@@ -307,9 +307,25 @@
   .stat-strip {
     grid-template-columns: 1fr 1fr;
   }
+  .toolbar {
+    align-items: stretch;
+  }
 }
 @media (max-width: 640px) {
   .admin-overview-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 560px) {
+  /* No drawer estreito, o formulário de 2 colunas espreme os campos. */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .stat-strip {
+    grid-template-columns: 1fr;
+  }
+  .search {
+    min-width: 0;
+    width: 100%;
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@/components/ui/icon";
 import { activeLmsId } from "@/lib/lms-nav";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -27,11 +27,21 @@ export function LmsShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { status, aluno, logout } = useAuth();
   const t = TITLES[activeLmsId(pathname)] ?? TITLES.dashboard;
+  const [navOpen, setNavOpen] = useState(false);
 
   // Guarda de rota: sem sessão → manda pro login.
   useEffect(() => {
     if (status === "unauthed") router.replace("/login");
   }, [status, router]);
+
+  // Fecha a gaveta ao trocar de rota e trava o scroll do corpo enquanto aberta.
+  useEffect(() => setNavOpen(false), [pathname]);
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [navOpen]);
 
   if (status !== "authed" || !aluno) {
     return (
@@ -54,11 +64,23 @@ export function LmsShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="app-shell">
-      <Sidebar aluno={aluno} />
+    <div className={`app-shell${navOpen ? " nav-open" : ""}`}>
+      <div
+        className="nav-scrim"
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
+      />
+      <Sidebar aluno={aluno} onNavigate={() => setNavOpen(false)} />
       <main style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div className="topbar">
-          <div>
+          <button
+            className="topbar-burger"
+            onClick={() => setNavOpen(true)}
+            aria-label="Abrir menu"
+          >
+            <Icon name="menu" size={20} />
+          </button>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div className="tag-mono" style={{ marginBottom: 3 }}>
               {t.crumb}
             </div>

@@ -29,6 +29,10 @@
   width: 100%;
   max-width: 400px;
 }
+/* Cabeçalho mobile do login (logo + voltar): só aparece quando o aside some. */
+.auth-mobile-top {
+  display: none;
+}
 .input-group {
   position: relative;
 }
@@ -504,6 +508,13 @@
   }
   .auth-main {
     padding: 32px 20px;
+  }
+  .auth-mobile-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 24px;
   }
 
   .app-shell {

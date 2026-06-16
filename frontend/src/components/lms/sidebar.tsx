@@ -30,7 +30,13 @@ const ITEMS: { id: string; label: string; icon: string }[] = [
   { id: "community", label: "Comunidade", icon: "users" },
 ];
 
-export function Sidebar({ aluno }: { aluno: Me }) {
+export function Sidebar({
+  aluno,
+  onNavigate,
+}: {
+  aluno: Me;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const active = activeLmsId(pathname);
 
@@ -50,6 +56,7 @@ export function Sidebar({ aluno }: { aluno: Me }) {
         href="/"
         style={{ padding: "4px 10px 22px", display: "inline-block" }}
         aria-label="Início"
+        onClick={onNavigate}
       >
         <Logo size="md" tagline={false} />
       </Link>
@@ -60,6 +67,7 @@ export function Sidebar({ aluno }: { aluno: Me }) {
             key={it.id}
             href={lmsHref(it.id)}
             className={`nav-item ${active === it.id ? "active" : ""}`.trim()}
+            onClick={onNavigate}
           >
             <Icon name={it.icon} size={19} />
             {it.label}

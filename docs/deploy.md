@@ -14,6 +14,25 @@ Arquitetura de produção:
 
 ---
 
+## Checkpoint — o que bloqueia o lançamento vs o que pode esperar
+
+**Bloqueadores reais** (sem isso a app não funciona ou cobra errado):
+- Backend de pé (envs ⚠️ + fail-fast verde) com `DATABASE_URL` correto.
+- Frontend com `NEXT_PUBLIC_API_URL` → backend, e `CORS_ORIGINS` casando com a origem do front.
+- Stripe **live** (chave + webhook + `price_id`/cupom recriados) — só na hora de cobrar de verdade.
+
+**Opcionais — degradam gracioso, ligam depois sem tocar em código:**
+- **E-mail (SMTP):** sem ele a app roda normal; só não envia boas-vindas/confirmação/certificado
+  (envio é best-effort pós-commit, não trava o pagamento). Preencha `SMTP_*` quando tiver as credenciais.
+- **WhatsApp, Google Places, YouTube, Supabase Storage (upload de capa), `NEXT_PUBLIC_*` de SEO,
+  `NEXT_PUBLIC_PANDA_EMBED_BASE` (vídeo):** cada bloco some/dorme se a env faltar (vídeo vira placeholder).
+
+**Pausa segura recomendada:** suba **backend + frontend com Stripe em modo TESTE**, valide o fluxo
+inteiro com cartões de teste (sem gastar) e só então faça o **passo 4 (Stripe live)**. E-mail e os
+demais opcionais entram a qualquer momento depois.
+
+---
+
 ## 0. Pré-requisitos
 
 - Conta na Railway, Vercel, Supabase e Stripe.

@@ -17,6 +17,7 @@ import {
 } from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
 import { QuizTaker } from "./quiz-taker";
+import { SmartPlayer } from "./smart-player";
 
 function ModuleNav({
   modules,
@@ -404,43 +405,10 @@ export function Player() {
       <div className="player-grid">
         {/* MAIN */}
         <div>
-          <div className="video-stage">
-            <div
-              style={{ textAlign: "center", position: "relative", zIndex: 1 }}
-            >
-              <div
-                className="play-btn"
-                style={{
-                  width: 72,
-                  height: 72,
-                  background: "var(--primary)",
-                  color: "var(--primary-fg)",
-                  margin: "0 auto",
-                  boxShadow: "var(--glow)",
-                }}
-              >
-                <Icon name="play" size={28} />
-              </div>
-            </div>
-            <div className="video-controls">
-              <div className="scrub">
-                <span
-                  style={{ width: currentLesson?.concluida ? "100%" : "0%" }}
-                />
-              </div>
-              <div className="flex center between">
-                <div className="flex center gap-3">
-                  <Icon name="play" size={16} style={{ color: "#fff" }} />
-                  <span
-                    className="tag-mono"
-                    style={{ color: "rgba(255,255,255,0.8)" }}
-                  >
-                    {currentLesson?.duracao_label ?? "00:00"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SmartPlayer
+            videoId={aulaQ.data?.panda_video_id ?? null}
+            title={currentLesson?.titulo}
+          />
 
           {/* título + ação dominante */}
           <div

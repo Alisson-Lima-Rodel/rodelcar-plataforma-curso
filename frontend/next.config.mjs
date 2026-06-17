@@ -22,12 +22,15 @@ const csp = [
   "frame-ancestors 'none'", // reforça o X-Frame-Options
   "form-action 'self' https://checkout.stripe.com",
   // Next 14 injeta hidratação inline (sem nonce) → 'unsafe-inline'. Em dev o HMR usa eval.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  // O SmartPlayer SDK (api.v2.js) vem de player.pandavideo.com.br (fora do *.tv.).
+  `script-src 'self' 'unsafe-inline' https://player.pandavideo.com.br${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:", // thumbnails de curso vêm de CDN/Supabase arbitrário
   "font-src 'self'", // next/font auto-hospeda no build
   "frame-src 'self' https://checkout.stripe.com https://*.tv.pandavideo.com.br",
-  `connect-src 'self'${apiOrigin ? " " + apiOrigin : ""}${
+  // SDK/player fazem XHR/postMessage (player. + *.tv.); o uploader TUS (admin) é
+  // uploader-*.pandavideo.com.br → tudo coberto por *.pandavideo.com.br.
+  `connect-src 'self' https://*.pandavideo.com.br${apiOrigin ? " " + apiOrigin : ""}${
     isDev ? " ws: http://localhost:*" : ""
   }`,
   "manifest-src 'self'",

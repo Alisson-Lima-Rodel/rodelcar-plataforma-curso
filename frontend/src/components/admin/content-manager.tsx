@@ -10,9 +10,12 @@ import {
   atualizarModulo,
   criarAula,
   criarModulo,
+  enviarVideoPanda,
   excluirAula,
   excluirModulo,
+  gerarUploadAula,
   listarConteudo,
+  sincronizarAulaPanda,
   type AdminAula,
   type AdminModulo,
 } from "@/lib/admin-api";
@@ -47,6 +50,47 @@ function AulaForm({
     initial ? durLabel(initial.duracao_segundos) : "",
   );
   const [gratuita, setGratuita] = useState(initial?.gratuita ?? false);
+  const [upPct, setUpPct] = useState<number | null>(null);
+  const [upErr, setUpErr] = useState<string | null>(null);
+
+  const aulaId = initial?.id;
+
+  const enviarArquivo = async (file: File) => {
+    if (!aulaId) return;
+    setUpErr(null);
+    setUpPct(0);
+    try {
+      const info = await gerarUploadAula(aulaId, {
+        filename: file.name,
+        size: file.size,
+        content_type: file.type || undefined,
+      });
+      await enviarVideoPanda(info.upload_url, file, setUpPct);
+      setPanda(info.video_id);
+      setUpPct(100);
+      // Duração só fica pronta após a conversão; ignora se ainda convertendo.
+      try {
+        const s = await sincronizarAulaPanda(aulaId);
+        if (s.duracao_segundos) setDur(durLabel(s.duracao_segundos));
+      } catch {
+        /* convertendo ainda — admin sincroniza depois */
+      }
+    } catch (e) {
+      setUpErr(e instanceof Error ? e.message : "Falha no upload");
+      setUpPct(null);
+    }
+  };
+
+  const sincronizar = async () => {
+    if (!aulaId) return;
+    setUpErr(null);
+    try {
+      const s = await sincronizarAulaPanda(aulaId);
+      if (s.duracao_segundos) setDur(durLabel(s.duracao_segundos));
+    } catch (e) {
+      setUpErr(e instanceof Error ? e.message : "Falha ao sincronizar");
+    }
+  };
 
   return (
     <div
@@ -83,6 +127,49 @@ function AulaForm({
           Aula grátis (preview)
         </label>
       </div>
+      {aulaId ? (
+        <div className="flex center gap-3" style={{ flexWrap: "wrap" }}>
+          <label
+            className="btn btn-ghost btn-sm"
+            style={{ cursor: upPct !== null && upPct < 100 ? "wait" : "pointer" }}
+          >
+            <Icon name="file" size={15} /> Enviar vídeo
+            <input
+              type="file"
+              accept="video/*"
+              style={{ display: "none" }}
+              disabled={upPct !== null && upPct < 100}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) enviarArquivo(f);
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={sincronizar}
+          >
+            <Icon name="clock" size={14} /> Sincronizar duração
+          </button>
+          {upPct !== null && (
+            <span className="tag-mono">
+              {upPct < 100
+                ? `enviando ${upPct}%`
+                : "enviado ✓ (convertendo no Panda)"}
+            </span>
+          )}
+          {upErr && (
+            <span className="tag-mono" style={{ color: "var(--primary)" }}>
+              {upErr}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span className="tag-mono subtle">
+          Salve a aula para enviar o vídeo pelo Panda.
+        </span>
+      )}
       <div className="flex center gap-2">
         <Button
           size="sm"

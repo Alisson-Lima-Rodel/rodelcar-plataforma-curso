@@ -1,0 +1,127 @@
+"""Endpoints admin de upload/sync de vídeo (Panda), com o cliente Panda mockado.
+
+Valida a lógica do backend (gating por chave, gravação do video_id, preenchimento
+da duração) sem depender de credenciais reais nem de rede."""
+import uuid
+
+import pytest_asyncio
+from httpx import AsyncClient
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+import app.routers.admin as admin_mod
+from app.core.config import settings
+from app.models import Aula, Curso, Modulo, TipoCurso
+
+
+@pytest_asyncio.fixture
+async def aula_admin():
+    engine = create_async_engine(
+        settings.DATABASE_URL, connect_args=settings.db_connect_args
+    )
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        curso = Curso(
+            slug=f"test-panda-{uuid.uuid4().hex[:6]}",
+            titulo="Curso Panda",
+            tipo=TipoCurso.avulso,
+            preco=100.0,
+            validade_dias=365,
+        )
+        s.add(curso)
+        await s.flush()
+        modulo = Modulo(curso_id=curso.id, titulo="M1", ordem=1)
+        s.add(modulo)
+        await s.flush()
+        aula = Aula(
+            modulo_id=modulo.id,
+            titulo="Aula Panda",
+            panda_video_id="vid-existente",
+            duracao_segundos=0,
+            ordem=1,
+        )
+        s.add(aula)
+        await s.commit()
+        ids = {"curso_id": curso.id, "modulo_id": modulo.id, "aula_id": str(aula.id)}
+
+    yield ids, Session
+
+    async with Session() as s:
+        await s.execute(delete(Aula).where(Aula.id == uuid.UUID(ids["aula_id"])))
+        await s.execute(delete(Modulo).where(Modulo.id == ids["modulo_id"]))
+        await s.execute(delete(Curso).where(Curso.id == ids["curso_id"]))
+        await s.commit()
+    await engine.dispose()
+
+
+class TestUploadPanda:
+    async def test_sem_chave_retorna_503(
+        self, client: AsyncClient, admin_token: dict, aula_admin, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "")
+        ids, _ = aula_admin
+        resp = await client.post(
+            f"/api/v1/admin/aulas/{ids['aula_id']}/upload-url",
+            json={"filename": "aula.mp4", "size": 1024},
+            headers=admin_token,
+        )
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "PANDA_INDISPONIVEL"
+
+    async def test_gera_url_e_salva_video_id(
+        self, client: AsyncClient, admin_token: dict, aula_admin, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "testkey")
+
+        async def fake_criar_upload(*, filename, size, video_id=None, folder_id=None):
+            assert filename == "aula.mp4" and size == 2048
+            return {
+                "video_id": "vid-novo-123",
+                "upload_url": "https://uploader-us01.pandavideo.com.br/files/abc",
+            }
+
+        monkeypatch.setattr(admin_mod.panda, "criar_upload", fake_criar_upload)
+
+        ids, Session = aula_admin
+        resp = await client.post(
+            f"/api/v1/admin/aulas/{ids['aula_id']}/upload-url",
+            json={"filename": "aula.mp4", "size": 2048},
+            headers=admin_token,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["video_id"] == "vid-novo-123"
+        assert data["upload_url"].startswith("https://uploader-")
+
+        async with Session() as s:
+            a = await s.get(Aula, uuid.UUID(ids["aula_id"]))
+            assert a.panda_video_id == "vid-novo-123"
+
+    async def test_sync_preenche_duracao(
+        self, client: AsyncClient, admin_token: dict, aula_admin, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "testkey")
+
+        async def fake_obter_video(video_id):
+            return {
+                "length": 600,
+                "status": "CONVERTED",
+                "thumbnail": "https://b.tv/thumb.jpg",
+            }
+
+        monkeypatch.setattr(admin_mod.panda, "obter_video", fake_obter_video)
+
+        ids, Session = aula_admin
+        resp = await client.post(
+            f"/api/v1/admin/aulas/{ids['aula_id']}/sync-panda",
+            headers=admin_token,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["duracao_segundos"] == 600
+        assert data["status"] == "CONVERTED"
+        assert data["thumbnail"] == "https://b.tv/thumb.jpg"
+
+        async with Session() as s:
+            a = await s.get(Aula, uuid.UUID(ids["aula_id"]))
+            assert a.duracao_segundos == 600

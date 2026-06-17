@@ -31,6 +31,14 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:3000/sucesso}
       STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:3000/}
+      # Vídeo — Panda Video (REST API). A chave fica SÓ no backend (upload é
+      # mediado; nunca vai ao browser). DRM via watermark group, opcional.
+      PANDA_API_KEY: ${PANDA_API_KEY:-}
+      PANDA_UPLOADER_BASE: ${PANDA_UPLOADER_BASE:-https://uploader-us01.pandavideo.com.br}
+      PANDA_FOLDER_ID: ${PANDA_FOLDER_ID:-}
+      PANDA_DRM_ENABLED: ${PANDA_DRM_ENABLED:-false}
+      PANDA_DRM_GROUP_ID: ${PANDA_DRM_GROUP_ID:-}
+      PANDA_DRM_SECRET: ${PANDA_DRM_SECRET:-}
     ports:
       - "8000:8000"
     volumes:
@@ -43,6 +51,8 @@ services:
       # SSR dentro do Docker fala com o backend pela rede interna do compose
       # (o NEXT_PUBLIC_* é para o navegador; este é para o servidor do Next).
       API_URL_INTERNAL: ${API_URL_INTERNAL:-http://backend:8000/api/v1}
+      # Base do embed do Panda (player do LMS). Sem ela, o player cai no placeholder.
+      NEXT_PUBLIC_PANDA_EMBED_BASE: ${NEXT_PUBLIC_PANDA_EMBED_BASE:-}
     ports:
       - "3000:3000"
     depends_on:

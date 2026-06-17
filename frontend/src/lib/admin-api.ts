@@ -234,6 +234,61 @@ export const atualizarAula = (id: string, data: Record<string, unknown>) =>
 export const excluirAula = (id: string) =>
   adminFetch<void>(`/admin/aulas/${id}`, { method: "DELETE" });
 
+// ── Upload de vídeo (Panda) pela tela admin ───────────────────────────────────
+export interface AulaUploadInfo {
+  video_id: string;
+  upload_url: string;
+}
+export interface AulaSyncInfo {
+  panda_video_id: string | null;
+  status: string | null;
+  duracao_segundos: number;
+  thumbnail: string | null;
+}
+
+/** 1) Backend cria a sessão de upload no Panda e grava o video_id na aula. */
+export const gerarUploadAula = (
+  aulaId: string,
+  body: { filename: string; size: number; content_type?: string },
+) =>
+  adminFetch<AulaUploadInfo>(`/admin/aulas/${aulaId}/upload-url`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+/** 3) Puxa duração/capa/status do Panda e preenche a aula. */
+export const sincronizarAulaPanda = (aulaId: string) =>
+  adminFetch<AulaSyncInfo>(`/admin/aulas/${aulaId}/sync-panda`, {
+    method: "POST",
+  });
+
+/** 2) Sobe o arquivo direto para o Panda (PATCH TUS na URL pré-autorizada).
+ * Vai direto ao uploader do Panda — sem Bearer, sem a PANDA_API_KEY no browser. */
+export function enviarVideoPanda(
+  uploadUrl: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PATCH", uploadUrl, true);
+    xhr.setRequestHeader("Tus-Resumable", "1.0.0");
+    xhr.setRequestHeader("Upload-Offset", "0");
+    xhr.setRequestHeader("Content-Type", "application/offset+octet-stream");
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+    }
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Upload falhou (${xhr.status})`));
+    xhr.onerror = () => reject(new Error("Erro de rede no upload"));
+    xhr.send(file);
+  });
+}
+
 // ── Quiz do módulo (com gabarito) ─────────────────────────────────────────────
 export interface AdminAlternativa {
   id?: string;

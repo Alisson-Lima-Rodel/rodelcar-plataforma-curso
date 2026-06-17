@@ -101,10 +101,14 @@ from app.schemas.admin import (
     VideoCreate,
     VideoUpdate,
 )
+from app.core import panda
 from app.schemas.conteudo_admin import (
     AulaAdmin,
     AulaCreate,
+    AulaSyncResponse,
     AulaUpdate,
+    AulaUploadRequest,
+    AulaUploadResponse,
     ModuloAdmin,
     ModuloCreate,
     ModuloUpdate,
@@ -651,6 +655,62 @@ async def atualizar_aula(
     await db.commit()
     await db.refresh(a)
     return _aula_admin(a)
+
+
+@conteudo.post("/aulas/{aula_id}/upload-url", response_model=AulaUploadResponse)
+async def gerar_upload_aula(
+    aula_id: uuid.UUID, body: AulaUploadRequest, db: AsyncSession = Depends(get_db)
+):
+    """Cria a sessão de upload no Panda (mediado) e grava o video_id na aula.
+
+    O browser sobe o arquivo direto para `upload_url` (PATCH TUS) — a PANDA_API_KEY
+    nunca sai do backend. Depois da conversão, chame /sync-panda para a duração."""
+    a = await db.get(Aula, aula_id)
+    if a is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    if not settings.panda_ativo:
+        raise _err(
+            503, "PANDA_INDISPONIVEL",
+            "Upload de vídeo indisponível (PANDA_API_KEY não configurada).",
+        )
+    try:
+        res = await panda.criar_upload(filename=body.filename, size=body.size)
+    except panda.PandaIndisponivel as exc:
+        raise _err(502, "PANDA_ERRO", str(exc))
+    a.panda_video_id = res["video_id"]
+    await db.commit()
+    return AulaUploadResponse(video_id=res["video_id"], upload_url=res["upload_url"])
+
+
+@conteudo.post("/aulas/{aula_id}/sync-panda", response_model=AulaSyncResponse)
+async def sincronizar_aula_panda(
+    aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    """Puxa duração/capa/status do Panda e preenche `duracao_segundos` da aula."""
+    a = await db.get(Aula, aula_id)
+    if a is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    if not a.panda_video_id:
+        raise _err(409, "SEM_VIDEO", "Aula sem vídeo do Panda para sincronizar.")
+    if not settings.panda_ativo:
+        raise _err(
+            503, "PANDA_INDISPONIVEL",
+            "Sincronização indisponível (PANDA_API_KEY não configurada).",
+        )
+    try:
+        video = await panda.obter_video(a.panda_video_id)
+    except panda.PandaIndisponivel as exc:
+        raise _err(502, "PANDA_ERRO", str(exc))
+    dur = panda.duracao_segundos(video)
+    if dur is not None and dur != a.duracao_segundos:
+        a.duracao_segundos = dur
+        await db.commit()
+    return AulaSyncResponse(
+        panda_video_id=a.panda_video_id,
+        status=video.get("status"),
+        duracao_segundos=a.duracao_segundos,
+        thumbnail=panda.thumbnail_url(video),
+    )
 
 
 @conteudo.delete("/aulas/{aula_id}", status_code=204)

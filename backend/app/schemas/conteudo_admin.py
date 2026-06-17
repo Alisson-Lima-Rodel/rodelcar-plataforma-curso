@@ -44,3 +44,25 @@ class AulaUpdate(BaseModel):
     duracao_segundos: int | None = Field(default=None, ge=0)
     ordem: int | None = None
     gratuita: bool | None = None
+
+
+# ── Upload de vídeo pela tela admin (mediado pelo backend) ───────────────────
+class AulaUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)  # bytes; vira Upload-Length no TUS
+    content_type: str | None = Field(default=None, max_length=120)
+
+
+class AulaUploadResponse(BaseModel):
+    """O backend cria a sessão (com a chave) e devolve só a URL — o browser sobe
+    o arquivo direto para `upload_url` (PATCH TUS), sem ver a PANDA_API_KEY."""
+    video_id: str
+    upload_url: str
+
+
+class AulaSyncResponse(BaseModel):
+    """Resultado da sincronização com o Panda (duração/capa/status)."""
+    panda_video_id: str | None = None
+    status: str | None = None
+    duracao_segundos: int
+    thumbnail: str | None = None

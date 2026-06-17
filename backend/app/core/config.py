@@ -112,6 +112,35 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = "http://localhost:3000/sucesso"
     STRIPE_CANCEL_URL: str = "http://localhost:3000/"
 
+    # ── Vídeo — Panda Video (REST API) ────────────────────────────────────────
+    # Chave da conta (header Authorization, SEM "Bearer"). Habilita upload pela
+    # tela admin, duração/thumbnail automáticas e analytics de retenção. Fica SÓ
+    # no backend — nunca vai ao browser (o upload é mediado pelo backend).
+    PANDA_API_KEY: str = ""
+    # Base do uploader TUS (varia por região da conta). O backend cria a sessão;
+    # o browser sobe o arquivo para a URL retornada (Location), sem a chave.
+    PANDA_UPLOADER_BASE: str = "https://uploader-us01.pandavideo.com.br"
+    # Pasta (folder_id) opcional onde os uploads caem na biblioteca do Panda.
+    PANDA_FOLDER_ID: str = ""
+    # DRM (token assinado / embed privado). Liga via watermark group do Panda.
+    PANDA_DRM_ENABLED: bool = False
+    PANDA_DRM_GROUP_ID: str = ""
+    PANDA_DRM_SECRET: str = ""
+    # TTL (segundos) do token DRM embutido no embed por sessão de aula.
+    PANDA_DRM_TOKEN_TTL: int = 14400  # 4h
+
+    @property
+    def panda_ativo(self) -> bool:
+        return bool(self.PANDA_API_KEY)
+
+    @property
+    def panda_drm_ativo(self) -> bool:
+        return bool(
+            self.PANDA_DRM_ENABLED
+            and self.PANDA_DRM_GROUP_ID
+            and self.PANDA_DRM_SECRET
+        )
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
@@ -164,6 +193,11 @@ class Settings(BaseSettings):
             problemas.append("CORS_ORIGINS contém '*' (use os domínios explícitos do front)")
         if self.WA_PROVIDER == "meta" and not self.WA_META_APP_SECRET:
             problemas.append("WA_META_APP_SECRET ausente (webhook do WhatsApp ficaria sem assinatura)")
+        if self.PANDA_DRM_ENABLED and not (self.PANDA_DRM_GROUP_ID and self.PANDA_DRM_SECRET):
+            problemas.append(
+                "PANDA_DRM_ENABLED sem PANDA_DRM_GROUP_ID/PANDA_DRM_SECRET "
+                "(DRM ligado mas sem watermark group → embed sem token assinado)"
+            )
 
         if problemas:
             raise ValueError(

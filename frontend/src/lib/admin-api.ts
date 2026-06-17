@@ -275,6 +275,46 @@ export interface RetencaoInfo {
 export const retencaoAula = (aulaId: string) =>
   adminFetch<RetencaoInfo>(`/admin/aulas/${aulaId}/retencao`);
 
+// ── Biblioteca do Panda (selecionar um vídeo já existente) ────────────────────
+export interface PandaVideoItem {
+  id: string;
+  titulo: string;
+  duracao_segundos: number | null;
+  thumbnail: string | null;
+  status: string | null;
+}
+export interface PandaBiblioteca {
+  itens: PandaVideoItem[];
+  page: number;
+  limit: number;
+}
+export interface PandaPasta {
+  id: string;
+  nome: string;
+}
+
+/** Lista a biblioteca da conta no Panda (mediado pelo backend). */
+export const listarVideosPanda = (
+  params: {
+    title?: string;
+    folder_id?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+) => {
+  const qs = new URLSearchParams();
+  if (params.title) qs.set("title", params.title);
+  if (params.folder_id) qs.set("folder_id", params.folder_id);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const q = qs.toString();
+  return adminFetch<PandaBiblioteca>(`/admin/panda/videos${q ? `?${q}` : ""}`);
+};
+
+/** Pastas da conta no Panda, para filtrar a biblioteca. */
+export const listarPastasPanda = () =>
+  adminFetch<{ itens: PandaPasta[] }>(`/admin/panda/pastas`);
+
 /** 2) Sobe o arquivo direto para o Panda (PATCH TUS na URL pré-autorizada).
  * Vai direto ao uploader do Panda — sem Bearer, sem a PANDA_API_KEY no browser. */
 export function enviarVideoPanda(

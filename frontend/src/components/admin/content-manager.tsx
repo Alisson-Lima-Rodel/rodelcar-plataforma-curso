@@ -18,9 +18,11 @@ import {
   sincronizarAulaPanda,
   type AdminAula,
   type AdminModulo,
+  type PandaVideoItem,
 } from "@/lib/admin-api";
 import { QuizEditor } from "./quiz-editor";
 import { RetencaoModal } from "./retencao-modal";
+import { PandaPickerModal } from "./panda-picker-modal";
 
 function durLabel(seg: number): string {
   const m = Math.floor(seg / 60);
@@ -38,11 +40,15 @@ function AulaForm({
   initial,
   onSave,
   onCancel,
+  ensureSaved,
   busy,
 }: {
   initial?: AdminAula;
   onSave: (data: Record<string, unknown>) => void;
   onCancel: () => void;
+  // Garante que a aula exista (cria se nova) e devolve-a — usado pelo upload,
+  // que precisa de um id antes de subir o arquivo.
+  ensureSaved: (data: Record<string, unknown>) => Promise<AdminAula>;
   busy: boolean;
 }) {
   const [titulo, setTitulo] = useState(initial?.titulo ?? "");
@@ -53,15 +59,39 @@ function AulaForm({
   const [gratuita, setGratuita] = useState(initial?.gratuita ?? false);
   const [upPct, setUpPct] = useState<number | null>(null);
   const [upErr, setUpErr] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   const aulaId = initial?.id;
 
+  const selecionarDaBiblioteca = (v: PandaVideoItem) => {
+    setPanda(v.id);
+    if (v.duracao_segundos) setDur(durLabel(v.duracao_segundos));
+  };
+
   const enviarArquivo = async (file: File) => {
-    if (!aulaId) return;
     setUpErr(null);
+    // Upload exige um id. Se a aula é nova, cria-a primeiro (precisa de título).
+    let id = aulaId;
+    if (!id) {
+      if (!titulo.trim()) {
+        setUpErr("Dê um título à aula antes de enviar o vídeo.");
+        return;
+      }
+      try {
+        const a = await ensureSaved({
+          titulo: titulo.trim(),
+          duracao_segundos: parseDur(dur),
+          gratuita,
+        });
+        id = a.id;
+      } catch {
+        setUpErr("Não foi possível criar a aula para o upload.");
+        return;
+      }
+    }
     setUpPct(0);
     try {
-      const info = await gerarUploadAula(aulaId, {
+      const info = await gerarUploadAula(id, {
         filename: file.name,
         size: file.size,
         content_type: file.type || undefined,
@@ -71,7 +101,7 @@ function AulaForm({
       setUpPct(100);
       // Duração só fica pronta após a conversão; ignora se ainda convertendo.
       try {
-        const s = await sincronizarAulaPanda(aulaId);
+        const s = await sincronizarAulaPanda(id);
         if (s.duracao_segundos) setDur(durLabel(s.duracao_segundos));
       } catch {
         /* convertendo ainda — admin sincroniza depois */
@@ -128,26 +158,33 @@ function AulaForm({
           Aula grátis (preview)
         </label>
       </div>
-      {aulaId ? (
-        <div className="flex center gap-3" style={{ flexWrap: "wrap" }}>
-          <label
-            className="btn btn-ghost btn-sm"
-            style={{
-              cursor: upPct !== null && upPct < 100 ? "wait" : "pointer",
+      <div className="flex center gap-3" style={{ flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setShowPicker(true)}
+        >
+          <Icon name="play" size={14} /> Selecionar do Panda
+        </button>
+        <label
+          className="btn btn-ghost btn-sm"
+          style={{
+            cursor: upPct !== null && upPct < 100 ? "wait" : "pointer",
+          }}
+        >
+          <Icon name="file" size={15} /> Enviar vídeo
+          <input
+            type="file"
+            accept="video/*"
+            style={{ display: "none" }}
+            disabled={upPct !== null && upPct < 100}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) enviarArquivo(f);
             }}
-          >
-            <Icon name="file" size={15} /> Enviar vídeo
-            <input
-              type="file"
-              accept="video/*"
-              style={{ display: "none" }}
-              disabled={upPct !== null && upPct < 100}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) enviarArquivo(f);
-              }}
-            />
-          </label>
+          />
+        </label>
+        {aulaId && panda && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -155,23 +192,25 @@ function AulaForm({
           >
             <Icon name="clock" size={14} /> Sincronizar duração
           </button>
-          {upPct !== null && (
-            <span className="tag-mono">
-              {upPct < 100
-                ? `enviando ${upPct}%`
-                : "enviado ✓ (convertendo no Panda)"}
-            </span>
-          )}
-          {upErr && (
-            <span className="tag-mono" style={{ color: "var(--primary)" }}>
-              {upErr}
-            </span>
-          )}
-        </div>
-      ) : (
-        <span className="tag-mono subtle">
-          Salve a aula para enviar o vídeo pelo Panda.
-        </span>
+        )}
+        {upPct !== null && (
+          <span className="tag-mono">
+            {upPct < 100
+              ? `enviando ${upPct}%`
+              : "enviado ✓ (convertendo no Panda)"}
+          </span>
+        )}
+        {upErr && (
+          <span className="tag-mono" style={{ color: "var(--primary)" }}>
+            {upErr}
+          </span>
+        )}
+      </div>
+      {showPicker && (
+        <PandaPickerModal
+          onSelect={selecionarDaBiblioteca}
+          onClose={() => setShowPicker(false)}
+        />
       )}
       <div className="flex center gap-2">
         <Button
@@ -295,6 +334,21 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
     run(() => acao, aulaForm.aula ? "Aula atualizada." : "Aula criada.").then(
       () => setAulaForm(null),
     );
+  };
+
+  // Garante uma aula persistida (sem fechar o form) p/ o upload ter um id. Se já
+  // existe, devolve-a; senão cria, passa o form para modo edição e recarrega a
+  // lista ao fundo. Sem `key` no <AulaForm>, ele NÃO remonta — preserva o que foi
+  // digitado e passa a enxergar o id novo.
+  const ensureAula = async (
+    data: Record<string, unknown>,
+  ): Promise<AdminAula> => {
+    if (!aulaForm) throw new Error("sem form de aula");
+    if (aulaForm.aula) return aulaForm.aula;
+    const created = await criarAula(aulaForm.moduloId, data);
+    setAulaForm({ moduloId: aulaForm.moduloId, aula: created });
+    reload();
+    return created;
   };
 
   return (
@@ -468,6 +522,7 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
                   busy={busy}
                   onSave={salvarAula}
                   onCancel={() => setAulaForm(null)}
+                  ensureSaved={ensureAula}
                 />
               ) : (
                 <Button

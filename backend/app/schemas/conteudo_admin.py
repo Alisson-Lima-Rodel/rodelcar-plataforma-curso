@@ -68,6 +68,31 @@ class AulaSyncResponse(BaseModel):
     thumbnail: str | None = None
 
 
+# ── Biblioteca do Panda (seletor de vídeo já existente) ──────────────────────
+class PandaVideoItem(BaseModel):
+    """Item da biblioteca do Panda, para escolher um vídeo já existente."""
+    id: str
+    titulo: str
+    duracao_segundos: int | None = None
+    thumbnail: str | None = None
+    status: str | None = None
+
+
+class PandaBibliotecaResponse(BaseModel):
+    itens: list[PandaVideoItem]
+    page: int
+    limit: int
+
+
+class PandaPastaItem(BaseModel):
+    id: str
+    nome: str
+
+
+class PandaPastasResponse(BaseModel):
+    itens: list[PandaPastaItem]
+
+
 # ── Analytics de retenção (Panda) ────────────────────────────────────────────
 class RetencaoPonto(BaseModel):
     segundo: int

@@ -106,6 +106,51 @@ async def obter_video(video_id: str) -> dict:
         raise PandaIndisponivel("Falha ao consultar o vídeo no Panda.") from exc
 
 
+async def listar_videos(
+    *,
+    page: int = 1,
+    limit: int = 30,
+    title: str | None = None,
+    folder_id: str | None = None,
+) -> dict:
+    """GET /videos — biblioteca da conta (paginada). Filtros opcionais por
+    `title` (busca) e `folder_id` (pasta). Usado pelo seletor do admin."""
+    _exigir_chave()
+    params: dict = {"page": page, "limit": limit}
+    if title:
+        params["title"] = title
+    if folder_id:
+        params["folder_id"] = folder_id
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(
+                f"{API_BASE}/videos", headers=_auth_headers(), params=params
+            )
+            r.raise_for_status()
+            return r.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Panda: falha ao listar vídeos: %s", exc)
+        raise PandaIndisponivel("Falha ao listar vídeos no Panda.") from exc
+
+
+async def listar_pastas(*, parent_folder_id: str | None = None) -> dict:
+    """GET /folders — pastas da conta, para filtrar a biblioteca no seletor."""
+    _exigir_chave()
+    params: dict = {}
+    if parent_folder_id:
+        params["parent_folder_id"] = parent_folder_id
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"{API_BASE}/folders", headers=_auth_headers(), params=params
+            )
+            r.raise_for_status()
+            return r.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Panda: falha ao listar pastas: %s", exc)
+        raise PandaIndisponivel("Falha ao listar pastas no Panda.") from exc
+
+
 async def retencao(
     video_id: str, *, start_date: str | None = None, end_date: str | None = None
 ) -> dict:
@@ -153,6 +198,50 @@ def duracao_segundos(video: dict) -> int | None:
 
 def thumbnail_url(video: dict) -> str | None:
     return video.get("thumbnail") or None
+
+
+def itens_biblioteca(data: dict | list) -> list[dict]:
+    """Normaliza a resposta de /videos numa lista de itens prontos p/ o seletor.
+
+    Aceita `{"videos": [...]}` ou uma lista solta (o schema exato da API não está
+    100% publicado). Cada item vira {id, titulo, duracao_segundos, thumbnail,
+    status}; descarta os sem `id`."""
+    videos = data.get("videos") if isinstance(data, dict) else data
+    if not isinstance(videos, list):
+        videos = []
+    itens: list[dict] = []
+    for v in videos:
+        if not isinstance(v, dict):
+            continue
+        vid = v.get("id") or v.get("video_id")
+        if not vid:
+            continue
+        itens.append(
+            {
+                "id": str(vid),
+                "titulo": v.get("title") or v.get("titulo") or "(sem título)",
+                "duracao_segundos": duracao_segundos(v),
+                "thumbnail": thumbnail_url(v),
+                "status": v.get("status"),
+            }
+        )
+    return itens
+
+
+def itens_pastas(data: dict | list) -> list[dict]:
+    """Normaliza /folders numa lista {id, nome}; descarta as sem `id`."""
+    folders = data.get("folders") if isinstance(data, dict) else data
+    if not isinstance(folders, list):
+        folders = []
+    itens: list[dict] = []
+    for f in folders:
+        if not isinstance(f, dict):
+            continue
+        fid = f.get("id")
+        if not fid:
+            continue
+        itens.append({"id": str(fid), "nome": f.get("name") or f.get("nome") or "(pasta)"})
+    return itens
 
 
 def pontos_retencao(data: dict) -> list[dict]:

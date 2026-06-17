@@ -112,6 +112,10 @@ from app.schemas.conteudo_admin import (
     ModuloAdmin,
     ModuloCreate,
     ModuloUpdate,
+    PandaBibliotecaResponse,
+    PandaPastasResponse,
+    PandaPastaItem,
+    PandaVideoItem,
     RetencaoPonto,
     RetencaoResponse,
 )
@@ -737,6 +741,52 @@ async def retencao_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         panda_video_id=a.panda_video_id,
         duracao_segundos=int(dur) if isinstance(dur, (int, float)) else None,
         pontos=[RetencaoPonto(**p) for p in panda.pontos_retencao(data)],
+    )
+
+
+@conteudo.get("/panda/videos", response_model=PandaBibliotecaResponse)
+async def listar_biblioteca_panda(
+    title: str | None = None,
+    folder_id: str | None = None,
+    page: int = 1,
+    limit: int = 30,
+):
+    """Lista a biblioteca de vídeos da conta no Panda (seletor do admin).
+
+    Mediado pelo backend — a PANDA_API_KEY nunca vai ao browser. Filtros opcionais
+    por título (busca) e pasta."""
+    if not settings.panda_ativo:
+        raise _err(
+            503, "PANDA_INDISPONIVEL",
+            "Biblioteca indisponível (PANDA_API_KEY não configurada).",
+        )
+    try:
+        data = await panda.listar_videos(
+            page=page, limit=limit, title=title, folder_id=folder_id
+        )
+    except panda.PandaIndisponivel as exc:
+        raise _err(502, "PANDA_ERRO", str(exc))
+    return PandaBibliotecaResponse(
+        itens=[PandaVideoItem(**i) for i in panda.itens_biblioteca(data)],
+        page=page,
+        limit=limit,
+    )
+
+
+@conteudo.get("/panda/pastas", response_model=PandaPastasResponse)
+async def listar_pastas_panda(parent_folder_id: str | None = None):
+    """Pastas da conta no Panda, para filtrar a biblioteca no seletor."""
+    if not settings.panda_ativo:
+        raise _err(
+            503, "PANDA_INDISPONIVEL",
+            "Pastas indisponíveis (PANDA_API_KEY não configurada).",
+        )
+    try:
+        data = await panda.listar_pastas(parent_folder_id=parent_folder_id)
+    except panda.PandaIndisponivel as exc:
+        raise _err(502, "PANDA_ERRO", str(exc))
+    return PandaPastasResponse(
+        itens=[PandaPastaItem(**i) for i in panda.itens_pastas(data)]
     )
 
 

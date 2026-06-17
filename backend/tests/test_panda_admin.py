@@ -177,6 +177,91 @@ class TestDrmToken:
         assert r.json()["player_token"] is None
 
 
+class TestBiblioteca:
+    def test_itens_biblioteca_normaliza(self):
+        from app.core import panda
+
+        itens = panda.itens_biblioteca(
+            {
+                "videos": [
+                    {
+                        "id": "v1",
+                        "title": "Intro",
+                        "length": 90.7,
+                        "thumbnail": "https://b.tv/1.jpg",
+                        "status": "CONVERTED",
+                    },
+                    {"video_id": "v2", "title": "Sem capa"},
+                    {"title": "Sem id — descartado"},
+                ]
+            }
+        )
+        assert [i["id"] for i in itens] == ["v1", "v2"]
+        assert itens[0]["duracao_segundos"] == 90
+        assert itens[0]["titulo"] == "Intro"
+        assert itens[1]["thumbnail"] is None
+
+    def test_itens_pastas_normaliza(self):
+        from app.core import panda
+
+        pastas = panda.itens_pastas({"folders": [{"id": "f1", "name": "Curso A"}, {}]})
+        assert pastas == [{"id": "f1", "nome": "Curso A"}]
+
+    async def test_videos_sem_chave_retorna_503(
+        self, client: AsyncClient, admin_token: dict, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "")
+        resp = await client.get("/api/v1/admin/panda/videos", headers=admin_token)
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "PANDA_INDISPONIVEL"
+
+    async def test_lista_videos_repassa_filtros(
+        self, client: AsyncClient, admin_token: dict, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "testkey")
+        capturado = {}
+
+        async def fake_listar_videos(*, page, limit, title, folder_id):
+            capturado.update(page=page, limit=limit, title=title, folder_id=folder_id)
+            return {
+                "videos": [
+                    {"id": "v1", "title": "Aula 1", "length": 120, "status": "CONVERTED"}
+                ]
+            }
+
+        monkeypatch.setattr(admin_mod.panda, "listar_videos", fake_listar_videos)
+
+        resp = await client.get(
+            "/api/v1/admin/panda/videos?title=aula&folder_id=f1&page=2&limit=10",
+            headers=admin_token,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 2 and data["limit"] == 10
+        assert data["itens"][0] == {
+            "id": "v1",
+            "titulo": "Aula 1",
+            "duracao_segundos": 120,
+            "thumbnail": None,
+            "status": "CONVERTED",
+        }
+        assert capturado == {"page": 2, "limit": 10, "title": "aula", "folder_id": "f1"}
+
+    async def test_lista_pastas(
+        self, client: AsyncClient, admin_token: dict, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "testkey")
+
+        async def fake_listar_pastas(*, parent_folder_id=None):
+            return {"folders": [{"id": "f1", "name": "Mecânica"}]}
+
+        monkeypatch.setattr(admin_mod.panda, "listar_pastas", fake_listar_pastas)
+
+        resp = await client.get("/api/v1/admin/panda/pastas", headers=admin_token)
+        assert resp.status_code == 200
+        assert resp.json()["itens"] == [{"id": "f1", "nome": "Mecânica"}]
+
+
 class TestRetencao:
     def test_pontos_ordenados(self):
         from app.core import panda

@@ -33,9 +33,26 @@ Frontend (Vercel): `NEXT_PUBLIC_PANDA_EMBED_BASE` — base do embed
 (ex.: `https://player-vz-XXXX.tv.pandavideo.com.br/embed/`). Sem ela, o player cai no
 placeholder. Produção faz **fail-fast** se `PANDA_DRM_ENABLED=true` sem grupo/segredo.
 
-## Upload de vídeo pela tela admin
+## Definir o vídeo da aula (biblioteca x upload)
 
-No admin → conteúdo do curso → editar aula → **Enviar vídeo**:
+No admin → conteúdo do curso → **Adicionar/editar aula**, há dois caminhos (ambos
+disponíveis já no cadastro, não só na edição):
+
+### a) Selecionar da biblioteca do Panda
+
+**Selecionar do Panda** abre um modal com os vídeos já existentes na conta (miniatura,
+título, duração), com **busca por título** e **filtro por pasta**. Escolher um vídeo
+preenche `panda_video_id` + duração — não precisa salvar antes (só preenche o form).
+
+- `GET /admin/panda/videos?title=&folder_id=&page=&limit=` → biblioteca paginada,
+  normalizada em `{itens:[{id,titulo,duracao_segundos,thumbnail,status}], page, limit}`.
+- `GET /admin/panda/pastas` → `{itens:[{id,nome}]}` para o filtro de pasta.
+- Mediados pelo backend (a `PANDA_API_KEY` não vai ao browser). **Não confundir com
+  `/admin/videos`**, que é o CRUD da prova social do YouTube.
+
+### b) Enviar (upload) um vídeo novo
+
+**Enviar vídeo** sobe um arquivo novo:
 
 1. `POST /admin/aulas/{id}/upload-url` `{filename,size,content_type?}` → o backend cria a
    sessão TUS no Panda, gera o `video_id` (UUID v4), grava em `aula.panda_video_id` e
@@ -44,6 +61,10 @@ No admin → conteúdo do curso → editar aula → **Enviar vídeo**:
 3. `POST /admin/aulas/{id}/sync-panda` → *Get video properties* preenche `duracao_segundos`
    (e devolve `status`/`thumbnail`). A duração só fica pronta após a conversão — clique
    **Sincronizar duração** depois se o vídeo ainda estava convertendo.
+
+> **Aula nova:** o upload precisa de um id, então clicar **Enviar vídeo** numa aula ainda
+> não salva **auto-cria a aula** (exige só o título) e segue o fluxo acima. O form passa a
+> modo edição sem perder o que foi digitado.
 
 Respostas de erro: 503 sem `PANDA_API_KEY`; 502 em falha do Panda; 409 sem vídeo.
 

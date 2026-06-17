@@ -20,6 +20,7 @@ import {
   type AdminModulo,
 } from "@/lib/admin-api";
 import { QuizEditor } from "./quiz-editor";
+import { RetencaoModal } from "./retencao-modal";
 
 function durLabel(seg: number): string {
   const m = Math.floor(seg / 60);
@@ -131,7 +132,9 @@ function AulaForm({
         <div className="flex center gap-3" style={{ flexWrap: "wrap" }}>
           <label
             className="btn btn-ghost btn-sm"
-            style={{ cursor: upPct !== null && upPct < 100 ? "wait" : "pointer" }}
+            style={{
+              cursor: upPct !== null && upPct < 100 ? "wait" : "pointer",
+            }}
           >
             <Icon name="file" size={15} /> Enviar vídeo
             <input
@@ -208,6 +211,7 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
     id: string;
     titulo: string;
   } | null>(null);
+  const [retAula, setRetAula] = useState<AdminAula | null>(null);
 
   useEffect(() => {
     ADMIN_CRUD.courses
@@ -304,6 +308,13 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
           moduloTitulo={quizModulo.titulo}
           onClose={() => setQuizModulo(null)}
           onToast={onToast}
+        />
+      )}
+      {retAula && (
+        <RetencaoModal
+          aulaId={retAula.id}
+          titulo={retAula.titulo}
+          onClose={() => setRetAula(null)}
         />
       )}
       <div
@@ -418,6 +429,17 @@ export function AdminContent({ onToast }: { onToast: (msg: string) => void }) {
                     >
                       {a.gratuita ? "Tornar paga" : "Liberar grátis"}
                     </Button>
+                    {a.panda_video_id && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon="bolt"
+                        onClick={() => setRetAula(a)}
+                        disabled={busy}
+                      >
+                        Retenção
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"

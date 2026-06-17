@@ -262,6 +262,19 @@ export const sincronizarAulaPanda = (aulaId: string) =>
     method: "POST",
   });
 
+// ── Analytics de retenção (Panda) ─────────────────────────────────────────────
+export interface RetencaoPonto {
+  segundo: number;
+  percentual: number;
+}
+export interface RetencaoInfo {
+  panda_video_id: string;
+  duracao_segundos: number | null;
+  pontos: RetencaoPonto[];
+}
+export const retencaoAula = (aulaId: string) =>
+  adminFetch<RetencaoInfo>(`/admin/aulas/${aulaId}/retencao`);
+
 /** 2) Sobe o arquivo direto para o Panda (PATCH TUS na URL pré-autorizada).
  * Vai direto ao uploader do Panda — sem Bearer, sem a PANDA_API_KEY no browser. */
 export function enviarVideoPanda(
@@ -277,7 +290,8 @@ export function enviarVideoPanda(
     xhr.setRequestHeader("Content-Type", "application/offset+octet-stream");
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        if (e.lengthComputable)
+          onProgress(Math.round((e.loaded / e.total) * 100));
       };
     }
     xhr.onload = () =>

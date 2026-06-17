@@ -66,3 +66,15 @@ class AulaSyncResponse(BaseModel):
     status: str | None = None
     duracao_segundos: int
     thumbnail: str | None = None
+
+
+# ── Analytics de retenção (Panda) ────────────────────────────────────────────
+class RetencaoPonto(BaseModel):
+    segundo: int
+    percentual: float  # % de espectadores ainda assistindo nesse segundo
+
+
+class RetencaoResponse(BaseModel):
+    panda_video_id: str
+    duracao_segundos: int | None = None
+    pontos: list[RetencaoPonto]

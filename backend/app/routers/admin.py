@@ -112,6 +112,8 @@ from app.schemas.conteudo_admin import (
     ModuloAdmin,
     ModuloCreate,
     ModuloUpdate,
+    RetencaoPonto,
+    RetencaoResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -710,6 +712,31 @@ async def sincronizar_aula_panda(
         status=video.get("status"),
         duracao_segundos=a.duracao_segundos,
         thumbnail=panda.thumbnail_url(video),
+    )
+
+
+@conteudo.get("/aulas/{aula_id}/retencao", response_model=RetencaoResponse)
+async def retencao_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Curva de retenção (Panda Analytics) da aula, para o painel admin."""
+    a = await db.get(Aula, aula_id)
+    if a is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aula não encontrada.")
+    if not a.panda_video_id:
+        raise _err(409, "SEM_VIDEO", "Aula sem vídeo do Panda.")
+    if not settings.panda_ativo:
+        raise _err(
+            503, "PANDA_INDISPONIVEL",
+            "Analytics indisponível (PANDA_API_KEY não configurada).",
+        )
+    try:
+        data = await panda.retencao(a.panda_video_id)
+    except panda.PandaIndisponivel as exc:
+        raise _err(502, "PANDA_ERRO", str(exc))
+    dur = (data.get("video") or {}).get("duration")
+    return RetencaoResponse(
+        panda_video_id=a.panda_video_id,
+        duracao_segundos=int(dur) if isinstance(dur, (int, float)) else None,
+        pontos=[RetencaoPonto(**p) for p in panda.pontos_retencao(data)],
     )
 
 

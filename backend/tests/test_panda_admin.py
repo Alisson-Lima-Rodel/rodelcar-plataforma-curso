@@ -175,3 +175,40 @@ class TestDrmToken:
         )
         assert r.status_code == 200
         assert r.json()["player_token"] is None
+
+
+class TestRetencao:
+    def test_pontos_ordenados(self):
+        from app.core import panda
+
+        pts = panda.pontos_retencao(
+            {"retention": {"0": 100, "10": 80, "5": 90, "x": 1}}
+        )
+        assert pts == [
+            {"segundo": 0, "percentual": 100.0},
+            {"segundo": 5, "percentual": 90.0},
+            {"segundo": 10, "percentual": 80.0},
+        ]
+
+    async def test_endpoint_retorna_curva(
+        self, client: AsyncClient, admin_token: dict, aula_admin, monkeypatch
+    ):
+        monkeypatch.setattr(admin_mod.settings, "PANDA_API_KEY", "testkey")
+
+        async def fake_retencao(video_id, *, start_date=None, end_date=None):
+            return {
+                "retention": {"0": 100, "5": 88, "10": 70},
+                "video": {"duration": 120},
+            }
+
+        monkeypatch.setattr(admin_mod.panda, "retencao", fake_retencao)
+
+        ids, _ = aula_admin
+        resp = await client.get(
+            f"/api/v1/admin/aulas/{ids['aula_id']}/retencao", headers=admin_token
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["duracao_segundos"] == 120
+        assert data["pontos"][0] == {"segundo": 0, "percentual": 100.0}
+        assert [p["segundo"] for p in data["pontos"]] == [0, 5, 10]

@@ -153,3 +153,19 @@ def duracao_segundos(video: dict) -> int | None:
 
 def thumbnail_url(video: dict) -> str | None:
     return video.get("thumbnail") or None
+
+
+def pontos_retencao(data: dict) -> list[dict]:
+    """Converte o mapa `retention` ({"0":100,"5":95,…}) numa lista ordenada de
+    {segundo, percentual} — pronta para o gráfico do admin."""
+    ret = data.get("retention") or {}
+    pontos: list[dict] = []
+    for chave, valor in ret.items():
+        try:
+            seg = int(chave)
+            pct = float(valor)
+        except (TypeError, ValueError):
+            continue
+        pontos.append({"segundo": seg, "percentual": pct})
+    pontos.sort(key=lambda p: p["segundo"])
+    return pontos

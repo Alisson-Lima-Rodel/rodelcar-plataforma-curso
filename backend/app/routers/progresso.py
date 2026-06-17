@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -71,7 +71,29 @@ async def salvar_progresso(
             }},
         )
 
-    # Upsert idempotente: mesma (matricula, aula) → atualiza em vez de duplicar
+    # Tempo real desde o último ping desta linha, limitado a 30s (~2x o intervalo
+    # de ping) para não creditar pausas/abas em segundo plano. Referencia a linha
+    # EXISTENTE (Progresso.atualizado_em) dentro do DO UPDATE — não o EXCLUDED.
+    delta_assistido = func.least(
+        func.extract("epoch", func.now() - Progresso.atualizado_em), 30
+    )
+
+    # Upsert idempotente: mesma (matricula, aula) → atualiza em vez de duplicar.
+    # No INSERT puro `segundos_assistidos` nasce 0; só acumula no UPDATE (a 1ª
+    # batida de uma aula nova não credita tempo — não há janela anterior).
+    update_set = {
+        "percentual": body.percentual,
+        "concluida": body.concluida,
+        "segundos_assistidos": (
+            Progresso.segundos_assistidos + cast(delta_assistido, Integer)
+        ),
+        "atualizado_em": func.now(),
+    }
+    # Só mexe na posição quando o cliente a envia (player). O botão "Concluir" não
+    # manda → preserva onde o aluno parou.
+    if body.posicao_segundos is not None:
+        update_set["posicao_segundos"] = body.posicao_segundos
+
     await db.execute(
         pg_insert(Progresso)
         .values(
@@ -80,14 +102,12 @@ async def salvar_progresso(
             aula_id=body.aula_id,
             percentual=body.percentual,
             concluida=body.concluida,
+            posicao_segundos=body.posicao_segundos or 0,
+            segundos_assistidos=0,
         )
         .on_conflict_do_update(
             constraint="uq_matricula_aula",
-            set_={
-                "percentual": body.percentual,
-                "concluida": body.concluida,
-                "atualizado_em": func.now(),
-            },
+            set_=update_set,
         )
     )
     await db.commit()
@@ -113,4 +133,5 @@ async def salvar_progresso(
         percentual=body.percentual,
         concluida=body.concluida,
         curso_percentual=curso_percentual,
+        posicao_segundos=body.posicao_segundos or 0,
     )

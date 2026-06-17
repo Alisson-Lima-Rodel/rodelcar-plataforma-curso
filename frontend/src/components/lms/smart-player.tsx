@@ -16,8 +16,20 @@ const SDK_SRC = "https://player.pandavideo.com.br/api.v2.js";
 const CONTROLS =
   "play-large,play,progress,current-time,volume,captions,settings,pip,fullscreen,airplay";
 
-/** Subconjunto da API do SmartPlayer que consumimos (eventos/seek na Fase 2). */
-export interface PandaPlayerInstance {
+// Salva progresso no máximo a cada N ms durante o playback (debounce de rede).
+const PING_MS = 7000;
+// % a partir da qual a aula é considerada concluída automaticamente.
+const CONCLUI_PCT = 95;
+
+/** Atualização de progresso emitida pelo player (consumida pelo LMS). */
+export interface ProgressUpdate {
+  percentual: number; // 0..100, monotônico (ponto mais distante)
+  posicaoSegundos: number; // segundo atual (resume)
+  concluida: boolean; // true ao terminar / cruzar CONCLUI_PCT
+}
+
+/** Subconjunto da API do SmartPlayer que consumimos. */
+interface PandaPlayerInstance {
   onEvent(cb: (e: { message: string; currentTime?: number }) => void): void;
   play(): void;
   pause(): void;
@@ -55,6 +67,15 @@ function ensureSdk() {
   document.head.appendChild(s);
 }
 
+function safeNum(fn?: () => number): number {
+  try {
+    const v = fn?.();
+    return typeof v === "number" && isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function Placeholder({ title }: { title?: string }) {
   return (
     <div className="video-stage">
@@ -80,29 +101,38 @@ function Placeholder({ title }: { title?: string }) {
 /**
  * Player de aula do LMS sobre o SmartPlayer do Panda. Renderiza o iframe do embed
  * (com controles nativos) e anexa a instância PandaPlayer para receber eventos e
- * controlar o playback. `onPlayerReady` entrega a instância pronta (usado pela
- * Fase 2: tracking de progresso + resume).
+ * controlar o playback. Resume via `startAt` (query-param startTime); progresso
+ * contínuo via `onProgress` (eventos timeupdate/pause/ended, com debounce).
  */
 export function SmartPlayer({
   videoId,
   title,
   startAt = 0,
-  onPlayerReady,
+  durationSeconds = 0,
+  onProgress,
 }: {
   videoId: string | null;
   title?: string;
   startAt?: number;
-  onPlayerReady?: (player: PandaPlayerInstance) => void;
+  durationSeconds?: number;
+  onProgress?: (p: ProgressUpdate) => void;
 }) {
   const playerRef = useRef<PandaPlayerInstance | null>(null);
-  const onReadyRef = useRef(onPlayerReady);
-  onReadyRef.current = onPlayerReady;
+  const onProgressRef = useRef(onProgress);
+  const durationRef = useRef(durationSeconds);
+  onProgressRef.current = onProgress;
+  durationRef.current = durationSeconds;
 
   useEffect(() => {
     if (!PANDA_BASE || !videoId) return;
     ensureSdk();
     const elId = `panda-${videoId}`;
     let cancelled = false;
+
+    // Estado de tracking, reiniciado a cada aula (init roda por videoId).
+    let maxPct = 0;
+    let concluded = false;
+    let lastSent = 0;
 
     const init = () => {
       if (cancelled || !window.PandaPlayer) return;
@@ -111,7 +141,48 @@ export function SmartPlayer({
         onReady: () => {
           if (cancelled) return;
           playerRef.current = player;
-          onReadyRef.current?.(player);
+
+          player.onEvent((e) => {
+            if (cancelled) return;
+            const cur =
+              typeof e.currentTime === "number" && isFinite(e.currentTime)
+                ? e.currentTime
+                : safeNum(player.getCurrentTime);
+            const dur = safeNum(player.getDuration) || durationRef.current || 0;
+            const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
+            if (pct > maxPct) maxPct = pct;
+
+            const emit = (concluida: boolean) =>
+              onProgressRef.current?.({
+                percentual: Math.round(maxPct * 10) / 10,
+                posicaoSegundos: Math.max(0, Math.floor(cur)),
+                concluida,
+              });
+
+            switch (e.message) {
+              case "panda_timeupdate": {
+                const now = Date.now();
+                if (now - lastSent < PING_MS) return;
+                lastSent = now;
+                if (!concluded && maxPct >= CONCLUI_PCT) {
+                  concluded = true;
+                  emit(true);
+                } else {
+                  emit(false);
+                }
+                break;
+              }
+              case "panda_pause":
+                lastSent = Date.now();
+                emit(concluded);
+                break;
+              case "panda_ended":
+                lastSent = Date.now();
+                concluded = true;
+                emit(true);
+                break;
+            }
+          });
         },
       });
     };
@@ -121,10 +192,22 @@ export function SmartPlayer({
 
     return () => {
       cancelled = true;
-      try {
-        playerRef.current?.destroy?.();
-      } catch {
-        /* SDK pode não expor destroy; ignorar */
+      const p = playerRef.current;
+      if (p) {
+        // Flush final: registra a posição exata ao trocar de aula / sair.
+        const cur = safeNum(p.getCurrentTime);
+        if (cur > 0) {
+          onProgressRef.current?.({
+            percentual: Math.round(maxPct * 10) / 10,
+            posicaoSegundos: Math.floor(cur),
+            concluida: concluded,
+          });
+        }
+        try {
+          p.destroy?.();
+        } catch {
+          /* SDK pode não expor destroy; ignorar */
+        }
       }
       playerRef.current = null;
     };

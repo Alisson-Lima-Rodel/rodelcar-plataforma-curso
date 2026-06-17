@@ -101,5 +101,6 @@ async def obter_aula(
         progresso=ProgressoAula(
             concluida=progresso.concluida if progresso else False,
             percentual=float(progresso.percentual) if progresso else 0.0,
+            posicao_segundos=progresso.posicao_segundos if progresso else 0,
         ),
     )

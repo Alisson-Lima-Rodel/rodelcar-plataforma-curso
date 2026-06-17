@@ -14,6 +14,8 @@ class MaterialResumo(BaseModel):
 class ProgressoAula(BaseModel):
     concluida: bool
     percentual: float
+    # Segundo onde o aluno parou — o player dá `seek` aqui ao reabrir (resume).
+    posicao_segundos: int = 0
 
 
 class AulaDetail(BaseModel):

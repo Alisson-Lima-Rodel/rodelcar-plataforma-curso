@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     # Tem default — não precisa estar no .env para funcionar.
     PORTAL_URL: str = "https://rodelcar.com.br"
 
+    # Gate anti-fraude do certificado: fração da duração da aula que precisa ter
+    # sido REALMENTE assistida (tempo acumulado pelo servidor) para a aula contar
+    # como concluída. 0.85 = 85%. Aula sem duração cadastrada (=0) passa trivial.
+    CERT_MIN_WATCH_RATIO: float = 0.85
+
     # YouTube Data API v3 (opcional). Com a chave, o cadastro de vídeo puxa
     # duração, views e likes automaticamente; sem ela, só título/canal via oEmbed.
     YOUTUBE_API_KEY: str = ""

@@ -230,7 +230,11 @@ export interface AulaDetail {
   panda_video_id: string | null;
   duracao_segundos: number;
   materiais: AulaMaterial[];
-  progresso: { concluida: boolean; percentual: number };
+  progresso: {
+    concluida: boolean;
+    percentual: number;
+    posicao_segundos: number;
+  };
 }
 
 export interface PlayerAula {
@@ -286,12 +290,19 @@ export const salvarProgresso = (
   aula_id: string,
   percentual: number,
   concluida: boolean,
+  posicao_segundos?: number,
 ) =>
-  authPost<{ curso_percentual: number }>("/progresso", {
-    aula_id,
-    percentual,
-    concluida,
-  });
+  authPost<{ curso_percentual: number; posicao_segundos: number }>(
+    "/progresso",
+    {
+      aula_id,
+      percentual,
+      concluida,
+      // Omitido quando undefined → o backend preserva a posição (ex.: botão
+      // "Concluir" não deve zerar onde o aluno parou).
+      ...(posicao_segundos != null ? { posicao_segundos } : {}),
+    },
+  );
 
 export const emitirCertificado = (matriculaId: string) =>
   authPost<CertificadoEmitido>(`/certificados/${matriculaId}`);

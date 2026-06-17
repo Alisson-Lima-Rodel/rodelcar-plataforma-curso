@@ -303,6 +303,17 @@ class Progresso(Base):
     aula_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("aulas.id"))
     concluida: Mapped[bool] = mapped_column(Boolean, default=False)
     percentual: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    # Último segundo assistido — usado para dar `seek` ao reabrir (resume
+    # cross-device). Difere de `percentual` (ponto mais distante / progresso).
+    posicao_segundos: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    # Tempo REAL assistido, acumulado pelo servidor (delta de relógio entre pings,
+    # limitado por ping). Gate anti-fraude do certificado: 100% instantâneo acumula
+    # ~0s e não conta. Cliente NUNCA envia este valor.
+    segundos_assistidos: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

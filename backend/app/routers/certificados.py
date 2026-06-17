@@ -115,10 +115,21 @@ async def emitir_certificado(
         .where(Modulo.curso_id == matricula.curso_id)
     ) or 0
 
+    # Anti-fraude: além de `concluida`, a aula só conta se o tempo REAL assistido
+    # (acumulado pelo servidor) cobrir >= CERT_MIN_WATCH_RATIO da sua duração.
+    # 100% instantâneo (scrub/POST direto) acumula ~0s e é barrado. Aula sem
+    # duração cadastrada (=0) passa trivial (0 >= 0).
+    ratio = settings.CERT_MIN_WATCH_RATIO
     concluidas = await db.scalar(
-        select(func.count(Progresso.id)).where(
+        select(func.count(Progresso.id))
+        .join(Aula, Progresso.aula_id == Aula.id)
+        .join(Modulo, Aula.modulo_id == Modulo.id)
+        .where(
             Progresso.matricula_id == matricula.id,
+            Modulo.curso_id == matricula.curso_id,
             Progresso.concluida.is_(True),
+            Progresso.segundos_assistidos
+            >= func.coalesce(Aula.duracao_segundos, 0) * ratio,
         )
     ) or 0
 

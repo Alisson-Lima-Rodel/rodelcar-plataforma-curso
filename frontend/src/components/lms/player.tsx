@@ -17,7 +17,7 @@ import {
 } from "@/lib/auth-api";
 import { lmsHref } from "@/lib/lms-nav";
 import { QuizTaker } from "./quiz-taker";
-import { SmartPlayer } from "./smart-player";
+import { SmartPlayer, type ProgressUpdate } from "./smart-player";
 
 function ModuleNav({
   modules,
@@ -338,6 +338,34 @@ export function Player() {
     },
   });
 
+  // Auto-save vindo do player (timeupdate/pause/ended). Só invalida o resto da UI
+  // quando a aula vira "concluída" — pings de progresso não disparam refetch.
+  const progressM = useMutation({
+    mutationFn: (p: {
+      aulaId: string;
+      percentual: number;
+      concluida: boolean;
+      posicao: number;
+    }) => salvarProgresso(p.aulaId, p.percentual, p.concluida, p.posicao),
+    onSuccess: (_data, vars) => {
+      if (vars.concluida) {
+        qc.invalidateQueries({ queryKey: ["me", "player", slug] });
+        qc.invalidateQueries({ queryKey: ["me", "dashboard"] });
+        qc.invalidateQueries({ queryKey: ["me", "matriculas"] });
+      }
+    },
+  });
+
+  const handleProgress = (p: ProgressUpdate) => {
+    if (!currentId) return;
+    progressM.mutate({
+      aulaId: currentId,
+      percentual: p.percentual,
+      concluida: p.concluida,
+      posicao: p.posicaoSegundos,
+    });
+  };
+
   // ── Estados de carga / vazio / erro ─────────────────────────────────────────
   if (querySlug === null && matQ.isLoading) {
     return (
@@ -408,6 +436,9 @@ export function Player() {
           <SmartPlayer
             videoId={aulaQ.data?.panda_video_id ?? null}
             title={currentLesson?.titulo}
+            startAt={aulaQ.data?.progresso.posicao_segundos ?? 0}
+            durationSeconds={aulaQ.data?.duracao_segundos ?? 0}
+            onProgress={handleProgress}
           />
 
           {/* título + ação dominante */}

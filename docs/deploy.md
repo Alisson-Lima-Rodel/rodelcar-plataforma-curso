@@ -117,6 +117,9 @@ de admin não é público. Depois disso, gerencie a equipe pelo painel `/admin`.
    | `GOOGLE_PLACES_API_KEY` / `GOOGLE_PLACE_ID` | nota/reviews do Google na prova social |
    | `YOUTUBE_API_KEY` | metadados ao cadastrar vídeo |
    | `WA_PROVIDER` + chaves (`WA_META_*` / `WA_TWILIO_*` / `WA_ZAPI_*`) | WhatsApp (vigência + certificado) |
+   | `PANDA_API_KEY` | upload de vídeo pela tela admin + duração/capa + retenção (ver [video-panda.md](video-panda.md)) |
+   | `PANDA_DRM_ENABLED` / `PANDA_DRM_GROUP_ID` / `PANDA_DRM_SECRET` | embed privado (token assinado). Fail-fast se ligado sem grupo/segredo |
+   | `CERT_MIN_WATCH_RATIO` | fração assistida exigida no certificado (default 0.85) |
    | `PORTAL_URL` / `RENOVACAO_URL` | já têm default `https://rodelcar.com.br` |
 
 4. **Deploy.** Gere um domínio público (**Settings → Networking → Generate Domain**) —

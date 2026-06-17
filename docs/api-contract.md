@@ -177,21 +177,31 @@ Exige matrícula ativa no curso da aula; caso contrário 403 `MATRICULA_EXPIRADA
   "id": "uuid",
   "titulo": "Leitura de scanner",
   "modulo_id": "uuid",
-  "panda_video_id": "abc123",        // id do embed; o token de player é gerado server-side
+  "panda_video_id": "abc123",        // id do embed (aula paga não vaza sem matrícula)
   "duracao_segundos": 1280,
   "materiais": [
     { "id": "uuid", "nome": "Esquema elétrico I-Motion", "url_pdf": "https://..." }
   ],
-  "progresso": { "concluida": false, "percentual": 60 }
+  // posicao_segundos = onde o aluno parou (o player dá seek aqui ao reabrir)
+  "progresso": { "concluida": false, "percentual": 60, "posicao_segundos": 740 },
+  // DRM: token assinado por sessão (null quando PANDA_DRM_ENABLED=false → embed
+  // público). O player anexa ?watermark=<token>&drm_group_id=<id> ao embed.
+  "player_token": null,
+  "drm_group_id": null
 }
 ```
 
 ### `POST /progresso` 🔒
+O player chama isto sozinho (debounce ~7s + pause/ended) — não depende mais do
+clique manual. `posicao_segundos` é opcional (omitido = não mexe na posição; o
+botão "Concluir" não zera). O tempo REALMENTE assistido é acumulado pelo servidor
+(não vem do cliente) e é exigido no gate do certificado.
 ```json
-// request
-{ "aula_id": "uuid", "percentual": 75, "concluida": false }
+// request  (posicao_segundos opcional)
+{ "aula_id": "uuid", "percentual": 75, "concluida": false, "posicao_segundos": 950 }
 // response 200
-{ "aula_id": "uuid", "percentual": 75, "concluida": false, "curso_percentual": 38.2 }
+{ "aula_id": "uuid", "percentual": 75, "concluida": false,
+  "curso_percentual": 38.2, "posicao_segundos": 950 }
 ```
 
 ---
@@ -199,7 +209,10 @@ Exige matrícula ativa no curso da aula; caso contrário 403 `MATRICULA_EXPIRADA
 ## 5. Certificados 🔒 / verificação pública
 
 ### `POST /certificados/{matricula_id}` 🔒
-Emite certificado se o curso estiver 100% concluído (senão 409).
+Emite certificado se o curso estiver 100% concluído (senão 409 `CURSO_NAO_CONCLUIDO`).
+**Anti-fraude:** a aula só conta como concluída se o tempo real assistido
+(`segundos_assistidos`, acumulado pelo servidor) cobrir ≥ `CERT_MIN_WATCH_RATIO`
+(default 0,85) da `duracao_segundos` — `percentual=100` instantâneo não basta.
 ```json
 // response 201
 { "id": "uuid", "codigo_verificacao": "RC-2026-AB12CD", "emitido_em": "2026-06-06T..." }

@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core import panda
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
@@ -88,6 +90,9 @@ async def obter_aula(
         )
     ).scalar_one_or_none()
 
+    # Token DRM por sessão (None se DRM desligado → embed público).
+    token = panda.assinar_drm_token()
+
     return AulaDetail(
         id=aula.id,
         titulo=aula.titulo,
@@ -103,4 +108,6 @@ async def obter_aula(
             percentual=float(progresso.percentual) if progresso else 0.0,
             posicao_segundos=progresso.posicao_segundos if progresso else 0,
         ),
+        player_token=token,
+        drm_group_id=settings.PANDA_DRM_GROUP_ID if token else None,
     )

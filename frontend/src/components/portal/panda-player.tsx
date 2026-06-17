@@ -10,13 +10,23 @@ const PANDA_BASE = process.env.NEXT_PUBLIC_PANDA_EMBED_BASE ?? "";
 export function PandaPlayer({
   videoId,
   title,
+  playerToken = null,
+  drmGroupId = null,
 }: {
   videoId: string | null;
   title?: string;
+  playerToken?: string | null;
+  drmGroupId?: string | null;
 }) {
   if (PANDA_BASE && videoId) {
     const sep = PANDA_BASE.includes("?") ? "&" : "?";
-    const src = `${PANDA_BASE}${sep}v=${encodeURIComponent(videoId)}`;
+    const params = new URLSearchParams({ v: videoId });
+    // DRM: embed privado quando o backend assinou um token (mesma lógica do LMS).
+    if (playerToken) {
+      params.set("watermark", playerToken);
+      if (drmGroupId) params.set("drm_group_id", drmGroupId);
+    }
+    const src = `${PANDA_BASE}${sep}${params.toString()}`;
     return (
       <div
         style={{

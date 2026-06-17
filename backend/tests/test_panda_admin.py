@@ -125,3 +125,53 @@ class TestUploadPanda:
         async with Session() as s:
             a = await s.get(Aula, uuid.UUID(ids["aula_id"]))
             assert a.duracao_segundos == 600
+
+
+class TestDrmToken:
+    def test_sem_drm_retorna_none(self, monkeypatch):
+        from app.core import panda
+
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_ENABLED", False)
+        assert panda.assinar_drm_token() is None
+
+    def test_com_drm_assina_jwt(self, monkeypatch):
+        import jwt as jwtlib
+
+        from app.core import panda
+
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_ENABLED", True)
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_GROUP_ID", "grp-1")
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_SECRET", "s3cr3t-xyz")
+        tok = panda.assinar_drm_token(ttl=60)
+        assert tok
+        dec = jwtlib.decode(tok, "s3cr3t-xyz", algorithms=["HS256"])
+        assert dec["drm_group_id"] == "grp-1"
+        assert "exp" in dec
+
+    async def test_aula_inclui_token_quando_drm_ligado(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict, monkeypatch
+    ):
+        from app.core import panda
+
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_ENABLED", True)
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_GROUP_ID", "grp-1")
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_SECRET", "s3cr3t-xyz")
+        r = await client.get(
+            f"/api/v1/aulas/{test_data['aula_ativa_id']}", headers=auth_headers
+        )
+        assert r.status_code == 200
+        d = r.json()
+        assert d["player_token"]
+        assert d["drm_group_id"] == "grp-1"
+
+    async def test_aula_sem_token_quando_drm_desligado(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict, monkeypatch
+    ):
+        from app.core import panda
+
+        monkeypatch.setattr(panda.settings, "PANDA_DRM_ENABLED", False)
+        r = await client.get(
+            f"/api/v1/aulas/{test_data['aula_ativa_id']}", headers=auth_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["player_token"] is None

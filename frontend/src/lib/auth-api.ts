@@ -235,6 +235,8 @@ export interface AulaDetail {
     percentual: number;
     posicao_segundos: number;
   };
+  player_token?: string | null;
+  drm_group_id?: string | null;
 }
 
 export interface PlayerAula {
@@ -375,6 +377,8 @@ export interface AulaPreview {
   id: string;
   titulo: string;
   panda_video_id: string | null;
+  player_token?: string | null;
+  drm_group_id?: string | null;
 }
 
 export const getPreview = (slug: string) =>

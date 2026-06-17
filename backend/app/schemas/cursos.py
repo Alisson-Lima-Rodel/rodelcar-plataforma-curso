@@ -56,6 +56,9 @@ class AulaPreview(BaseModel):
     id: uuid.UUID
     titulo: str
     panda_video_id: str | None = None
+    # DRM (mesma lógica do AulaDetail): token por sessão p/ o embed privado.
+    player_token: str | None = None
+    drm_group_id: str | None = None
 
 
 class ModuloDetalhe(BaseModel):

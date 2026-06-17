@@ -438,6 +438,8 @@ export function Player() {
             title={currentLesson?.titulo}
             startAt={aulaQ.data?.progresso.posicao_segundos ?? 0}
             durationSeconds={aulaQ.data?.duracao_segundos ?? 0}
+            playerToken={aulaQ.data?.player_token ?? null}
+            drmGroupId={aulaQ.data?.drm_group_id ?? null}
             onProgress={handleProgress}
           />
 

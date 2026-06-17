@@ -26,3 +26,7 @@ class AulaDetail(BaseModel):
     duracao_segundos: int
     materiais: list[MaterialResumo]
     progresso: ProgressoAula
+    # DRM: token assinado por sessão p/ embed privado. None quando DRM desligado
+    # (embed público). O player anexa ?watermark=<token>&drm_group_id=<id>.
+    player_token: str | None = None
+    drm_group_id: str | None = None

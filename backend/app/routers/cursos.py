@@ -3,6 +3,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core import panda
+from app.core.config import settings
 from app.core.db import get_db
 from app.dependencies import get_current_aluno
 from app.models import Aluno, Aula, Curso, Modulo, TipoCurso
@@ -146,8 +148,17 @@ async def aulas_preview(
             .order_by(Modulo.ordem, Aula.ordem)
         )
     ).scalars().all()
+    # Sob DRM, até a amostra grátis precisa do token assinado p/ tocar.
+    token = panda.assinar_drm_token()
+    grupo = settings.PANDA_DRM_GROUP_ID if token else None
     return [
-        AulaPreview(id=a.id, titulo=a.titulo, panda_video_id=a.panda_video_id)
+        AulaPreview(
+            id=a.id,
+            titulo=a.titulo,
+            panda_video_id=a.panda_video_id,
+            player_token=token,
+            drm_group_id=grupo,
+        )
         for a in rows
     ]
 

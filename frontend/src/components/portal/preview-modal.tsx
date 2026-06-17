@@ -69,6 +69,8 @@ export function PreviewModal({
             <PandaPlayer
               videoId={atual?.panda_video_id ?? null}
               title={atual?.titulo}
+              playerToken={atual?.player_token ?? null}
+              drmGroupId={atual?.drm_group_id ?? null}
             />
             {aulas.length > 1 && (
               <div style={{ marginTop: 12, display: "grid", gap: 6 }}>

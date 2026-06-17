@@ -109,12 +109,16 @@ export function SmartPlayer({
   title,
   startAt = 0,
   durationSeconds = 0,
+  playerToken = null,
+  drmGroupId = null,
   onProgress,
 }: {
   videoId: string | null;
   title?: string;
   startAt?: number;
   durationSeconds?: number;
+  playerToken?: string | null;
+  drmGroupId?: string | null;
   onProgress?: (p: ProgressUpdate) => void;
 }) {
   const playerRef = useRef<PandaPlayerInstance | null>(null);
@@ -220,6 +224,11 @@ export function SmartPlayer({
   const sep = PANDA_BASE.includes("?") ? "&" : "?";
   const params = new URLSearchParams({ v: videoId, controls: CONTROLS });
   if (startAt > 0) params.set("startTime", String(Math.floor(startAt)));
+  // DRM: embed privado quando o backend assinou um token.
+  if (playerToken) {
+    params.set("watermark", playerToken);
+    if (drmGroupId) params.set("drm_group_id", drmGroupId);
+  }
   const src = `${PANDA_BASE}${sep}${params.toString()}`;
 
   return (

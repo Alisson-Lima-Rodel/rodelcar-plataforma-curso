@@ -30,6 +30,7 @@ export interface Course {
   gratuito?: boolean; // curso 100% grátis (matrícula free)
   desc?: string;
   learn?: string[];
+  idiomasLegenda?: string[]; // selo "Legendado em PT/EN/ES" na venda
   modules?: CourseModule[];
 }
 

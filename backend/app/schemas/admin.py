@@ -72,6 +72,7 @@ class CursoAdmin(BaseModel):
     gratuito: bool
     ordem: int
     thumbnail_url: str | None = None
+    idiomas_legenda: list[str] = []
 
 
 class CursoCreate(BaseModel):
@@ -94,6 +95,7 @@ class CursoCreate(BaseModel):
     gratuito: bool = False
     ordem: int = Field(default=0, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
+    idiomas_legenda: list[str] = Field(default_factory=list)
 
 
 class CursoUpdate(BaseModel):
@@ -116,6 +118,7 @@ class CursoUpdate(BaseModel):
     gratuito: bool | None = None
     ordem: int | None = Field(default=None, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
+    idiomas_legenda: list[str] | None = None
 
 
 # ── Depoimentos ───────────────────────────────────────────────────────────────

@@ -197,6 +197,12 @@ class Curso(Base):
     icon: Mapped[str | None] = mapped_column(String(40))
     badge_label: Mapped[str | None] = mapped_column(String(40))
     aprende: Mapped[list] = mapped_column(JSONB, default=list)
+    # Idiomas de legenda disponíveis (ex.: ["PT","EN","ES"]) — só metadado de
+    # vitrine p/ o selo "Legendado em…" na página de venda. A legenda em si é
+    # gerada/renderizada pelo Panda (legenda IA no dashboard).
+    idiomas_legenda: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
     # Curso 100% gratuito: o aluno cadastrado se matricula de graça (sem Stripe) e
     # acessa todas as aulas. Ímã de leads. Difere de Aula.gratuita (amostra avulsa).
     gratuito: Mapped[bool] = mapped_column(

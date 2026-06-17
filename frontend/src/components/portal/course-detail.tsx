@@ -216,6 +216,11 @@ export function CourseDetail({
                 <Badge variant="cyan" icon="infinity">
                   1 ano de acesso
                 </Badge>
+                {rich.idiomasLegenda && rich.idiomasLegenda.length > 0 && (
+                  <Badge variant="success" icon="message">
+                    Legendado em {rich.idiomasLegenda.join("/")}
+                  </Badge>
+                )}
                 <span className="flex center gap-2">
                   <Stars value={rich.rating} size={15} />
                   <span className="tag-mono">

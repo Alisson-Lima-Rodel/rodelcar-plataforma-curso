@@ -25,14 +25,28 @@ export function RemoteEntityManager({
     queryKey,
     queryFn: crud.list,
   });
-  const items = (data ?? []) as AdminItem[];
+  // O form genérico é escalar; campos de lista (ex.: idiomas_legenda do curso)
+  // chegam como array da API → viram texto "PT, EN" no form e voltam a array no
+  // save. Localizado aqui para não vazar arrays pelo AdminItem.
+  const items = ((data ?? []) as Record<string, unknown>[]).map((it) =>
+    Array.isArray(it.idiomas_legenda)
+      ? { ...it, idiomas_legenda: (it.idiomas_legenda as string[]).join(", ") }
+      : it,
+  ) as AdminItem[];
 
   const onSave = async (item: AdminItem) => {
     const exists = items.some((x) => x.id === item.id);
     const { id, ...rest } = item; // id do backend não vai no corpo
+    const payload: Record<string, unknown> = { ...rest };
+    if (typeof payload.idiomas_legenda === "string") {
+      payload.idiomas_legenda = payload.idiomas_legenda
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
     try {
-      if (exists) await crud.update(String(id), rest);
-      else await crud.create(rest);
+      if (exists) await crud.update(String(id), payload);
+      else await crud.create(payload);
       await qc.invalidateQueries({ queryKey });
     } catch {
       onToast("Não foi possível salvar — confira os campos.");

@@ -117,6 +117,7 @@ interface ApiCourseListItem extends ApiCourseBase {
 interface ApiCourseDetail extends ApiCourseBase {
   descricao?: string | null;
   aprende?: string[];
+  idiomas_legenda?: string[];
   modulos: {
     id: string;
     titulo: string;
@@ -304,6 +305,7 @@ export async function getCurso(slug: string): Promise<Course | null> {
     hasPreview: (d.modulos ?? []).some((m) => m.aulas.some((a) => a.gratuita)),
     desc: d.descricao ?? undefined,
     learn: d.aprende ?? [],
+    idiomasLegenda: d.idiomas_legenda ?? [],
     modules: (d.modulos ?? []).map((m) => ({
       t: m.titulo,
       lessons: m.aulas.map((a) => a.titulo),

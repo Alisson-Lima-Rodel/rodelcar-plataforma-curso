@@ -89,6 +89,7 @@ class CursoDetail(BaseModel):
     icon: str | None = None
     badge_label: str | None = None
     aprende: list[str] = []
+    idiomas_legenda: list[str] = []  # selo "Legendado em PT/EN/ES"
     modulos: list[ModuloDetalhe]
     # Avaliações reais dos alunos (alimentam aggregateRating no JSON-LD).
     rating_medio: float | None = None

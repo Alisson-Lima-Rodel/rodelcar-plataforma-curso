@@ -214,6 +214,7 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         icon=curso.icon,
         badge_label=curso.badge_label,
         aprende=curso.aprende or [],
+        idiomas_legenda=curso.idiomas_legenda or [],
         modulos=modulos,
         rating_medio=rating_medio,
         rating_count=rating_count,

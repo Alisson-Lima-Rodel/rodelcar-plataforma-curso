@@ -746,10 +746,10 @@ async def retencao_aula(aula_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 @conteudo.get("/panda/videos", response_model=PandaBibliotecaResponse)
 async def listar_biblioteca_panda(
-    title: str | None = None,
-    folder_id: str | None = None,
-    page: int = 1,
-    limit: int = 30,
+    title: str | None = Query(None, max_length=200),
+    folder_id: str | None = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    limit: int = Query(30, ge=1, le=100),
 ):
     """Lista a biblioteca de vídeos da conta no Panda (seletor do admin).
 
@@ -774,7 +774,9 @@ async def listar_biblioteca_panda(
 
 
 @conteudo.get("/panda/pastas", response_model=PandaPastasResponse)
-async def listar_pastas_panda(parent_folder_id: str | None = None):
+async def listar_pastas_panda(
+    parent_folder_id: str | None = Query(None, max_length=100),
+):
     """Pastas da conta no Panda, para filtrar a biblioteca no seletor."""
     if not settings.panda_ativo:
         raise _err(

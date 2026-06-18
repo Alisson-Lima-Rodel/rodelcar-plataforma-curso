@@ -190,6 +190,11 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     rt.revogado = True
     rt.revogado_em = agora
     aluno = await db.get(Aluno, aluno_uuid)
+    # Aluno bloqueado não renova sessão (mesmo com refresh válido). O access já
+    # cairia em get_current_aluno, mas barrar aqui evita rotacionar a família.
+    if aluno is None or aluno.bloqueado:
+        await db.commit()  # persiste a revogação do token atual
+        raise _err(403, "ALUNO_BLOQUEADO", "Acesso bloqueado. Fale com o suporte.")
     return await _emitir_tokens(str(aluno_uuid), aluno.token_version, db)
 
 

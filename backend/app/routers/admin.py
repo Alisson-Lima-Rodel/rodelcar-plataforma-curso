@@ -1,10 +1,11 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 import stripe
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import EmailStr
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -395,6 +396,13 @@ async def recuperar_senha_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(
     obj = await db.get(Aluno, aluno_id)
     if obj is None:
         raise _err(404, "NAO_ENCONTRADO", "Aluno não encontrado.")
+    # Invalida links de reset anteriores ainda válidos (1 token vivo por aluno):
+    # gerar um novo derruba os antigos, evitando vários links em circulação.
+    await db.execute(
+        update(PasswordReset)
+        .where(PasswordReset.aluno_id == obj.id, PasswordReset.usado.is_(False))
+        .values(usado=True)
+    )
     raw, token_hash = gerar_reset_token()
     expira_em = datetime.now(timezone.utc) + timedelta(hours=24)
     db.add(PasswordReset(aluno_id=obj.id, token_hash=token_hash, expira_em=expira_em))
@@ -1172,8 +1180,8 @@ async def buscar_reembolsos(
 
 @reembolsos.get("/matriculas", response_model=list[MatriculaAdminItem])
 async def listar_matriculas_admin(
-    status: str = Query(default="ativo", description="ativo | inativo | bloqueado"),
-    origem: str | None = Query(default=None, description="avulsa | assinatura | manual"),
+    status: Literal["ativo", "inativo", "bloqueado"] = Query(default="ativo"),
+    origem: Literal["avulsa", "assinatura", "manual"] | None = Query(default=None),
     curso_id: uuid.UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):

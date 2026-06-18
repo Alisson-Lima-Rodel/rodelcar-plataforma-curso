@@ -191,6 +191,77 @@ class TestAlunoGestao:
         finally:
             await _delete_aluno(aluno_id)
 
+    async def test_bloqueio_barra_refresh_token(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        """Refresh token pré-existente não renova sessão após o bloqueio."""
+        email = f"refbloq_{uuid.uuid4().hex[:6]}@rodelcar.dev"
+        senha = "SenhaForte123"
+        criado = await client.post(
+            "/api/v1/admin/alunos",
+            headers=admin_headers,
+            json={"nome": "Refresh Bloq", "email": email, "senha": senha},
+        )
+        aluno_id = criado.json()["id"]
+        try:
+            login = await client.post(
+                "/api/v1/auth/login", json={"email": email, "senha": senha}
+            )
+            refresh_token = login.json()["refresh_token"]
+
+            await client.post(
+                f"/api/v1/admin/alunos/{aluno_id}/bloquear",
+                headers=admin_headers,
+                json={"bloqueado": True},
+            )
+            r = await client.post(
+                "/api/v1/auth/refresh", json={"refresh_token": refresh_token}
+            )
+            assert r.status_code == 403
+            assert r.json()["error"]["code"] == "ALUNO_BLOQUEADO"
+        finally:
+            await _delete_aluno(aluno_id)
+
+    async def test_recuperar_senha_gerar_novo_invalida_anterior(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        """Gerar um novo link de reset invalida o anterior (1 token vivo)."""
+        email = f"reset2_{uuid.uuid4().hex[:6]}@rodelcar.dev"
+        criado = await client.post(
+            "/api/v1/admin/alunos",
+            headers=admin_headers,
+            json={"nome": "Dois Links", "email": email, "senha": "SenhaForte123"},
+        )
+        aluno_id = criado.json()["id"]
+        try:
+            t1 = (
+                await client.post(
+                    f"/api/v1/admin/alunos/{aluno_id}/recuperar-senha",
+                    headers=admin_headers,
+                )
+            ).json()["token"]
+            t2 = (
+                await client.post(
+                    f"/api/v1/admin/alunos/{aluno_id}/recuperar-senha",
+                    headers=admin_headers,
+                )
+            ).json()["token"]
+
+            # O 1º token (anterior) não vale mais.
+            r1 = await client.post(
+                "/api/v1/auth/recuperar-senha/confirmar",
+                json={"token": t1, "nova_senha": "NovaSenha456"},
+            )
+            assert r1.status_code == 400
+            # O 2º (mais recente) funciona.
+            r2 = await client.post(
+                "/api/v1/auth/recuperar-senha/confirmar",
+                json={"token": t2, "nova_senha": "NovaSenha456"},
+            )
+            assert r2.status_code == 204
+        finally:
+            await _delete_aluno(aluno_id)
+
     async def test_recuperar_senha_link_redefine_e_e_single_use(
         self, client: AsyncClient, admin_headers: dict
     ):

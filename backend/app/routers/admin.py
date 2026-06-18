@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import stripe
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
@@ -12,7 +12,13 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import auth_limit, limiter
-from app.core.security import create_admin_token, dummy_verify, hash_password, verify_password
+from app.core.security import (
+    create_admin_token,
+    dummy_verify,
+    gerar_reset_token,
+    hash_password,
+    verify_password,
+)
 from app.core.stripe_admin import (
     arquivar_price,
     criar_price_curso,
@@ -39,12 +45,14 @@ from app.models import (
     Cupom,
     Curso,
     Depoimento,
+    Evento,
     Faq,
     MaterialApoio,
     Matricula,
     Modulo,
     Pagamento,
     PapelAdmin,
+    PasswordReset,
     PlanoAssinatura,
     Progresso,
     Questao,
@@ -76,6 +84,7 @@ from app.schemas.admin import (
     AdminUserItem,
     AdminUserUpdate,
     AlunoAdminItem,
+    AlunoBloqueioUpdate,
     AlunoCreate,
     AlunoUpdate,
     CursoAdmin,
@@ -93,9 +102,12 @@ from app.schemas.admin import (
     CupomAdmin,
     CupomCreate,
     CupomUpdate,
+    MatriculaAdminItem,
+    MetricaDiaria,
     PlanoAssinaturaAdmin,
     PlanoAssinaturaCreate,
     PlanoAssinaturaUpdate,
+    RecuperarSenhaResponse,
     ReembolsoItem,
     VideoAdmin,
     VideoCreate,
@@ -287,6 +299,8 @@ async def _alunos_agg(db: AsyncSession) -> dict:
 
 def _aluno_item(a: Aluno, agg: tuple) -> AlunoAdminItem:
     count, vig, ativo = agg
+    # Bloqueio (trava manual) tem prioridade sobre a vigência da matrícula.
+    status = "Bloqueado" if a.bloqueado else ("Ativo" if ativo else "Inativo")
     return AlunoAdminItem(
         id=a.id,
         nome=a.nome,
@@ -294,7 +308,8 @@ def _aluno_item(a: Aluno, agg: tuple) -> AlunoAdminItem:
         telefone=a.telefone,
         matriculas=count,
         vigencia=vig.date() if vig else None,
-        status="Ativo" if ativo else "Inativo",
+        bloqueado=a.bloqueado,
+        status=status,
     )
 
 
@@ -352,6 +367,39 @@ async def excluir_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     await db.delete(obj)
     await db.commit()
     return Response(status_code=204)
+
+
+@alunos.post("/{aluno_id}/bloquear", response_model=AlunoAdminItem)
+async def bloquear_aluno(
+    aluno_id: uuid.UUID, body: AlunoBloqueioUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Bloqueia/desbloqueia o acesso do aluno. Ao bloquear, incrementa o
+    token_version para derrubar sessões vivas na hora (o login já fica barrado)."""
+    obj = await db.get(Aluno, aluno_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aluno não encontrado.")
+    if body.bloqueado and not obj.bloqueado:
+        obj.token_version += 1  # mata access tokens vivos
+    obj.bloqueado = body.bloqueado
+    await db.commit()
+    await db.refresh(obj)
+    agg = await _alunos_agg(db)
+    return _aluno_item(obj, agg.get(obj.id, (0, None, False)))
+
+
+@alunos.post("/{aluno_id}/recuperar-senha", response_model=RecuperarSenhaResponse)
+async def recuperar_senha_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Gera um token de redefinição (single-use, 24h). Devolve o token bruto UMA
+    vez para o admin montar o link e enviar ao aluno (WhatsApp/e-mail). O banco
+    guarda só o hash. Não revela nada do aluno além do token."""
+    obj = await db.get(Aluno, aluno_id)
+    if obj is None:
+        raise _err(404, "NAO_ENCONTRADO", "Aluno não encontrado.")
+    raw, token_hash = gerar_reset_token()
+    expira_em = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.add(PasswordReset(aluno_id=obj.id, token_hash=token_hash, expira_em=expira_em))
+    await db.commit()
+    return RecuperarSenhaResponse(token=raw, expira_em=expira_em)
 
 
 router.include_router(alunos)
@@ -1122,6 +1170,82 @@ async def buscar_reembolsos(
     )
 
 
+@reembolsos.get("/matriculas", response_model=list[MatriculaAdminItem])
+async def listar_matriculas_admin(
+    status: str = Query(default="ativo", description="ativo | inativo | bloqueado"),
+    origem: str | None = Query(default=None, description="avulsa | assinatura | manual"),
+    curso_id: uuid.UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lista matrículas (aluno × curso/plano) para gestão de acesso/reembolso.
+
+    `status` default 'ativo'. 'bloqueado' filtra por aluno bloqueado (independe da
+    matrícula); 'inativo' = matrícula não-ativa de aluno não bloqueado. `origem`
+    distingue plano (assinatura) de curso avulso; `curso_id` filtra um curso."""
+    stmt = (
+        select(Matricula, Aluno)
+        .join(Aluno, Matricula.aluno_id == Aluno.id)
+        .options(selectinload(Matricula.curso))
+        .order_by(Matricula.data_inicio.desc())
+    )
+    if status == "ativo":
+        stmt = stmt.where(
+            Matricula.status == StatusMatricula.ativo, Aluno.bloqueado.is_(False)
+        )
+    elif status == "inativo":
+        stmt = stmt.where(
+            Matricula.status != StatusMatricula.ativo, Aluno.bloqueado.is_(False)
+        )
+    elif status == "bloqueado":
+        stmt = stmt.where(Aluno.bloqueado.is_(True))
+    if curso_id is not None:
+        stmt = stmt.where(Matricula.curso_id == curso_id)
+    rows = (await db.execute(stmt.limit(500))).all()
+
+    pag_ids = [m.pagamento_id for m, _a in rows if m.pagamento_id]
+    pagamentos: dict = {}
+    if pag_ids:
+        prows = (
+            await db.execute(select(Pagamento).where(Pagamento.id.in_(pag_ids)))
+        ).scalars().all()
+        pagamentos = {p.id: p for p in prows}
+
+    agora = datetime.now(timezone.utc)
+    items = []
+    for m, a in rows:
+        pag = pagamentos.get(m.pagamento_id) if m.pagamento_id else None
+        if pag is None:
+            mat_origem = "manual"
+        elif m.stripe_subscription_id:
+            mat_origem = "assinatura"
+        else:
+            mat_origem = "avulsa"
+        if origem and mat_origem != origem:
+            continue
+        limite = limite_cancelamento(pag)
+        items.append(MatriculaAdminItem(
+            matricula_id=m.id,
+            aluno_id=a.id,
+            aluno_nome=a.nome,
+            aluno_email=a.email,
+            aluno_telefone=a.telefone,
+            aluno_bloqueado=a.bloqueado,
+            curso_titulo=m.curso.titulo,
+            origem=mat_origem,
+            status=m.status.value,
+            valor=float(pag.valor) if pag else None,
+            pago_em=pag.criado_em if pag else None,
+            dentro_da_janela=bool(limite is not None and agora <= limite),
+            cancelavel=(
+                pag is not None
+                and pag.status == StatusPagamento.aprovado
+                and pag.gateway == "stripe"
+                and m.status == StatusMatricula.ativo
+            ),
+        ))
+    return items
+
+
 @reembolsos.post("/{matricula_id}/cancelar", response_model=CancelamentoResultado)
 async def cancelar_matricula_admin(
     matricula_id: uuid.UUID, db: AsyncSession = Depends(get_db)
@@ -1161,6 +1285,57 @@ async def cancelar_matricula_admin(
 
 
 router.include_router(reembolsos)
+
+
+# ── Métricas diárias (visão geral) ────────────────────────────────────────────
+metricas = APIRouter(prefix="/metricas", dependencies=[Depends(require_papel(*_ALUNOS))])
+
+
+@metricas.get("/diario", response_model=list[MetricaDiaria])
+async def metricas_diarias(
+    dias: int = Query(default=90, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """Série diária de acessos (logins), aulas assistidas e compras aprovadas.
+
+    Acessos e aulas vêm de `eventos` (registrados a partir do deploy desta
+    feature); compras têm histórico completo em `pagamentos`. Dias sem dado vêm
+    com zero (série contínua)."""
+    hoje = datetime.now(timezone.utc).date()
+    inicio = hoje - timedelta(days=dias - 1)
+    inicio_dt = datetime(inicio.year, inicio.month, inicio.day, tzinfo=timezone.utc)
+
+    async def _por_dia(col, *filtros) -> dict:
+        d = func.date(col).label("dia")
+        stmt = select(d, func.count()).where(col >= inicio_dt)
+        for f in filtros:
+            stmt = stmt.where(f)
+        rows = (await db.execute(stmt.group_by(d))).all()
+        # func.date devolve date no asyncpg; normaliza por segurança.
+        return {
+            (r[0] if isinstance(r[0], date) else date.fromisoformat(str(r[0]))): r[1]
+            for r in rows
+        }
+
+    acessos = await _por_dia(Evento.timestamp, Evento.nome_evento == "login")
+    aulas = await _por_dia(Evento.timestamp, Evento.nome_evento == "aula_assistida")
+    compras = await _por_dia(
+        Pagamento.criado_em, Pagamento.status == StatusPagamento.aprovado
+    )
+
+    out: list[MetricaDiaria] = []
+    for i in range(dias):
+        d = inicio + timedelta(days=i)
+        out.append(MetricaDiaria(
+            dia=d,
+            acessos=acessos.get(d, 0),
+            aulas_assistidas=aulas.get(d, 0),
+            compras=compras.get(d, 0),
+        ))
+    return out
+
+
+router.include_router(metricas)
 
 
 # ── Upload de imagens (capa de curso → Supabase Storage) ──────────────────────

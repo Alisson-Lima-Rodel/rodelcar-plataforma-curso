@@ -53,6 +53,13 @@ async def get_current_aluno(
             status_code=401,
             detail={"error": {"code": "TOKEN_INVALIDO", "message": "Sessão expirada. Faça login novamente.", "details": None}},
         )
+    # Bloqueio manual: derruba sessão viva mesmo com token válido (o bloqueio já
+    # incrementa o token_version, mas reforçamos aqui por clareza/segurança).
+    if aluno.bloqueado:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": {"code": "ALUNO_BLOQUEADO", "message": "Acesso bloqueado. Fale com o suporte.", "details": None}},
+        )
     return aluno
 
 

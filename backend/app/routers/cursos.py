@@ -69,8 +69,10 @@ async def listar_cursos(
         .scalar_subquery()
     )
 
-    base = select(Curso)
-    count_stmt = select(func.count(Curso.id))
+    # Só cursos ATIVOS na vitrine pública (inativo some do site, mas continua
+    # acessível a quem já comprou — isso é barrado por matrícula, não aqui).
+    base = select(Curso).where(Curso.ativo.is_(True))
+    count_stmt = select(func.count(Curso.id)).where(Curso.ativo.is_(True))
     if tipo is not None:
         base = base.where(Curso.tipo == tipo)
         count_stmt = count_stmt.where(Curso.tipo == tipo)
@@ -129,7 +131,9 @@ async def aulas_preview(
     de liberar a amostra) — expõe `panda_video_id` SÓ de aulas marcadas como
     gratuitas, e só para aluno cadastrado (as pagas nunca vazam)."""
     curso = (
-        await db.execute(select(Curso.id).where(Curso.slug == slug))
+        await db.execute(
+            select(Curso.id).where(Curso.slug == slug, Curso.ativo.is_(True))
+        )
     ).scalar_one_or_none()
     if curso is None:
         raise HTTPException(
@@ -169,7 +173,7 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
     curso = (
         await db.execute(
             select(Curso)
-            .where(Curso.slug == slug)
+            .where(Curso.slug == slug, Curso.ativo.is_(True))
             .options(selectinload(Curso.modulos).selectinload(Modulo.aulas))
         )
     ).scalar_one_or_none()

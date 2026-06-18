@@ -80,6 +80,17 @@ export function createLead(input: LeadInput): Promise<LeadCreated> {
   return api.post<LeadCreated>("/leads", input);
 }
 
+// ── Recuperação de senha (link gerado pelo admin) ─────────────────────────────
+export function confirmarResetSenha(
+  token: string,
+  nova_senha: string,
+): Promise<void> {
+  return api.post<void>("/auth/recuperar-senha/confirmar", {
+    token,
+    nova_senha,
+  });
+}
+
 // ── Cursos (vitrine pública / página de venda) ────────────────────────────────
 // Server-side fetch (SSR). Em dev o localhost funciona no servidor; em Docker,
 // defina API_URL_INTERNAL=http://backend:8000/api/v1.

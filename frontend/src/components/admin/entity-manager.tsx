@@ -35,6 +35,7 @@ const STATUS_MAP: Record<string, BadgeVariant> = {
   Publicado: "success",
   Aprovado: "success",
   Inativo: "",
+  Bloqueado: "warning",
   Rascunho: "warning",
   Pendente: "warning",
 };
@@ -531,6 +532,16 @@ function Confirm({
   );
 }
 
+/** Ação extra por linha (ex.: ativar/inativar curso, bloquear/recuperar aluno).
+ * Renderizada à esquerda do botão de editar. `active` (opcional) escolhe o ícone/
+ * cor conforme um estado do item (toggle). */
+export interface RowAction {
+  label: (it: AdminItem) => string;
+  icon: (it: AdminItem) => string;
+  tone?: (it: AdminItem) => "success" | "danger" | "default";
+  onClick: (it: AdminItem) => void;
+}
+
 export interface EntityManagerProps {
   ent: EntitySchema;
   items: AdminItem[];
@@ -538,6 +549,7 @@ export interface EntityManagerProps {
   onDelete: (id: string) => void;
   onToast: (msg: string) => void;
   autoNew?: boolean;
+  extraActions?: RowAction[];
 }
 
 export function EntityManager({
@@ -547,6 +559,7 @@ export function EntityManager({
   onDelete,
   onToast,
   autoNew,
+  extraActions,
 }: EntityManagerProps) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("Todos");
@@ -633,6 +646,25 @@ export function EntityManager({
                   ))}
                   <td>
                     <div className="row-actions">
+                      {extraActions?.map((a, ai) => {
+                        const tone = a.tone?.(it) ?? "default";
+                        return (
+                          <button
+                            key={ai}
+                            className={`icon-btn${tone === "danger" ? " danger" : ""}`}
+                            onClick={() => a.onClick(it)}
+                            aria-label={a.label(it)}
+                            title={a.label(it)}
+                            style={
+                              tone === "success"
+                                ? { color: "var(--success)" }
+                                : undefined
+                            }
+                          >
+                            <Icon name={a.icon(it)} size={15} />
+                          </button>
+                        );
+                      })}
                       <button
                         className="icon-btn"
                         onClick={() => setEditing(it)}

@@ -161,6 +161,68 @@ export const cancelarMatriculaAdmin = (matriculaId: string) =>
     method: "POST",
   });
 
+// ── Gestão de matrículas (acesso / reembolso) ─────────────────────────────────
+export interface MatriculaAdmin {
+  matricula_id: string;
+  aluno_id: string;
+  aluno_nome: string;
+  aluno_email: string;
+  aluno_telefone: string | null;
+  aluno_bloqueado: boolean;
+  curso_titulo: string;
+  origem: "avulsa" | "assinatura" | "manual";
+  status: string;
+  valor: number | null;
+  pago_em: string | null;
+  dentro_da_janela: boolean;
+  cancelavel: boolean;
+}
+
+export interface MatriculaFiltro {
+  status?: "ativo" | "inativo" | "bloqueado";
+  origem?: "avulsa" | "assinatura" | "manual";
+  curso_id?: string;
+}
+
+export const listarMatriculasReembolso = (f: MatriculaFiltro = {}) => {
+  const qs = new URLSearchParams();
+  if (f.status) qs.set("status", f.status);
+  if (f.origem) qs.set("origem", f.origem);
+  if (f.curso_id) qs.set("curso_id", f.curso_id);
+  const q = qs.toString();
+  return adminFetch<MatriculaAdmin[]>(
+    `/admin/reembolsos/matriculas${q ? `?${q}` : ""}`,
+  );
+};
+
+// ── Bloqueio e recuperação de senha do aluno ──────────────────────────────────
+export const bloquearAluno = (alunoId: string, bloqueado: boolean) =>
+  adminFetch<AdminRow>(`/admin/alunos/${alunoId}/bloquear`, {
+    method: "POST",
+    body: JSON.stringify({ bloqueado }),
+  });
+
+export interface RecuperarSenhaResp {
+  token: string;
+  expira_em: string;
+}
+
+export const recuperarSenhaAluno = (alunoId: string) =>
+  adminFetch<RecuperarSenhaResp>(`/admin/alunos/${alunoId}/recuperar-senha`, {
+    method: "POST",
+  });
+
+// ── Métricas diárias (visão geral) ────────────────────────────────────────────
+export interface MetricaDiaria {
+  dia: string;
+  acessos: number;
+  aulas_assistidas: number;
+  compras: number;
+}
+
+export const metricasDiarias = (dias = 90) =>
+  adminFetch<MetricaDiaria[]>(`/admin/metricas/diario?dias=${dias}`);
+
 // ── Moderação de avaliações ───────────────────────────────────────────────────
 export interface AvaliacaoAdmin {
   id: string;

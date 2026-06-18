@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Aula, Matricula, Modulo, Progresso, StatusMatricula
+from app.models import Aluno, Aula, Evento, Matricula, Modulo, Progresso, StatusMatricula
 from app.schemas.aulas import AulaDetail, MaterialResumo, ProgressoAula
 
 router = APIRouter(prefix="/aulas", tags=["aulas"])
@@ -92,6 +92,14 @@ async def obter_aula(
 
     # Token DRM por sessão (None se DRM desligado → embed público).
     token = panda.assinar_drm_token()
+
+    # Registra a aula assistida (alimenta o gráfico diário da visão geral).
+    db.add(Evento(
+        aluno_id=aluno.id,
+        nome_evento="aula_assistida",
+        propriedades={"aula_id": str(aula_id), "curso_id": str(curso_id)},
+    ))
+    await db.commit()
 
     return AulaDetail(
         id=aula.id,

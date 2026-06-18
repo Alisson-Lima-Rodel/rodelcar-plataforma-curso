@@ -27,6 +27,25 @@ def _so_http_url(v: str | None) -> str | None:
     return v
 
 
+def _telefone_br(v: str | None) -> str | None:
+    """Normaliza e valida telefone BR: guarda só dígitos (DDD + número, 10–11).
+
+    Aceita máscara/“+55” na entrada (descarta o 55 do país se vier com 12–13
+    dígitos). Vazio/None vira None. Inválido → 422 com mensagem clara. O valor
+    normalizado é o que alimenta o link `wa.me/55...` no painel.
+    """
+    if v is None:
+        return None
+    digitos = "".join(c for c in v if c.isdigit())
+    if not digitos:
+        return None
+    if len(digitos) in (12, 13) and digitos.startswith("55"):
+        digitos = digitos[2:]
+    if len(digitos) not in (10, 11):
+        raise ValueError("Telefone deve ter DDD + número (10 ou 11 dígitos).")
+    return digitos
+
+
 # ── Auth do painel ────────────────────────────────────────────────────────────
 class AdminLoginRequest(BaseModel):
     email: EmailStr
@@ -70,6 +89,7 @@ class CursoAdmin(BaseModel):
     validade_dias: int
     destaque: bool
     gratuito: bool
+    ativo: bool
     ordem: int
     thumbnail_url: str | None = None
     idiomas_legenda: list[str] = []
@@ -93,6 +113,7 @@ class CursoCreate(BaseModel):
     validade_dias: int = Field(default=365, gt=0)
     destaque: bool = False
     gratuito: bool = False
+    ativo: bool = True
     ordem: int = Field(default=0, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
     idiomas_legenda: list[str] = Field(default_factory=list)
@@ -116,6 +137,7 @@ class CursoUpdate(BaseModel):
     validade_dias: int | None = Field(default=None, gt=0)
     destaque: bool | None = None
     gratuito: bool | None = None
+    ativo: bool | None = None
     ordem: int | None = Field(default=None, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
     idiomas_legenda: list[str] | None = None
@@ -378,6 +400,8 @@ class AlunoAdminItem(BaseModel):
     telefone: str | None = None
     matriculas: int = 0
     vigencia: date | None = None
+    bloqueado: bool = False
+    # "Bloqueado" (trava manual) tem prioridade; senão "Ativo"/"Inativo" da matrícula.
     status: str = "Inativo"
 
 
@@ -387,9 +411,48 @@ class AlunoCreate(BaseModel):
     senha: str = _SENHA
     telefone: str | None = Field(default=None, max_length=40)
 
+    _valida_tel = field_validator("telefone")(_telefone_br)
+
 
 class AlunoUpdate(BaseModel):
     nome: str | None = None
     email: EmailStr | None = None
     senha: str | None = Field(default=None, min_length=8, max_length=72)
     telefone: str | None = Field(default=None, max_length=40)
+
+    _valida_tel = field_validator("telefone")(_telefone_br)
+
+
+class AlunoBloqueioUpdate(BaseModel):
+    bloqueado: bool
+
+
+class RecuperarSenhaResponse(BaseModel):
+    """Token bruto devolvido UMA vez ao admin p/ montar o link de redefinição."""
+    token: str
+    expira_em: datetime
+
+
+# ── Matrículas (gestão de acesso / reembolso) ─────────────────────────────────
+class MatriculaAdminItem(BaseModel):
+    matricula_id: uuid.UUID
+    aluno_id: uuid.UUID
+    aluno_nome: str
+    aluno_email: str
+    aluno_telefone: str | None = None
+    aluno_bloqueado: bool
+    curso_titulo: str
+    origem: str  # avulsa | assinatura | manual
+    status: str  # ativo | expirado | bloqueado
+    valor: float | None = None
+    pago_em: datetime | None = None
+    dentro_da_janela: bool
+    cancelavel: bool
+
+
+# ── Métricas diárias (visão geral) ────────────────────────────────────────────
+class MetricaDiaria(BaseModel):
+    dia: date
+    acessos: int
+    aulas_assistidas: int
+    compras: int

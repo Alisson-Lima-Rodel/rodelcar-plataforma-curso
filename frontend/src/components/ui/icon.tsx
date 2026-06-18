@@ -64,6 +64,18 @@ const paths: Record<string, ReactNode> = {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </>
   ),
+  power: (
+    <>
+      <path d="M12 3v9" />
+      <path d="M7.5 6.5a7 7 0 1 0 9 0" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2" />
+    </>
+  ),
   file: (
     <>
       <path d="M14 3v5h5" />

@@ -135,6 +135,12 @@ class Aluno(Base):
     # request. Incrementar invalida TODOS os access tokens vivos do aluno (ex.: ao
     # detectar reuso de refresh = roubo). Default 0 mantém tokens antigos válidos.
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Acesso bloqueado manualmente pelo admin: recusa login E derruba sessões vivas
+    # (ao bloquear, o token_version é incrementado). Difere de matrícula expirada
+    # (vigência): é uma trava independente de ter cursos ativos.
+    bloqueado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     # Customer do Stripe (cus_...); criado no 1º checkout e reaproveitado depois.
     stripe_customer_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
@@ -166,6 +172,26 @@ class RefreshToken(Base):
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revogado: Mapped[bool] = mapped_column(Boolean, default=False)
     revogado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = _created_at()
+
+
+class PasswordReset(Base):
+    """Token de redefinição de senha do aluno (single-use, gerado pelo admin).
+
+    O admin dispara a recuperação; o backend gera um token aleatório, guarda só o
+    SHA-256 dele (nunca o bruto) e devolve o bruto UMA vez para o admin montar o
+    link e enviar por WhatsApp/e-mail. O aluno abre o link, define a senha nova e a
+    linha é marcada como usada. Expira em 24h.
+    """
+    __tablename__ = "password_resets"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    aluno_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("alunos.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    usado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     criado_em: Mapped[datetime] = _created_at()
 
 
@@ -207,6 +233,12 @@ class Curso(Base):
     # acessa todas as aulas. Ímã de leads. Difere de Aula.gratuita (amostra avulsa).
     gratuito: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
+    )
+    # Curso ativo: aparece na vitrine pública e na página de venda. Inativo some do
+    # site (catálogo, slug e preview), mas NÃO corta quem já comprou — o acesso ao
+    # conteúdo continua sendo barrado por status de matrícula, não pela vitrine.
+    ativo: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
     )
 
     modulos: Mapped[list[Modulo]] = relationship(
@@ -399,7 +431,11 @@ class Evento(Base):
     __tablename__ = "eventos"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    aluno_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("alunos.id"))
+    # SET NULL: excluir um aluno NÃO apaga o histórico de eventos (as métricas
+    # diárias contam por dia, independem do aluno), e o delete não viola a FK.
+    aluno_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("alunos.id", ondelete="SET NULL")
+    )
     nome_evento: Mapped[str] = mapped_column(String(120), index=True)
     sessao_id: Mapped[str | None] = mapped_column(String(80), index=True)
     propriedades: Mapped[dict] = mapped_column(JSONB, default=dict)

@@ -78,10 +78,12 @@ function AulaForm({
         return;
       }
       try {
+        // Auto-create SEMPRE como não-grátis: a aula só vira preview público no
+        // "Salvar" explícito (evita expor o vídeo antes de o admin confirmar).
         const a = await ensureSaved({
           titulo: titulo.trim(),
           duracao_segundos: parseDur(dur),
-          gratuita,
+          gratuita: false,
         });
         id = a.id;
       } catch {

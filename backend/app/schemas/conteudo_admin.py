@@ -49,7 +49,9 @@ class AulaUpdate(BaseModel):
 # ── Upload de vídeo pela tela admin (mediado pelo backend) ───────────────────
 class AulaUploadRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
-    size: int = Field(gt=0)  # bytes; vira Upload-Length no TUS
+    # Teto (50 GB) p/ não repassar um Upload-Length absurdo ao TUS do Panda
+    # (sessões fantasma/billing). Folgado p/ qualquer aula real; barra abuso.
+    size: int = Field(gt=0, le=50 * 1024 * 1024 * 1024)  # bytes; vira Upload-Length
     content_type: str | None = Field(default=None, max_length=120)
 
 

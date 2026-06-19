@@ -82,6 +82,9 @@ async def criar_upload(
             )
             r.raise_for_status()
     except httpx.HTTPError as exc:
+        # Loga só a exceção (método+URL+status) — NUNCA os headers da request, que
+        # carregam a PANDA_API_KEY no Upload-Metadata. httpx não loga headers por
+        # padrão e não há event_hooks aqui; manter assim (não logar `r.request`).
         logger.warning("Panda: falha ao criar upload TUS: %s", exc)
         raise PandaIndisponivel("Falha ao criar o upload no Panda.") from exc
 

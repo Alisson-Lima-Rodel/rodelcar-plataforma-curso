@@ -68,6 +68,20 @@ class TestUploadPanda:
         assert resp.status_code == 503
         assert resp.json()["error"]["code"] == "PANDA_INDISPONIVEL"
 
+    async def test_size_acima_do_teto_retorna_422(
+        self, client: AsyncClient, admin_token: dict, aula_admin
+    ):
+        """Upload-Length absurdo (> 50 GB) é barrado no schema (422), sem chegar
+        a abrir sessão TUS fantasma no Panda."""
+        ids, _ = aula_admin
+        resp = await client.post(
+            f"/api/v1/admin/aulas/{ids['aula_id']}/upload-url",
+            json={"filename": "aula.mp4", "size": 60 * 1024 * 1024 * 1024},
+            headers=admin_token,
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
     async def test_gera_url_e_salva_video_id(
         self, client: AsyncClient, admin_token: dict, aula_admin, monkeypatch
     ):

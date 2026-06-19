@@ -126,8 +126,13 @@ class Settings(BaseSettings):
     PANDA_DRM_ENABLED: bool = False
     PANDA_DRM_GROUP_ID: str = ""
     PANDA_DRM_SECRET: str = ""
-    # TTL (segundos) do token DRM embutido no embed por sessão de aula.
-    PANDA_DRM_TOKEN_TTL: int = 14400  # 4h
+    # TTL (segundos) do token DRM embutido no embed por sessão de aula. O token do
+    # Panda é GROUP-scoped por design (payload = drm_group_id + exp; não há binding
+    # por vídeo/aluno na spec do watermark) — então a janela curta + o watermark
+    # forense são os controles contra reuso. 1h cobre a sessão de uma aula e reduz
+    # 4× a janela de reuso vs. as 4h antigas. Suba via env se houver aula de vídeo
+    # único > 1h (raro) e o Panda revalidar o exp por segmento.
+    PANDA_DRM_TOKEN_TTL: int = 3600  # 1h
 
     @property
     def panda_ativo(self) -> bool:

@@ -44,8 +44,12 @@ def _autor(nome: str | None) -> str:
 
 
 async def _curso_por_slug(slug: str, db: AsyncSession) -> Curso:
+    # Curso inativo está fora do site: não mostra nem aceita avaliações (mesma
+    # regra da vitrine/página de venda).
     curso = (
-        await db.execute(select(Curso).where(Curso.slug == slug))
+        await db.execute(
+            select(Curso).where(Curso.slug == slug, Curso.ativo.is_(True))
+        )
     ).scalar_one_or_none()
     if curso is None:
         raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")

@@ -2,10 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/ui/icon";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type { AdminItem, EntityKey } from "@/lib/admin-data";
-import { ADMIN_CRUD } from "@/lib/admin-api";
+import { ADMIN_CRUD, metricasDiarias } from "@/lib/admin-api";
+import { MetricsChart } from "./metrics-chart";
 
 function StatCard({
   icon,
@@ -13,15 +12,29 @@ function StatCard({
   label,
   accent,
   hint,
+  onClick,
 }: {
   icon: string;
   value: number;
   label: string;
   accent?: string;
   hint?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="kpi">
+    <button
+      type="button"
+      className="kpi kpi-clickable"
+      onClick={onClick}
+      style={{
+        textAlign: "left",
+        width: "100%",
+        cursor: onClick ? "pointer" : "default",
+        font: "inherit",
+        color: "inherit",
+        transition: "border-color 140ms, transform 140ms",
+      }}
+    >
       <div className="kpi-label">
         <Icon
           name={icon}
@@ -38,7 +51,7 @@ function StatCard({
           {hint}
         </span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -52,21 +65,13 @@ function useAdminList(key: EntityKey): AdminItem[] {
   return (data ?? []) as AdminItem[];
 }
 
-function initials(name: string) {
-  return (name || "?")
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 export function Overview({
   onNav,
-  onNew,
 }: {
   onNav: (v: string) => void;
-  onNew: (key: EntityKey) => void;
+  // onNew é passado pelo container, mas a visão geral não usa mais (removido o
+  // bloco "Cadastro rápido"). Mantido opcional p/ não quebrar a chamada.
+  onNew?: (key: EntityKey) => void;
 }) {
   const students = useAdminList("students");
   const courses = useAdminList("courses");
@@ -76,6 +81,11 @@ export function Overview({
   const activeStudents = students.filter((s) => s.status === "Ativo").length;
   const pending = testimonials.filter((t) => t.status === "Pendente");
   const activePlans = plans.filter((p) => p.status === "Ativo").length;
+
+  const { data: metricas } = useQuery({
+    queryKey: ["admin", "metricas", 90],
+    queryFn: () => metricasDiarias(90),
+  });
 
   return (
     <div
@@ -97,150 +107,35 @@ export function Overview({
           icon="users"
           value={activeStudents}
           label="Alunos ativos"
-          hint={`${students.length} no total`}
+          hint={`${students.length} no total · gerenciar`}
+          onClick={() => onNav("students")}
         />
         <StatCard
           icon="book"
           value={courses.length}
           label="Cursos"
-          hint="no catálogo"
+          hint="no catálogo · gerenciar"
+          onClick={() => onNav("courses")}
         />
         <StatCard
           icon="message"
           value={pending.length}
           label="Depoimentos pendentes"
           accent={pending.length ? "var(--warning)" : "var(--success)"}
-          hint="aguardando aprovação"
+          hint="revisar depoimentos"
+          onClick={() => onNav("testimonials")}
         />
         <StatCard
           icon="infinity"
           value={activePlans}
           label="Planos ativos"
-          hint="à venda no site"
+          hint="à venda · gerenciar"
+          onClick={() => onNav("plans")}
         />
       </div>
 
-      <div
-        className="admin-overview-grid"
-        style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}
-      >
-        {/* recent students */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div
-            className="flex center between"
-            style={{
-              padding: "16px 20px",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <h3 style={{ fontSize: "1.05rem" }}>Alunos recentes</h3>
-            <Button
-              variant="link"
-              iconRight="arrow"
-              onClick={() => onNav("students")}
-            >
-              Gerenciar
-            </Button>
-          </div>
-          <div>
-            {students.length === 0 && (
-              <div
-                className="muted"
-                style={{ padding: "22px 20px", fontSize: "0.92rem" }}
-              >
-                Nenhum aluno cadastrado ainda.
-              </div>
-            )}
-            {students.slice(0, 5).map((s, i) => (
-              <div
-                key={String(s.id)}
-                className="flex center between"
-                style={{
-                  padding: "13px 20px",
-                  borderTop: i ? "1px solid var(--border)" : "none",
-                }}
-              >
-                <div className="cell-user">
-                  <span className="cell-avatar">
-                    {initials(String(s.nome))}
-                  </span>
-                  <div>
-                    <div
-                      className="cell-strong"
-                      style={{ fontSize: "0.92rem" }}
-                    >
-                      {s.nome}
-                    </div>
-                    <div className="tag-mono">{s.email}</div>
-                  </div>
-                </div>
-                <div className="flex center gap-3">
-                  <Badge variant="">{Number(s.matriculas) || 0} cursos</Badge>
-                  <Badge variant={s.status === "Ativo" ? "success" : ""}>
-                    {String(s.status)}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* pending approval / quick action */}
-        <div style={{ display: "grid", gap: 20, alignContent: "start" }}>
-          <div
-            className="card blueprint"
-            style={{ padding: 22, position: "relative", overflow: "hidden" }}
-          >
-            <div
-              className="glow-amber"
-              style={{ width: 240, height: 160, top: -70, right: -40 }}
-            />
-            <div style={{ position: "relative", zIndex: 1 }}>
-              <Badge variant="warning" icon="message">
-                {pending.length} para aprovar
-              </Badge>
-              <h3 style={{ fontSize: "1.15rem", margin: "12px 0 6px" }}>
-                Depoimentos pendentes
-              </h3>
-              <p
-                className="muted"
-                style={{ fontSize: "0.92rem", marginBottom: 16 }}
-              >
-                {pending.length
-                  ? `${pending[0].nome} e outros aguardam moderação para aparecer no site.`
-                  : "Tudo aprovado. Nenhum depoimento na fila."}
-              </p>
-              <Button
-                variant="secondary"
-                block
-                iconRight="arrow"
-                onClick={() => onNav("testimonials")}
-              >
-                Revisar depoimentos
-              </Button>
-            </div>
-          </div>
-          {/* ação âmbar dominante */}
-          <div className="card" style={{ padding: 22 }}>
-            <h3 style={{ fontSize: "1.05rem", marginBottom: 6 }}>
-              Cadastro rápido
-            </h3>
-            <p
-              className="muted"
-              style={{ fontSize: "0.9rem", marginBottom: 16 }}
-            >
-              Adicione um novo aluno ao portal.
-            </p>
-            <Button
-              variant="primary"
-              block
-              icon="spark"
-              onClick={() => onNew("students")}
-            >
-              Novo aluno
-            </Button>
-          </div>
-        </div>
+      <div style={{ marginTop: 22 }}>
+        <MetricsChart data={metricas ?? []} />
       </div>
     </div>
   );

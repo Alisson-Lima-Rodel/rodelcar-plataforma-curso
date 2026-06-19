@@ -78,7 +78,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     icon: "users",
     title: (it) => String(it.nome),
     search: (it) => `${it.nome} ${it.email} ${it.telefone ?? ""}`,
-    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    filter: { key: "status", options: ["Todos", "Ativo", "Inativo", "Bloqueado"] },
     // Cursos/Vigência/Status vêm derivados da matrícula (somente-leitura).
     columns: [
       { key: "nome", label: "Aluno", kind: "user" },
@@ -122,6 +122,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       { key: "nivel", label: "Nível" },
       { key: "aulas_total", label: "Aulas", kind: "center" },
       { key: "preco", label: "Preço", kind: "price" },
+      { key: "ativo", label: "Ativo", kind: "badgeAtivo" },
     ],
     fields: [
       {
@@ -183,6 +184,7 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       preco: 397,
       preco_antigo: 597,
       gratuito: false,
+      ativo: true,
       horas: "6h00",
       idiomas_legenda: "",
       aulas_total: 30,

@@ -16,17 +16,27 @@ from app.core.security import (
     decode_token,
     dummy_verify,
     hash_password,
+    hash_reset_token,
     verify_password,
 )
 from app.core.referral import codigo_unico_indicacao
 from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Indicacao, Matricula, RefreshToken, StatusMatricula
+from app.models import (
+    Aluno,
+    Evento,
+    Indicacao,
+    Matricula,
+    PasswordReset,
+    RefreshToken,
+    StatusMatricula,
+)
 from app.schemas.auth import (
     LoginRequest,
     MeResponse,
     RefreshRequest,
     RegisterRequest,
+    ResetSenhaConfirm,
     TokenResponse,
 )
 
@@ -76,7 +86,12 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     if not verify_password(body.senha, aluno.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
+    # Acesso bloqueado manualmente pelo admin: barra o login até ser liberado.
+    if aluno.bloqueado:
+        raise _err(403, "ALUNO_BLOQUEADO", "Acesso bloqueado. Fale com o suporte.")
     await checar_vigencia_aluno(aluno.id, db)
+    # Registra o acesso (alimenta o gráfico diário da visão geral do admin).
+    db.add(Evento(aluno_id=aluno.id, nome_evento="login"))
     return await _emitir_tokens(str(aluno.id), aluno.token_version, db)
 
 
@@ -175,6 +190,11 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     rt.revogado = True
     rt.revogado_em = agora
     aluno = await db.get(Aluno, aluno_uuid)
+    # Aluno bloqueado não renova sessão (mesmo com refresh válido). O access já
+    # cairia em get_current_aluno, mas barrar aqui evita rotacionar a família.
+    if aluno is None or aluno.bloqueado:
+        await db.commit()  # persiste a revogação do token atual
+        raise _err(403, "ALUNO_BLOQUEADO", "Acesso bloqueado. Fale com o suporte.")
     return await _emitir_tokens(str(aluno_uuid), aluno.token_version, db)
 
 
@@ -195,6 +215,35 @@ async def logout(
         .where(RefreshToken.jti == jti, RefreshToken.revogado.is_(False))
         .values(revogado=True, revogado_em=datetime.now(timezone.utc))
     )
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/recuperar-senha/confirmar", status_code=204)
+@limiter.limit(auth_limit)
+async def confirmar_recuperar_senha(
+    request: Request, body: ResetSenhaConfirm, db: AsyncSession = Depends(get_db)
+):
+    """Redefine a senha a partir do token gerado pelo admin (link enviado ao
+    aluno). Token single-use, comparado por hash. Ao concluir, incrementa o
+    token_version (derruba sessões vivas) e marca o token como usado."""
+    pr = (
+        await db.execute(
+            select(PasswordReset).where(
+                PasswordReset.token_hash == hash_reset_token(body.token)
+            )
+        )
+    ).scalar_one_or_none()
+    if pr is None or pr.usado or _aware(pr.expira_em) < datetime.now(timezone.utc):
+        raise _err(400, "TOKEN_INVALIDO", "Link inválido ou expirado. Peça um novo.")
+
+    aluno = await db.get(Aluno, pr.aluno_id)
+    if aluno is None:
+        raise _err(400, "TOKEN_INVALIDO", "Link inválido ou expirado. Peça um novo.")
+
+    aluno.senha_hash = hash_password(body.nova_senha)
+    aluno.token_version += 1
+    pr.usado = True
     await db.commit()
     return Response(status_code=204)
 

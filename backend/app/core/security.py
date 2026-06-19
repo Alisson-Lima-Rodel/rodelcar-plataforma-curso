@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -5,6 +7,20 @@ import bcrypt
 import jwt
 
 from app.core.config import settings
+
+
+def gerar_reset_token() -> tuple[str, str]:
+    """Gera (token_bruto, token_hash) p/ redefinição de senha.
+
+    O bruto vai no link (entregue UMA vez ao admin); só o SHA-256 é persistido.
+    Comparação por hash evita vazar tokens válidos caso a tabela seja lida.
+    """
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_reset_token(raw)
+
+
+def hash_reset_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def hash_password(plain: str) -> str:

@@ -34,3 +34,9 @@ class MeResponse(BaseModel):
     nome: str
     email: str
     matriculas_ativas: int
+
+
+class ResetSenhaConfirm(BaseModel):
+    """Redefinição via link gerado pelo admin: token bruto + senha nova."""
+    token: str = Field(min_length=10, max_length=128)
+    nova_senha: str = Field(min_length=8, max_length=72)

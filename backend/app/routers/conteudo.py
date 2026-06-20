@@ -3,9 +3,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.models import Faq, GoogleReviewCache, PlanoAssinatura, Video
+from app.models import Faq, GoogleReviewCache, PlanoAssinatura, TurmaMidia, Video
 from app.schemas.pagamentos import PlanoPublico
-from app.schemas.portal import FaqPublico, GoogleReviewsPublico, VideoPublico
+from app.schemas.portal import (
+    FaqPublico,
+    GoogleReviewsPublico,
+    TurmaMidiaPublico,
+    VideoPublico,
+)
 
 router = APIRouter(tags=["conteudo"])
 
@@ -64,6 +69,20 @@ async def listar_faq(db: AsyncSession = Depends(get_db)):
             select(Faq)
             .where(Faq.status == "Ativo")
             .order_by(Faq.ordem, Faq.criado_em)
+            .limit(100)  # teto defensivo p/ resposta pública
+        )
+    ).scalars().all()
+    return rows
+
+
+@router.get("/turmas-midia", response_model=list[TurmaMidiaPublico])
+async def listar_turmas_midia(db: AsyncSession = Depends(get_db)):
+    """Fotos das turmas presenciais ativas (mosaico bento da home — público)."""
+    rows = (
+        await db.execute(
+            select(TurmaMidia)
+            .where(TurmaMidia.status == "Ativo")
+            .order_by(TurmaMidia.ordem, TurmaMidia.criado_em)
             .limit(100)  # teto defensivo p/ resposta pública
         )
     ).scalars().all()

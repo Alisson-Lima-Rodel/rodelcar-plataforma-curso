@@ -27,6 +27,19 @@ def _so_http_url(v: str | None) -> str | None:
     return v
 
 
+def _url_http_obrigatoria(v: str | None) -> str:
+    """Como _so_http_url, mas OBRIGATÓRIA: recusa None/vazio (não deixa gravar URL
+    nula numa coluna NOT NULL → 422 em vez de estourar IntegrityError/500). Para a
+    foto de turma, cuja URL sempre vem do upload. No update só roda quando o campo
+    é enviado (validate_default desligado), então omitir a url continua permitido."""
+    if v is None or not v.strip():
+        raise ValueError("URL é obrigatória.")
+    v = v.strip()
+    if not v.lower().startswith(("http://", "https://")):
+        raise ValueError("URL deve começar com http:// ou https://")
+    return v
+
+
 def _telefone_br(v: str | None) -> str | None:
     """Normaliza e valida telefone BR: guarda só dígitos (DDD + número, 10–11).
 
@@ -278,6 +291,40 @@ class FaqUpdate(BaseModel):
     resposta: str | None = Field(default=None, max_length=5000)
     status: StatusAtivo | None = None
     ordem: int | None = None
+
+
+# ── Mídia de turmas presenciais (mosaico bento da home) ───────────────────────
+class TurmaMidiaAdmin(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    url: str
+    alt: str | None = None
+    destaque: bool
+    status: str
+    ordem: int
+
+
+class TurmaMidiaCreate(BaseModel):
+    url: str = Field(max_length=500)
+    alt: str | None = Field(default=None, max_length=300)
+    destaque: bool = False
+    status: StatusAtivo = "Ativo"
+    ordem: int = 0
+
+    _valida_url = field_validator("url")(_url_http_obrigatoria)
+
+
+class TurmaMidiaUpdate(BaseModel):
+    # url é opcional p/ OMITIR (edita só alt/ordem/status), mas se enviada não
+    # pode ser nula/vazia — a coluna é NOT NULL. _url_http_obrigatoria garante 422.
+    url: str | None = Field(default=None, max_length=500)
+    alt: str | None = Field(default=None, max_length=300)
+    destaque: bool | None = None
+    status: StatusAtivo | None = None
+    ordem: int | None = None
+
+    _valida_url = field_validator("url")(_url_http_obrigatoria)
 
 
 # ── Avaliações dos alunos (moderação) ─────────────────────────────────────────

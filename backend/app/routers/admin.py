@@ -62,6 +62,7 @@ from app.models import (
     StatusPagamento,
     TentativaQuiz,
     TipoCurso,
+    TurmaMidia,
     Video,
 )
 from app.schemas.me import CancelamentoResultado
@@ -110,6 +111,9 @@ from app.schemas.admin import (
     PlanoAssinaturaUpdate,
     RecuperarSenhaResponse,
     ReembolsoItem,
+    TurmaMidiaAdmin,
+    TurmaMidiaCreate,
+    TurmaMidiaUpdate,
     VideoAdmin,
     VideoCreate,
     VideoUpdate,
@@ -486,6 +490,9 @@ router.include_router(_crud_router(
     "/videos", Video, VideoAdmin, VideoCreate, VideoUpdate, enrich=_enriquecer_video
 ))
 router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
+router.include_router(_crud_router(
+    "/turmas-midia", TurmaMidia, TurmaMidiaAdmin, TurmaMidiaCreate, TurmaMidiaUpdate
+))
 
 
 # ── Planos de assinatura (Premium) — fora do CRUD genérico pela checagem de ──

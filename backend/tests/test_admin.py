@@ -359,6 +359,86 @@ class TestAdminFaq:
         assert resp.status_code == 204
 
 
+# ── CRUD de Mídia de turmas (fábrica _crud_router) ────────────────────────────
+class TestAdminTurmasMidia:
+    async def test_ciclo_completo(self, client: AsyncClient, admin_headers: dict):
+        resp = await client.post(
+            "/api/v1/admin/turmas-midia",
+            headers=admin_headers,
+            json={
+                "url": "https://cdn.exemplo.com/turma.jpg",
+                "alt": "Turma na bancada",
+                "destaque": True,
+            },
+        )
+        assert resp.status_code == 201
+        m = resp.json()
+        assert m["url"] == "https://cdn.exemplo.com/turma.jpg"
+        assert m["destaque"] is True
+        assert m["status"] == "Ativo"
+        mid = m["id"]
+
+        resp = await client.patch(
+            f"/api/v1/admin/turmas-midia/{mid}",
+            headers=admin_headers,
+            json={"ordem": 3, "status": "Inativo"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ordem"] == 3
+        assert resp.json()["status"] == "Inativo"
+
+        resp = await client.delete(
+            f"/api/v1/admin/turmas-midia/{mid}", headers=admin_headers
+        )
+        assert resp.status_code == 204
+
+    async def test_url_esquema_perigoso_recusada(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        # javascript:/data: barrados antes de persistir (XSS no boundary) → 422
+        resp = await client.post(
+            "/api/v1/admin/turmas-midia",
+            headers=admin_headers,
+            json={"url": "javascript:alert(1)", "alt": "x"},
+        )
+        assert resp.status_code == 422
+
+    async def test_patch_url_nula_recusada(
+        self, client: AsyncClient, admin_headers: dict
+    ):
+        # url é NOT NULL: PATCH com url=null deve dar 422 no boundary, não 500 no banco.
+        c = await client.post(
+            "/api/v1/admin/turmas-midia",
+            headers=admin_headers,
+            json={"url": "https://cdn.exemplo.com/t.jpg"},
+        )
+        mid = c.json()["id"]
+        resp = await client.patch(
+            f"/api/v1/admin/turmas-midia/{mid}",
+            headers=admin_headers,
+            json={"url": None},
+        )
+        assert resp.status_code == 422
+        await client.delete(
+            f"/api/v1/admin/turmas-midia/{mid}", headers=admin_headers
+        )
+
+    async def test_sem_token_retorna_401(self, client: AsyncClient):
+        resp = await client.get("/api/v1/admin/turmas-midia")
+        assert resp.status_code == 401
+
+    async def test_suporte_bloqueado(
+        self, client: AsyncClient, suporte_headers: dict
+    ):
+        # Suporte não cuida de conteúdo (escopo _CONTEUDO) → 403
+        resp = await client.post(
+            "/api/v1/admin/turmas-midia",
+            headers=suporte_headers,
+            json={"url": "https://cdn.exemplo.com/t.jpg"},
+        )
+        assert resp.status_code == 403
+
+
 # ── CRUD de Alunos (campos de matrícula derivados) ────────────────────────────
 class TestAdminAlunos:
     async def test_cria_aluno_com_campos_derivados(

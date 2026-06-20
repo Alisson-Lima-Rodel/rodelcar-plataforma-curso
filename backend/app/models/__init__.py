@@ -714,3 +714,27 @@ class TentativaQuiz(Base):
     aprovado: Mapped[bool] = mapped_column(Boolean, default=False)
     respostas: Mapped[dict] = mapped_column(JSONB, default=dict)
     criado_em: Mapped[datetime] = _created_at()
+
+
+class TurmaMidia(Base):
+    """Foto de turma presencial no mosaico bento da home (seção "Turmas
+    presenciais"). Gerenciada pelo admin (upload + reordenar + ativar), sem deploy.
+    O vídeo em destaque da seção é um asset estático em public/; aqui só o mosaico.
+    """
+    __tablename__ = "turmas_midia"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    url: Mapped[str] = mapped_column(String(500))
+    # Texto alternativo: acessibilidade + legenda no lightbox.
+    alt: Mapped[str | None] = mapped_column(String(300))
+    # Destaque: tile grande (bento-wide) no mosaico; senão tile alto (bento-tall).
+    destaque: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    # Ativo/Inativo (string p/ casar com o CRUD genérico e o filtro do admin,
+    # igual a Video/Faq). O endpoint público só expõe os "Ativo".
+    status: Mapped[str] = mapped_column(
+        String(20), default="Ativo", server_default="Ativo"
+    )
+    criado_em: Mapped[datetime] = _created_at()

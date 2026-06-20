@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/reveal";
@@ -10,12 +10,8 @@ type Photo = { src: string; span: "bento-wide" | "bento-tall"; alt: string };
 
 // Fallback embutido (mídia em frontend/public/turmas/). Usado quando o backend
 // ainda não tem mídias cadastradas — a seção nunca aparece vazia/quebrada.
+// t1 virou a foto do hero; aqui ficam as 4 retrato (tiles altos, sem repetir).
 const TURMA_PHOTOS: Photo[] = [
-  {
-    src: "/turmas/t1.jpg",
-    span: "bento-wide",
-    alt: "Aluno com câmbio automatizado desmontado na bancada",
-  },
   {
     src: "/turmas/t2.jpg",
     span: "bento-tall",
@@ -25,11 +21,6 @@ const TURMA_PHOTOS: Photo[] = [
     src: "/turmas/t3.jpg",
     span: "bento-tall",
     alt: "Trem de engrenagens do câmbio sendo apresentado",
-  },
-  {
-    src: "/turmas/t6.jpg",
-    span: "bento-wide",
-    alt: "Instrutor da Rödelcar conduzindo a aula",
   },
   {
     src: "/turmas/t4.jpg",
@@ -44,7 +35,6 @@ const TURMA_PHOTOS: Photo[] = [
 ];
 
 const VIDEO_SRC = "/turmas/turma.mp4";
-const VIDEO_POSTER = "/turmas/t1.jpg";
 
 function Lightbox({
   photos,
@@ -110,7 +100,9 @@ function Lightbox({
 }
 
 export function Turmas({ photos = TURMA_PHOTOS }: { photos?: Photo[] }) {
-  const [playing, setPlaying] = useState(false);
+  // `started` controla a troca poster→player; o "poster" é o 1º frame do vídeo.
+  const [started, setStarted] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [lb, setLb] = useState(-1);
   const nav = (d: number) => setLb((lb + d + photos.length) % photos.length);
 
@@ -137,24 +129,24 @@ export function Turmas({ photos = TURMA_PHOTOS }: { photos?: Photo[] }) {
           center
         />
 
-        {/* Vídeo em destaque */}
+        {/* Vídeo em destaque — o "poster" é o 1º frame do próprio vídeo
+            (preload="metadata" + fragmento #t=0.1 forçam o frame a renderizar). */}
         <Reveal
           className="turmas-video"
           style={{ maxWidth: 940, margin: "0 auto 18px" }}
         >
-          {playing ? (
-            <video
-              src={VIDEO_SRC}
-              controls
-              autoPlay
-              playsInline
-              poster={VIDEO_POSTER}
-            />
-          ) : (
+          <video
+            ref={videoRef}
+            src={`${VIDEO_SRC}#t=0.1`}
+            controls={started}
+            playsInline
+            preload="metadata"
+            onPlay={() => setStarted(true)}
+          />
+          {!started && (
             <div
               className="turmas-poster"
-              style={{ backgroundImage: `url('${VIDEO_POSTER}')` }}
-              onClick={() => setPlaying(true)}
+              onClick={() => videoRef.current?.play()}
             >
               <span className="turmas-play">
                 <Icon name="play" size={30} />

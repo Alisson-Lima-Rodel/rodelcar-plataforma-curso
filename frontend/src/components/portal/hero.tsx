@@ -113,22 +113,23 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Right — visual: workshop placeholder + floating diagnostic readout */}
+          {/* Right — visual: foto da equipe na bancada + floating diagnostic readout */}
           <Reveal style={{ position: "relative" }}>
             <div
               className="thumb"
               style={{ aspectRatio: "4/5", borderRadius: 14 }}
             >
-              <div style={{ textAlign: "center" }}>
-                <Icon
-                  name="wrench"
-                  size={40}
-                  style={{ color: "var(--border-strong)" }}
-                />
-              </div>
-              <span className="thumb-label">
-                [ foto · equipe na bancada · 4:5 ]
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/turmas/t1.jpg"
+                alt="Equipe Rödelcar na bancada durante a aula prática"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
             </div>
             {/* floating diagnostic readout — overlay no canto inferior direito da imagem */}
             <div

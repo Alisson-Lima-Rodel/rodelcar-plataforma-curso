@@ -475,6 +475,7 @@ export const ADMIN_CRUD: Record<string, AdminCrud> = {
   plans: adminCrud("/admin/planos"),
   cupons: adminCrud("/admin/cupons"),
   videos: adminCrud("/admin/videos"),
+  turmas: adminCrud("/admin/turmas-midia"),
   faq: adminCrud("/admin/faqs"),
   admins: adminCrud("/admin/administradores"),
 };

@@ -250,6 +250,29 @@ export async function getFaq(): Promise<Faq[]> {
   return (data ?? []).map((f) => ({ q: f.pergunta, a: f.resposta }));
 }
 
+// ── Mídia das turmas presenciais (mosaico bento da home) ──────────────────────
+interface ApiTurmaMidia {
+  url: string;
+  alt?: string | null;
+  destaque?: boolean;
+}
+
+// Casa com o tipo `Photo` do componente <Turmas/> (compatível estruturalmente).
+export interface TurmaFoto {
+  src: string;
+  span: "bento-wide" | "bento-tall";
+  alt: string;
+}
+
+export async function getTurmasMidia(): Promise<TurmaFoto[]> {
+  const data = await serverGet<ApiTurmaMidia[]>("/turmas-midia");
+  return (data ?? []).map((m) => ({
+    src: m.url,
+    span: m.destaque ? "bento-wide" : "bento-tall",
+    alt: m.alt ?? "",
+  }));
+}
+
 // ── Avaliações públicas do curso (prova social + aggregateRating) ─────────────
 export interface AvaliacaoPublica {
   autor: string;

@@ -28,6 +28,17 @@ class FaqPublico(BaseModel):
     resposta: str
 
 
+class TurmaMidiaPublico(BaseModel):
+    """Foto de turma presencial (mosaico bento da home — sem status/ordem)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    url: str
+    alt: str | None = None
+    destaque: bool = False
+
+
 class GoogleReviewItem(BaseModel):
     autor: str | None = None
     nota: int | None = None

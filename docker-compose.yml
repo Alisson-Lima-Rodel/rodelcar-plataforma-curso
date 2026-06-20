@@ -53,6 +53,10 @@ services:
       API_URL_INTERNAL: ${API_URL_INTERNAL:-http://backend:8000/api/v1}
       # Base do embed do Panda (player do LMS). Sem ela, o player cai no placeholder.
       NEXT_PUBLIC_PANDA_EMBED_BASE: ${NEXT_PUBLIC_PANDA_EMBED_BASE:-}
+      # Bind mount no Windows/WSL não propaga eventos de inotify → o file-watcher
+      # do `next dev` não enxerga edições do host. Polling liga o hot-reload (a
+      # custo de um pouco de CPU). Em Linux nativo pode desligar (WATCHPACK_POLLING=false).
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
     ports:
       - "3000:3000"
     depends_on:

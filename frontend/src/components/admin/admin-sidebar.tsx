@@ -16,6 +16,7 @@ const NAV: { id: string; label: string; icon: string }[] = [
   { id: "refunds", label: "Reembolsos", icon: "arrowLeft" },
   { id: "reviews", label: "Avaliações", icon: "star" },
   { id: "videos", label: "Vídeos", icon: "play" },
+  { id: "turmas", label: "Turmas", icon: "users" },
   { id: "faq", label: "FAQ", icon: "book" },
   { id: "admins", label: "Administradores", icon: "shield" },
 ];

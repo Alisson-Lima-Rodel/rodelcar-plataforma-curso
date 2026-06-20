@@ -59,6 +59,7 @@ export type EntityKey =
   | "plans"
   | "cupons"
   | "videos"
+  | "turmas"
   | "faq"
   | "admins";
 
@@ -78,7 +79,10 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     icon: "users",
     title: (it) => String(it.nome),
     search: (it) => `${it.nome} ${it.email} ${it.telefone ?? ""}`,
-    filter: { key: "status", options: ["Todos", "Ativo", "Inativo", "Bloqueado"] },
+    filter: {
+      key: "status",
+      options: ["Todos", "Ativo", "Inativo", "Bloqueado"],
+    },
     // Cursos/Vigência/Status vêm derivados da matrícula (somente-leitura).
     columns: [
       { key: "nome", label: "Aluno", kind: "user" },
@@ -393,6 +397,59 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       duracao: "",
       views: "",
       likes: "",
+      ordem: 0,
+      status: "Ativo",
+    },
+  },
+  // Fotos das turmas presenciais — mosaico bento da home (seção "Turmas
+  // presenciais"). O vídeo em destaque da seção é um asset estático em public/.
+  turmas: {
+    label: "Turmas (fotos)",
+    singular: "foto de turma",
+    icon: "users",
+    title: (it) => String(it.alt || "Foto da turma"),
+    search: (it) => String(it.alt ?? ""),
+    filter: { key: "status", options: ["Todos", "Ativo", "Inativo"] },
+    columns: [
+      { key: "alt", label: "Legenda", kind: "strong" },
+      { key: "ordem", label: "Ordem", kind: "center" },
+      { key: "status", label: "Status", kind: "badgeStatus" },
+    ],
+    fields: [
+      {
+        key: "url",
+        label: "Foto da turma",
+        type: "image",
+        col: "full",
+        hint: "Aparece no mosaico da seção “Turmas presenciais” da home.",
+      },
+      {
+        key: "alt",
+        label: "Legenda / descrição",
+        type: "text",
+        col: "full",
+        hint: "Texto alternativo (acessibilidade) e legenda exibida no lightbox.",
+      },
+      {
+        key: "destaque",
+        label: "Destaque (tile grande no mosaico)",
+        type: "toggle",
+        on: true,
+        off: false,
+      },
+      { key: "ordem", label: "Ordem", type: "number" },
+      {
+        key: "status",
+        label: "Exibir no site",
+        type: "toggle",
+        on: "Ativo",
+        off: "Inativo",
+      },
+    ],
+    defaults: {
+      url: "",
+      alt: "",
+      destaque: false,
       ordem: 0,
       status: "Ativo",
     },

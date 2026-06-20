@@ -28,6 +28,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   refunds: { title: "Reembolsos", crumb: "ADMIN · SUPORTE" },
   reviews: { title: "Avaliações", crumb: "ADMIN · PORTAL" },
   videos: { title: "Vídeos", crumb: "ADMIN · PORTAL" },
+  turmas: { title: "Turmas (fotos)", crumb: "ADMIN · PORTAL" },
   faq: { title: "FAQ", crumb: "ADMIN · PORTAL" },
   admins: { title: "Administradores", crumb: "ADMIN · EQUIPE" },
 };

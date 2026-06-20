@@ -753,3 +753,191 @@ h4 {
     display: none !important;
   }
 }
+
+/* ============================================================
+   TURMAS — seção "Turmas presenciais" (vídeo + mosaico bento + lightbox)
+   Reutiliza os tokens existentes: --primary, --surface, --border…
+   ============================================================ */
+
+/* Vídeo em destaque */
+.turmas-video {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: #000;
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.9);
+}
+.turmas-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.turmas-poster {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  background-size: cover;
+  background-position: center;
+}
+.turmas-poster::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 40%, rgba(8, 9, 12, 0.55));
+}
+.turmas-play {
+  position: relative;
+  z-index: 1;
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  background: var(--primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--glow);
+  transition: transform 200ms ease-out;
+}
+.turmas-poster:hover .turmas-play {
+  transform: scale(1.08);
+}
+
+/* Mosaico bento */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 132px;
+  gap: 14px;
+  grid-auto-flow: dense;
+}
+.bento-tile {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--surface-2);
+}
+.bento-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 500ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.bento-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 55%, rgba(8, 9, 12, 0.5));
+  opacity: 0;
+  transition: opacity 250ms;
+}
+.bento-tile:hover img {
+  transform: scale(1.06);
+}
+.bento-tile:hover::after {
+  opacity: 1;
+}
+.bento-tile:hover .bento-zoom {
+  opacity: 1;
+  transform: none;
+}
+.bento-zoom {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.7);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: all 220ms ease-out;
+  backdrop-filter: blur(3px);
+}
+.bento-wide {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.bento-tall {
+  grid-column: span 1;
+  grid-row: span 2;
+}
+
+/* Lightbox */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(5, 6, 9, 0.92);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  animation: fade 180ms ease-out;
+}
+.lightbox img {
+  max-width: 90vw;
+  max-height: 84vh;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 40px 100px -30px #000;
+}
+.lb-btn {
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 160ms ease-out;
+  z-index: 2;
+}
+.lb-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.lb-close {
+  top: 26px;
+  right: 26px;
+}
+.lb-prev {
+  left: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lb-next {
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lb-count {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 760px) {
+  .bento {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 120px;
+  }
+}

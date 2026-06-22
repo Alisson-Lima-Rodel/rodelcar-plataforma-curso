@@ -95,13 +95,22 @@ de admin não é público. Depois disso, gerencie a equipe pelo painel `/admin`.
    | `RATE_LIMIT_PUBLIC` | `120/minute` |
    | `RATE_LIMIT_AUTH` | `5/minute` |
 
+   **Domínio público (FONTE ÚNICA — defina UMA vez)**
+   | Variável | Valor |
+   |----------|-------|
+   | `PORTAL_URL` | `https://seu-dominio.com.br` (domínio real do front) |
+
+   > Dela derivam **automaticamente** o retorno do Stripe (`/sucesso` e cancelamento → home),
+   > os links de verificação de certificado, os links dos e-mails e a URL de renovação.
+   > Não há mais 4 URLs para manter em sincronia. Em produção o boot **falha** se `PORTAL_URL`
+   > apontar para `localhost` (era a causa do "voltar caía no domínio errado").
+
    **Pagamento (Stripe — começar em test, virar live no passo 4)**
    | Variável | Valor |
    |----------|-------|
    | `STRIPE_SECRET_KEY` | `sk_live_...` |
    | `STRIPE_WEBHOOK_SECRET` | `whsec_...` (do endpoint live — passo 4) |
-   | `STRIPE_SUCCESS_URL` | `https://rodelcar.com.br/sucesso` |
-   | `STRIPE_CANCEL_URL` | `https://rodelcar.com.br/` |
+   | `STRIPE_SUCCESS_URL` / `STRIPE_CANCEL_URL` | **deixe em branco** — derivam de `PORTAL_URL`. Defina só se a página de sucesso/cancelamento morar em outro host. |
 
    **E-mail transacional (boas-vindas/confirmação/certificado)**
    | Variável | Valor |
@@ -120,7 +129,7 @@ de admin não é público. Depois disso, gerencie a equipe pelo painel `/admin`.
    | `PANDA_API_KEY` | upload de vídeo pela tela admin + duração/capa + retenção (ver [video-panda.md](video-panda.md)) |
    | `PANDA_DRM_ENABLED` / `PANDA_DRM_GROUP_ID` / `PANDA_DRM_SECRET` | embed privado (token assinado). Fail-fast se ligado sem grupo/segredo |
    | `CERT_MIN_WATCH_RATIO` | fração assistida exigida no certificado (default 0.85) |
-   | `PORTAL_URL` / `RENOVACAO_URL` | já têm default `https://rodelcar.com.br` |
+   | `RENOVACAO_URL` | override OPCIONAL da URL de renovação; em branco = usa `PORTAL_URL` |
 
 4. **Deploy.** Gere um domínio público (**Settings → Networking → Generate Domain**) —
    ex.: `rodelcar-backend.up.railway.app`. Anote: é a base da API.

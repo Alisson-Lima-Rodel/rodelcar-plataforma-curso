@@ -43,7 +43,7 @@ def _build_email_subject(msg: MensagemNotificacao) -> str:
 def _build_email_body(msg: MensagemNotificacao) -> str:
     nome = _primeiro_nome(msg.aluno_nome)
     data_fmt = msg.data_expiracao.strftime("%d/%m/%Y")
-    url = settings.RENOVACAO_URL
+    url = settings.renovacao_url
 
     if msg.tipo == TipoNotificacao.vigencia_expirada:
         return f"""
@@ -82,7 +82,7 @@ def _build_email_body(msg: MensagemNotificacao) -> str:
 def _build_wa_text(msg: MensagemNotificacao) -> str:
     nome = _primeiro_nome(msg.aluno_nome)
     data_fmt = msg.data_expiracao.strftime("%d/%m/%Y")
-    url = settings.RENOVACAO_URL
+    url = settings.renovacao_url
 
     if msg.tipo == TipoNotificacao.vigencia_expirada:
         return (

@@ -26,11 +26,18 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-cursos}
+      # FONTE ÚNICA do domínio público (back + front). No .env local você define
+      # SÓ `NEXT_PUBLIC_SITE_URL`; o backend recebe o mesmo valor como PORTAL_URL,
+      # e dele derivam o retorno do Stripe, os links de certificado/e-mail e a
+      # renovação. Em deploy separado (Railway), defina PORTAL_URL direto lá.
+      PORTAL_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      RENOVACAO_URL: ${RENOVACAO_URL:-}
       # Pagamentos — Stripe (vazios em dev; defina no .env para rodar o checkout).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:3000/sucesso}
-      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:3000/}
+      # Vazios = derivar de PORTAL_URL. Defina só p/ sucesso/cancelamento em outro host.
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-}
       # Vídeo — Panda Video (REST API). A chave fica SÓ no backend (upload é
       # mediado; nunca vai ao browser). DRM via watermark group, opcional.
       PANDA_API_KEY: ${PANDA_API_KEY:-}
@@ -51,6 +58,9 @@ services:
       # SSR dentro do Docker fala com o backend pela rede interna do compose
       # (o NEXT_PUBLIC_* é para o navegador; este é para o servidor do Next).
       API_URL_INTERNAL: ${API_URL_INTERNAL:-http://backend:8000/api/v1}
+      # FONTE ÚNICA do domínio público (mesma var que alimenta o PORTAL_URL do back).
+      # SEO/sitemap/OG + links de indicação/certificado. Em dev = localhost.
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
       # Base do embed do Panda (player do LMS). Sem ela, o player cai no placeholder.
       NEXT_PUBLIC_PANDA_EMBED_BASE: ${NEXT_PUBLIC_PANDA_EMBED_BASE:-}
       # Bind mount no Windows/WSL não propaga eventos de inotify → o file-watcher

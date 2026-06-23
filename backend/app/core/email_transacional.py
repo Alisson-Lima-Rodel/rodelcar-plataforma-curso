@@ -55,6 +55,21 @@ def email_assinatura(nome: str | None) -> tuple[str, str]:
     return assunto, corpo
 
 
+def email_reset_senha(nome: str | None, reset_url: str) -> tuple[str, str]:
+    assunto = "🔑 Redefinição de senha — RödelCar"
+    corpo = _layout(
+        f"Olá, {escape(_primeiro_nome(nome))}!",
+        "<p>Recebemos um pedido para redefinir a sua senha na RödelCar. "
+        "Clique no botão abaixo para criar uma nova senha — o link é válido por "
+        "<strong>24 horas</strong>.</p>"
+        '<p style="color:#888;font-size:13px">Se você não solicitou, ignore '
+        "este e-mail: sua senha atual continua valendo.</p>",
+        "Redefinir minha senha",
+        reset_url,
+    )
+    return assunto, corpo
+
+
 def email_certificado(
     nome: str | None, curso_titulo: str, verify_url: str
 ) -> tuple[str, str]:

@@ -311,6 +311,43 @@ class TestAlunoGestao:
         finally:
             await _delete_aluno(aluno_id)
 
+    async def test_recuperar_senha_dispara_email_com_link(
+        self, client: AsyncClient, admin_headers: dict, monkeypatch
+    ):
+        """Ao gerar a recuperação, o link vai automático para o e-mail do aluno."""
+        import app.routers.admin as admin_router
+
+        enviados: list[tuple[str, str, str]] = []
+
+        async def fake_email(para, assunto, corpo, *, log_ref="?"):
+            enviados.append((para, assunto, corpo))
+            return "fake-id"
+
+        monkeypatch.setattr(admin_router, "enviar_email_bruto", fake_email)
+
+        email = f"resetmail_{uuid.uuid4().hex[:6]}@rodelcar.dev"
+        criado = await client.post(
+            "/api/v1/admin/alunos",
+            headers=admin_headers,
+            json={"nome": "Maria Silva", "email": email, "senha": "SenhaForte123"},
+        )
+        aluno_id = criado.json()["id"]
+        try:
+            r = await client.post(
+                f"/api/v1/admin/alunos/{aluno_id}/recuperar-senha",
+                headers=admin_headers,
+            )
+            assert r.status_code == 200
+            token = r.json()["token"]
+
+            # E-mail disparado UMA vez, para o aluno, com o link contendo o token.
+            assert len(enviados) == 1
+            para, _assunto, corpo = enviados[0]
+            assert para == email
+            assert f"/recuperar-senha?token={token}" in corpo
+        finally:
+            await _delete_aluno(aluno_id)
+
 
 # ── Reembolso: listagem de matrículas + métricas ──────────────────────────────
 class TestReembolsoEMetricas:

@@ -280,6 +280,17 @@ export interface CertificadoEmitido {
 
 export const getMe = () => authGet<Me>("/auth/me");
 export const getDashboard = () => authGet<DashboardData>("/me/dashboard");
+
+/** Status REAL de uma sessão de checkout (para a tela /sucesso não afirmar
+ *  'pago' sem confirmação). O acesso é concedido só pelo webhook; isto reporta. */
+export interface StatusCompra {
+  estado: "liberado" | "processando" | "pendente" | string;
+  payment_status: string;
+  acesso_liberado: boolean;
+  curso_slug: string | null;
+}
+export const consultarStatusCompra = (sessionId: string) =>
+  authGet<StatusCompra>(`/checkout/session/${encodeURIComponent(sessionId)}`);
 export const getMatriculas = () =>
   authGet<{ items: MatriculaItem[] }>("/me/matriculas");
 

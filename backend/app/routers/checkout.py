@@ -18,11 +18,12 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Curso, PlanoAssinatura
+from app.models import Aluno, Curso, Matricula, PlanoAssinatura, StatusMatricula
 from app.schemas.pagamentos import (
     CheckoutAssinaturaRequest,
     CheckoutAvulsoRequest,
     CheckoutCriado,
+    StatusCompra,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,17 @@ async def checkout_avulso(
         raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")
     if not curso.stripe_price_id:
         raise _err(404, "PRECO_NAO_CONFIGURADO", "Curso sem preço configurado no Stripe.")
+
+    # Anti-duplicidade: já tem o curso (matrícula ativa) → não abre nova cobrança.
+    # Sem isso, o aluno consegue pagar o MESMO curso várias vezes (dupla cobrança).
+    if await db.scalar(
+        select(Matricula.id).where(
+            Matricula.aluno_id == aluno.id,
+            Matricula.curso_id == curso.id,
+            Matricula.status == StatusMatricula.ativo,
+        )
+    ):
+        raise _err(409, "JA_MATRICULADO", "Você já tem acesso a este curso.")
 
     customer_id = await _ensure_customer(db, aluno)
     kwargs = dict(
@@ -224,3 +236,70 @@ async def checkout_assinatura_pix(
         raise _tratar_erro_stripe(exc)
 
     return CheckoutCriado(checkout_url=session.url, session_id=session.id)
+
+
+@router.get("/session/{session_id}", response_model=StatusCompra)
+@limiter.limit("30/minute")
+async def status_sessao(
+    request: Request,
+    session_id: str,
+    aluno: Aluno = Depends(get_current_aluno),
+    db: AsyncSession = Depends(get_db),
+):
+    """Status REAL da compra para a tela /sucesso (report-only).
+
+    O acesso continua sendo concedido SÓ pelo webhook — aqui apenas conferimos o
+    `payment_status` no Stripe e se a matrícula já foi criada, para a UI não
+    afirmar 'pago' antes da confirmação. Só o dono da sessão pode consultar.
+    """
+    _exige_stripe()
+    try:
+        session = await run_in_threadpool(
+            stripe.checkout.Session.retrieve, session_id
+        )
+    except stripe.error.InvalidRequestError:
+        raise _err(404, "SESSAO_NAO_ENCONTRADA", "Sessão de checkout não encontrada.")
+    except stripe.error.StripeError:
+        logger.exception("Erro ao consultar a sessão de checkout")
+        raise _err(502, "STRIPE_ERRO", "Não foi possível consultar o pagamento.")
+
+    meta = dict(session.get("metadata") or {})
+    # Não vaza status de sessão de terceiros (responde 404 como se não existisse).
+    if meta.get("app_user_id") != str(aluno.id):
+        raise _err(404, "SESSAO_NAO_ENCONTRADA", "Sessão de checkout não encontrada.")
+
+    payment_status = session.get("payment_status") or "unpaid"
+    curso_slug = meta.get("curso_slug")
+
+    # Acesso = matrícula ATIVA já criada pelo webhook. Avulso confere o curso da
+    # sessão; assinatura (plano_id) libera o catálogo → qualquer matrícula ativa.
+    if curso_slug:
+        q = (
+            select(Matricula.id)
+            .join(Curso, Curso.id == Matricula.curso_id)
+            .where(
+                Matricula.aluno_id == aluno.id,
+                Curso.slug == curso_slug,
+                Matricula.status == StatusMatricula.ativo,
+            )
+        )
+    else:
+        q = select(Matricula.id).where(
+            Matricula.aluno_id == aluno.id,
+            Matricula.status == StatusMatricula.ativo,
+        )
+    acesso = (await db.scalar(q)) is not None
+
+    if acesso:
+        estado = "liberado"
+    elif payment_status == "paid":
+        estado = "processando"
+    else:
+        estado = "pendente"
+
+    return StatusCompra(
+        estado=estado,
+        payment_status=payment_status,
+        acesso_liberado=acesso,
+        curso_slug=curso_slug,
+    )

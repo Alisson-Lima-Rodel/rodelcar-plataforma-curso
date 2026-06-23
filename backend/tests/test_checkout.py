@@ -4,6 +4,7 @@ Mocka as chamadas de saída do Stripe (Session.create / Customer.create) — nã
 a API real. Verifica criação da sessão, persistência do customer e os erros.
 """
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest_asyncio
@@ -14,7 +15,14 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.security import hash_password
-from app.models import Aluno, Curso, PlanoAssinatura, TipoCurso
+from app.models import (
+    Aluno,
+    Curso,
+    Matricula,
+    PlanoAssinatura,
+    StatusMatricula,
+    TipoCurso,
+)
 
 URL = "/api/v1/checkout/avulso"
 SENHA = "Checkout123!"
@@ -139,6 +147,39 @@ class TestCheckoutAvulso:
     async def test_sem_token_401(self, client: AsyncClient):
         resp = await client.post(URL, json={"curso_slug": "qualquer"})
         assert resp.status_code == 401
+
+    async def test_ja_matriculado_409(self, client, checkout_seed, monkeypatch):
+        """Curso já possuído (matrícula ativa) → recusa nova cobrança."""
+        async with AsyncSessionLocal() as db:
+            db.add(
+                Matricula(
+                    aluno_id=uuid.UUID(checkout_seed["aluno_id"]),
+                    curso_id=uuid.UUID(checkout_seed["curso_id"]),
+                    status=StatusMatricula.ativo,
+                    data_expiracao=datetime.now(timezone.utc) + timedelta(days=365),
+                )
+            )
+            await db.commit()
+        try:
+            monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+            # Não deve nem chegar a criar sessão/customer no Stripe.
+            monkeypatch.setattr(stripe.checkout.Session, "create", _fake_session_create)
+            monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+            resp = await client.post(
+                URL,
+                json={"curso_slug": checkout_seed["curso_slug"]},
+                headers=checkout_seed["headers"],
+            )
+            assert resp.status_code == 409
+            assert resp.json()["error"]["code"] == "JA_MATRICULADO"
+        finally:
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    delete(Matricula).where(
+                        Matricula.aluno_id == uuid.UUID(checkout_seed["aluno_id"])
+                    )
+                )
+                await db.commit()
 
     async def test_fallback_card_quando_pix_indisponivel(
         self, client, checkout_seed, monkeypatch
@@ -275,3 +316,116 @@ class TestCheckoutAssinatura:
         )
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "PLANO_NAO_ENCONTRADO"
+
+
+def _fake_retrieve(app_user_id, *, payment_status="paid", curso_slug=None):
+    """Mock de stripe.checkout.Session.retrieve — devolve um dict (a SDK suporta
+    acesso por .get(), igual ao StripeObject real)."""
+
+    def fake(session_id, **kw):
+        meta = {"app_user_id": app_user_id}
+        if curso_slug:
+            meta["curso_slug"] = curso_slug
+        return {"payment_status": payment_status, "metadata": meta}
+
+    return fake
+
+
+class TestStatusSessao:
+    """GET /checkout/session/{id} — status REAL p/ a tela de sucesso não afirmar
+    'pago' sem confirmação. O acesso é só do webhook; aqui apenas reporta."""
+
+    URL = "/api/v1/checkout/session/cs_test_123"
+
+    async def test_pago_sem_matricula_processando(
+        self, client, checkout_seed, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        monkeypatch.setattr(
+            stripe.checkout.Session,
+            "retrieve",
+            _fake_retrieve(
+                checkout_seed["aluno_id"],
+                payment_status="paid",
+                curso_slug=checkout_seed["curso_slug"],
+            ),
+        )
+        resp = await client.get(self.URL, headers=checkout_seed["headers"])
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["payment_status"] == "paid"
+        assert body["acesso_liberado"] is False
+        assert body["estado"] == "processando"
+
+    async def test_pendente_quando_nao_pago(
+        self, client, checkout_seed, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        monkeypatch.setattr(
+            stripe.checkout.Session,
+            "retrieve",
+            _fake_retrieve(
+                checkout_seed["aluno_id"],
+                payment_status="unpaid",
+                curso_slug=checkout_seed["curso_slug"],
+            ),
+        )
+        resp = await client.get(self.URL, headers=checkout_seed["headers"])
+        assert resp.status_code == 200
+        assert resp.json()["estado"] == "pendente"
+
+    async def test_liberado_com_matricula_ativa(
+        self, client, checkout_seed, monkeypatch
+    ):
+        async with AsyncSessionLocal() as db:
+            db.add(
+                Matricula(
+                    aluno_id=uuid.UUID(checkout_seed["aluno_id"]),
+                    curso_id=uuid.UUID(checkout_seed["curso_id"]),
+                    status=StatusMatricula.ativo,
+                    data_expiracao=datetime.now(timezone.utc) + timedelta(days=365),
+                )
+            )
+            await db.commit()
+        try:
+            monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+            monkeypatch.setattr(
+                stripe.checkout.Session,
+                "retrieve",
+                _fake_retrieve(
+                    checkout_seed["aluno_id"],
+                    payment_status="paid",
+                    curso_slug=checkout_seed["curso_slug"],
+                ),
+            )
+            resp = await client.get(self.URL, headers=checkout_seed["headers"])
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["acesso_liberado"] is True
+            assert body["estado"] == "liberado"
+        finally:
+            # Limpa a matrícula antes do teardown do fixture (que apaga aluno/curso).
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    delete(Matricula).where(
+                        Matricula.aluno_id == uuid.UUID(checkout_seed["aluno_id"])
+                    )
+                )
+                await db.commit()
+
+    async def test_sessao_de_outro_aluno_404(
+        self, client, checkout_seed, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        monkeypatch.setattr(
+            stripe.checkout.Session,
+            "retrieve",
+            _fake_retrieve(str(uuid.uuid4()), payment_status="paid"),
+        )
+        resp = await client.get(self.URL, headers=checkout_seed["headers"])
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "SESSAO_NAO_ENCONTRADA"
+
+    async def test_sem_token_401(self, client: AsyncClient):
+        resp = await client.get(self.URL)
+        assert resp.status_code == 401

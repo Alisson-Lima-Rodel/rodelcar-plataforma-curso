@@ -33,6 +33,22 @@ class CheckoutCriado(BaseModel):
     session_id: str
 
 
+class StatusCompra(BaseModel):
+    """Status REAL de uma sessão de checkout, para a tela /sucesso não afirmar
+    'pago' sem confirmação. O acesso é concedido SÓ pelo webhook; aqui apenas
+    REPORTAMOS o `payment_status` do Stripe e se a matrícula já foi criada.
+
+    estado: 'liberado'  → matrícula ativa já existe (pode entrar no curso);
+            'processando'→ pago no Stripe, mas o webhook ainda não liberou;
+            'pendente'   → pagamento não confirmado (ex.: Pix aguardando).
+    """
+
+    estado: str
+    payment_status: str
+    acesso_liberado: bool
+    curso_slug: str | None = None
+
+
 class WebhookRecebido(BaseModel):
     """Resposta padrão dos webhooks de pagamento."""
 

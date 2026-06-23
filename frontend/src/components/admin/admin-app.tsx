@@ -25,7 +25,7 @@ const TITLES: Record<View, { title: string; crumb: string }> = {
   testimonials: { title: "Depoimentos", crumb: "ADMIN · CADASTROS" },
   plans: { title: "Planos (assinatura)", crumb: "ADMIN · CADASTROS" },
   cupons: { title: "Cupons de desconto", crumb: "ADMIN · CADASTROS" },
-  refunds: { title: "Reembolsos", crumb: "ADMIN · SUPORTE" },
+  refunds: { title: "Assinaturas", crumb: "ADMIN · CADASTROS" },
   reviews: { title: "Avaliações", crumb: "ADMIN · PORTAL" },
   videos: { title: "Vídeos", crumb: "ADMIN · PORTAL" },
   turmas: { title: "Turmas (fotos)", crumb: "ADMIN · PORTAL" },

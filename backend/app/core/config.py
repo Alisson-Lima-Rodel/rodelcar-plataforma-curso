@@ -73,11 +73,13 @@ class Settings(BaseSettings):
     WA_ZAPI_TOKEN: str = ""
     WA_ZAPI_CLIENT_TOKEN: str = ""
 
-    # URL de renovação usada nas mensagens de vigência
-    RENOVACAO_URL: str = "https://rodelcar.com.br"
-    # Base pública do portal (links de verificação de certificado, compartilhamento).
-    # Tem default — não precisa estar no .env para funcionar.
-    PORTAL_URL: str = "https://rodelcar.com.br"
+    # ── URLs públicas — FONTE ÚNICA do domínio da plataforma ───────────────────
+    # PORTAL_URL é a base pública do front. Verificação de certificado, links de
+    # e-mail, retorno do checkout (Stripe) e renovação DERIVAM dela. Defina-a UMA
+    # vez com o domínio real do front (ex.: https://app.suaempresa.com.br); em dev
+    # fica localhost. RENOVACAO_URL abaixo é override OPCIONAL — vazio = derivar.
+    PORTAL_URL: str = "http://localhost:3000"
+    RENOVACAO_URL: str = ""
 
     # Gate anti-fraude do certificado: fração da duração da aula que precisa ter
     # sido REALMENTE assistida (tempo acumulado pelo servidor) para a aula contar
@@ -107,10 +109,11 @@ class Settings(BaseSettings):
     # Segredo de assinatura do endpoint de webhook (whsec_...). A validação da
     # assinatura só é exigida quando setado (igual ao WA_META_APP_SECRET).
     STRIPE_WEBHOOK_SECRET: str = ""
-    # Para onde a Stripe redireciona após o checkout hospedado. O cancelamento
-    # volta para a home do portal (onde a compra começou).
-    STRIPE_SUCCESS_URL: str = "http://localhost:3000/sucesso"
-    STRIPE_CANCEL_URL: str = "http://localhost:3000/"
+    # Para onde a Stripe redireciona após o checkout hospedado. Vazio = derivar de
+    # PORTAL_URL (sucesso → /sucesso, cancelamento → home do portal). Defina
+    # explicitamente só se a página de sucesso/cancelamento morar em outro host.
+    STRIPE_SUCCESS_URL: str = ""
+    STRIPE_CANCEL_URL: str = ""
 
     # ── Vídeo — Panda Video (REST API) ────────────────────────────────────────
     # Chave da conta (header Authorization, SEM "Bearer"). Habilita upload pela
@@ -149,6 +152,26 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def portal_base(self) -> str:
+        """Base do portal sem barra final — raiz de todas as URLs públicas."""
+        return self.PORTAL_URL.rstrip("/")
+
+    @property
+    def stripe_success_url(self) -> str:
+        """success_url do Stripe. Override explícito vence; senão deriva de PORTAL_URL."""
+        return self.STRIPE_SUCCESS_URL or f"{self.portal_base}/sucesso"
+
+    @property
+    def stripe_cancel_url(self) -> str:
+        """cancel_url do Stripe — volta para a home do portal por padrão."""
+        return self.STRIPE_CANCEL_URL or f"{self.portal_base}/"
+
+    @property
+    def renovacao_url(self) -> str:
+        """URL de renovação nas mensagens de vigência (deriva de PORTAL_URL)."""
+        return self.RENOVACAO_URL or self.portal_base
 
     @property
     def is_production(self) -> bool:
@@ -196,6 +219,24 @@ class Settings(BaseSettings):
             )
         if "*" in self.cors_origins_list:
             problemas.append("CORS_ORIGINS contém '*' (use os domínios explícitos do front)")
+        # PORTAL_URL é a raiz de TODA URL pública (retorno do Stripe, links de
+        # certificado/e-mail, renovação). Em produção exige um domínio HTTPS real:
+        # vazio deixa as URLs sem host, localhost vaza o domínio errado e http
+        # trafega link sem TLS — os três recusam o boot.
+        if not self.PORTAL_URL:
+            problemas.append(
+                "PORTAL_URL vazio (retorno do Stripe e links de certificado/e-mail ficariam sem host)"
+            )
+        elif "localhost" in self.PORTAL_URL or "127.0.0.1" in self.PORTAL_URL:
+            problemas.append(
+                "PORTAL_URL aponta para localhost (defina o domínio público do front; "
+                "dele derivam o retorno do Stripe, os links de certificado/e-mail e a renovação)"
+            )
+        elif not self.PORTAL_URL.startswith("https://"):
+            problemas.append(
+                "PORTAL_URL sem HTTPS em produção (retorno do Stripe e links de "
+                "certificado/e-mail trafegariam sem TLS)"
+            )
         if self.WA_PROVIDER == "meta" and not self.WA_META_APP_SECRET:
             problemas.append("WA_META_APP_SECRET ausente (webhook do WhatsApp ficaria sem assinatura)")
         if self.PANDA_DRM_ENABLED and not (self.PANDA_DRM_GROUP_ID and self.PANDA_DRM_SECRET):

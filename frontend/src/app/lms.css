@@ -65,6 +65,10 @@
   top: 0;
   height: 100vh;
   padding: 22px 16px;
+  /* Com muitos itens (admin) e telas baixas, o menu transborda os 100vh —
+     rola dentro da própria barra em vez de cortar os itens. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .nav-item {
   display: flex;

@@ -92,12 +92,16 @@ export function confirmarResetSenha(
 }
 
 // ── Cursos (vitrine pública / página de venda) ────────────────────────────────
-// Server-side fetch (SSR). Em dev o localhost funciona no servidor; em Docker,
-// defina API_URL_INTERNAL=http://backend:8000/api/v1.
-const SERVER_API_URL =
+// Server-side fetch (SSR). Em Docker, defina API_URL_INTERNAL=http://backend:8000/api/v1.
+// `localhost` no loopback é forçado a IPv4 (127.0.0.1): em dev no Windows/Node o
+// `localhost` resolve só para IPv6 (::1) e o uvicorn escuta em IPv4, o que faria
+// TODO fetch SSR dar ECONNREFUSED (vitrine/vídeos/depoimentos sumiriam). Só afeta o
+// fetch do SERVIDOR; o browser usa API_URL. Em prod a base é um domínio real (no-op).
+const SERVER_API_URL = (
   process.env.API_URL_INTERNAL ??
   process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8000/api/v1";
+  "http://localhost:8000/api/v1"
+).replace(/\/\/localhost(?=[:/]|$)/, "//127.0.0.1");
 
 interface ApiCourseBase {
   slug: string;

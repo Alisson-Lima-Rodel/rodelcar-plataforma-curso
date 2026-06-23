@@ -13,7 +13,7 @@ const NAV: { id: string; label: string; icon: string }[] = [
   { id: "testimonials", label: "Depoimentos", icon: "message" },
   { id: "plans", label: "Planos", icon: "infinity" },
   { id: "cupons", label: "Cupons", icon: "spark" },
-  { id: "refunds", label: "Reembolsos", icon: "arrowLeft" },
+  { id: "refunds", label: "Assinaturas", icon: "calendar" },
   { id: "reviews", label: "Avaliações", icon: "star" },
   { id: "videos", label: "Vídeos", icon: "play" },
   { id: "turmas", label: "Turmas", icon: "users" },

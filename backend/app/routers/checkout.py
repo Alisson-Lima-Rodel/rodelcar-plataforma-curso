@@ -111,8 +111,8 @@ async def checkout_avulso(
         metadata={"app_user_id": str(aluno.id), "curso_slug": curso.slug},
         # Cliente digita o cupom na tela hospedada (admin cria em /admin/cupons).
         allow_promotion_codes=True,
-        success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url=settings.STRIPE_CANCEL_URL,
+        success_url=settings.stripe_success_url + "?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url=settings.stripe_cancel_url,
     )
     try:
         session = await run_in_threadpool(
@@ -174,8 +174,8 @@ async def checkout_assinatura_cartao(
             allow_promotion_codes=True,
             metadata={"app_user_id": str(aluno.id), "plano_id": str(plano.id)},
             subscription_data={"metadata": {"app_user_id": str(aluno.id)}},
-            success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=settings.STRIPE_CANCEL_URL,
+            success_url=settings.stripe_success_url + "?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=settings.stripe_cancel_url,
         )
     except stripe.error.StripeError as exc:
         raise _tratar_erro_stripe(exc)
@@ -217,8 +217,8 @@ async def checkout_assinatura_pix(
             },
             metadata={"app_user_id": str(aluno.id), "plano_id": str(plano.id)},
             subscription_data={"metadata": {"app_user_id": str(aluno.id)}},
-            success_url=settings.STRIPE_SUCCESS_URL + "?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=settings.STRIPE_CANCEL_URL,
+            success_url=settings.stripe_success_url + "?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=settings.stripe_cancel_url,
         )
     except stripe.error.StripeError as exc:
         raise _tratar_erro_stripe(exc)

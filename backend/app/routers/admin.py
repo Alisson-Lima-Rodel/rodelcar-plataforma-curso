@@ -12,6 +12,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.email_transacional import email_reset_senha
+from app.core.notificacoes import enviar_email_bruto
 from app.core.ratelimit import auth_limit, limiter
 from app.core.security import (
     create_admin_token,
@@ -411,6 +413,14 @@ async def recuperar_senha_aluno(aluno_id: uuid.UUID, db: AsyncSession = Depends(
     expira_em = datetime.now(timezone.utc) + timedelta(hours=24)
     db.add(PasswordReset(aluno_id=obj.id, token_hash=token_hash, expira_em=expira_em))
     await db.commit()
+
+    # Envia o link direto ao e-mail do aluno (best-effort: sem SMTP configurado,
+    # `enviar_email_bruto` vira no-op). O token bruto também volta na resposta para
+    # o admin reenviar pelo modal (WhatsApp/copiar) caso o e-mail não chegue.
+    reset_url = f"{settings.PORTAL_URL.rstrip('/')}/recuperar-senha?token={raw}"
+    assunto, corpo = email_reset_senha(obj.nome, reset_url)
+    await enviar_email_bruto(obj.email, assunto, corpo, log_ref=str(obj.id))
+
     return RecuperarSenhaResponse(token=raw, expira_em=expira_em)
 
 

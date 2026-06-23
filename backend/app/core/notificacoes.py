@@ -121,15 +121,17 @@ async def enviar_email_bruto(
     em["Subject"] = assunto
     em.add_alternative(corpo_html, subtype="html")
 
+    # 465 = TLS implícito (SMTPS); 587 = STARTTLS. Deixamos o aiosmtplib negociar
+    # via `start_tls` em vez de chamar `starttls()` à mão — versões recentes já
+    # sobem o TLS no connect e a chamada manual estoura ("already using TLS").
     use_tls = settings.SMTP_PORT == 465
     try:
         async with aiosmtplib.SMTP(
             hostname=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             use_tls=use_tls,
+            start_tls=not use_tls,
         ) as smtp:
-            if not use_tls:
-                await smtp.starttls()
             if settings.SMTP_USER:
                 await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             await smtp.send_message(em)

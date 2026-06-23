@@ -18,6 +18,15 @@ services:
       # Em dev, SMTP/WA ficam vazios (não envia). Para exercitar o pipeline
       # localmente sem disparo real, defina NOTIFICACOES_FAKE=true.
       NOTIFICACOES_FAKE: ${NOTIFICACOES_FAKE:-false}
+      # E-mail transacional (SMTP). Vazios = não envia. Para Gmail: HOST
+      # smtp.gmail.com, PORT 587, USER a conta, PASSWORD a Senha de app (2FA).
+      # EMAIL_FROM TEM que ser o mesmo endereço do SMTP_USER (o Gmail recusa
+      # enviar de um remetente que não é o autenticado).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@rodelcar.com.br}
       # YouTube Data API (opcional) — com a chave, o cadastro de vídeo puxa
       # duração, views e likes; sem ela, só título/canal via oEmbed.
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import "../lms.css";
 import "../admin.css";
-import { AdminApp } from "@/components/admin/admin-app";
-import { AdminProvider } from "@/components/providers/admin-provider";
+import { AdminClient } from "@/components/admin/admin-client";
 
 export const metadata: Metadata = {
   title: "Painel Administrador",
@@ -10,9 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default function AdminPage() {
-  return (
-    <AdminProvider>
-      <AdminApp />
-    </AdminProvider>
-  );
+  // AdminClient renderiza o painel client-only (ssr:false) — ver admin-client.tsx.
+  return <AdminClient />;
 }

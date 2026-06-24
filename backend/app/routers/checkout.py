@@ -116,6 +116,13 @@ async def checkout_avulso(
         raise _err(409, "JA_MATRICULADO", "Você já tem acesso a este curso.")
 
     customer_id = await _ensure_customer(db, aluno)
+    # Idempotency key por (aluno, curso): fecha a janela de corrida do guard acima
+    # (a matrícula só existe após o webhook). Dois checkouts simultâneos do mesmo
+    # curso retornam a MESMA sessão (Stripe deduplica), evitando dupla cobrança.
+    # Sufixo por método: a degradação card+pix → card usa params diferentes, que
+    # exigem chaves distintas. A chave expira em 24h no Stripe; passada a compra,
+    # o guard de matrícula assume.
+    idem = f"avulso:{aluno.id}:{curso.id}"
     kwargs = dict(
         mode="payment",
         customer=customer_id,
@@ -130,6 +137,7 @@ async def checkout_avulso(
         session = await run_in_threadpool(
             stripe.checkout.Session.create,
             payment_method_types=["card", "pix"],
+            idempotency_key=f"{idem}:cardpix",
             **kwargs,
         )
     except stripe.error.InvalidRequestError as exc:
@@ -144,6 +152,7 @@ async def checkout_avulso(
             session = await run_in_threadpool(
                 stripe.checkout.Session.create,
                 payment_method_types=["card"],
+                idempotency_key=f"{idem}:card",
                 **kwargs,
             )
         except stripe.error.StripeError as exc2:

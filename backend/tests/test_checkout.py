@@ -148,6 +148,28 @@ class TestCheckoutAvulso:
         resp = await client.post(URL, json={"curso_slug": "qualquer"})
         assert resp.status_code == 401
 
+    async def test_avulso_usa_idempotency_key(self, client, checkout_seed, monkeypatch):
+        """Mitiga race/dupla cobrança: idempotency_key estável por (aluno, curso)."""
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        captura: dict = {}
+
+        def fake(**kwargs):
+            captura.update(kwargs)
+            return _Stub(id="cs_idem", url="https://checkout.stripe.test/cs_idem")
+
+        monkeypatch.setattr(stripe.checkout.Session, "create", fake)
+        monkeypatch.setattr(stripe.Customer, "create", _fake_customer_create)
+        resp = await client.post(
+            URL,
+            json={"curso_slug": checkout_seed["curso_slug"]},
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 200
+        key = captura.get("idempotency_key", "")
+        assert key.startswith("avulso:")
+        assert checkout_seed["aluno_id"] in key
+        assert checkout_seed["curso_id"] in key
+
     async def test_ja_matriculado_409(self, client, checkout_seed, monkeypatch):
         """Curso já possuído (matrícula ativa) → recusa nova cobrança."""
         async with AsyncSessionLocal() as db:

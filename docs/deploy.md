@@ -31,6 +31,17 @@ Arquitetura de produção:
 inteiro com cartões de teste (sem gastar) e só então faça o **passo 4 (Stripe live)**. E-mail e os
 demais opcionais entram a qualquer momento depois.
 
+> ⚠️ **Gotcha test-mode × produção (custa horas se ignorado):** o webhook **recusa eventos de teste
+> quando `ENVIRONMENT=production`** — eventos `livemode=false` são ignorados de propósito (pagamento de
+> teste NÃO pode liberar acesso real), respondendo 200 sem criar `Pagamento`/`Matrícula`. Resultado: o
+> Stripe mostra a entrega como sucesso, mas nada é concedido. Logo, **não dá para validar o fluxo
+> webhook→matrícula com cartões de teste apontando para um backend `production`.** Para esse teste, use um
+> ambiente com **`ENVIRONMENT=development`** (ex.: um environment "dev" separado na Railway — domínio
+> próprio + webhook de teste apontando para ele). **Detecção rápida do modo:** o header **HSTS** só sai sob
+> produção — se `GET /health` traz `strict-transport-security`, o backend está em `production` (vai ignorar
+> test-mode). Test e live também têm **webhooks separados**: repontar um único endpoint entre ambientes
+> deixa o outro **sem webhook**.
+
 ---
 
 ## 0. Pré-requisitos

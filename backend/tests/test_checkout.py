@@ -335,7 +335,7 @@ class TestStatusSessao:
     """GET /checkout/session/{id} — status REAL p/ a tela de sucesso não afirmar
     'pago' sem confirmação. O acesso é só do webhook; aqui apenas reporta."""
 
-    URL = "/api/v1/checkout/session/cs_test_123"
+    URL = "/api/v1/checkout/session/cs_test_a1b2c3d4e5f6g7h8i9j0"
 
     async def test_pago_sem_matricula_processando(
         self, client, checkout_seed, monkeypatch
@@ -429,3 +429,14 @@ class TestStatusSessao:
     async def test_sem_token_401(self, client: AsyncClient):
         resp = await client.get(self.URL)
         assert resp.status_code == 401
+
+    async def test_session_id_formato_invalido_422(
+        self, client, checkout_seed, monkeypatch
+    ):
+        """Formato inválido é rejeitado antes de qualquer chamada ao Stripe."""
+        monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test_x")
+        resp = await client.get(
+            "/api/v1/checkout/session/lixo-invalido",
+            headers=checkout_seed["headers"],
+        )
+        assert resp.status_code == 422

@@ -9,7 +9,7 @@ import logging
 from decimal import Decimal
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -242,7 +242,9 @@ async def checkout_assinatura_pix(
 @limiter.limit("30/minute")
 async def status_sessao(
     request: Request,
-    session_id: str,
+    # Valida o formato antes de qualquer IO: rejeita lixo sem gastar round-trip
+    # ao Stripe (ids de sessão são `cs_test_`/`cs_live_` + alfanumérico).
+    session_id: str = Path(..., pattern=r"^cs_(test|live)_[A-Za-z0-9]{10,100}$"),
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),
 ):
@@ -268,7 +270,10 @@ async def status_sessao(
     if meta.get("app_user_id") != str(aluno.id):
         raise _err(404, "SESSAO_NAO_ENCONTRADA", "Sessão de checkout não encontrada.")
 
+    # Saída tipada: só repassa valores conhecidos do Stripe (allowlist).
     payment_status = session.get("payment_status") or "unpaid"
+    if payment_status not in {"paid", "unpaid", "no_payment_required"}:
+        payment_status = "unpaid"
     curso_slug = meta.get("curso_slug")
 
     # Acesso = matrícula ATIVA já criada pelo webhook. Avulso confere o curso da

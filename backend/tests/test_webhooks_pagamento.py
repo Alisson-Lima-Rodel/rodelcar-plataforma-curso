@@ -563,6 +563,45 @@ class TestWebhookAssinatura:
         mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
         assert mat.status == StatusMatricula.ativo
 
+    async def test_assinatura_sobre_avulso_preserva_o_avulso(
+        self, client: AsyncClient, seed, monkeypatch
+    ):
+        """Ordem AVULSO→ASSINATURA: a fatura NÃO encurta a vigência longa do avulso,
+        NÃO re-amarra à assinatura e NÃO troca o pagamento. Cancelar a assinatura
+        depois NÃO expira o curso pago avulso."""
+        monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)
+        pref = seed["pref"]
+        sub = f"sub_{pref}_av"
+
+        # 1) Compra AVULSA do curso (validade 365d, sem assinatura).
+        await _post(client, _session_event(
+            "checkout.session.completed", event_id=f"evt_{pref}_av1",
+            pi_id=f"pi_{pref}_av", aluno_id=seed["aluno_id"], curso_slug=seed["curso_slug"],
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat.stripe_subscription_id is None and mat.pagamento_id is not None
+        exp_avulso = mat.data_expiracao
+        pag_avulso = mat.pagamento_id
+
+        # 2) Assinatura libera o catálogo (ciclo curto ~30d).
+        period_end = int(time.time()) + 30 * 86400
+        await _post(client, _invoice_event(
+            "invoice.paid", event_id=f"evt_{pref}_av2", invoice_id=f"in_{pref}_av",
+            sub_id=sub, aluno_id=seed["aluno_id"], period_end=period_end,
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        # Preserva o avulso: sem re-amarrar, sem encurtar, sem trocar o pagamento.
+        assert mat.stripe_subscription_id is None
+        assert mat.pagamento_id == pag_avulso
+        assert mat.data_expiracao == exp_avulso  # max() manteve a vigência de 365d
+
+        # 3) Cancelar a assinatura NÃO expira o curso pago avulso.
+        await _post(client, _sub_event(
+            "customer.subscription.deleted", event_id=f"evt_{pref}_av3", sub_id=sub,
+        ))
+        mat = await _matricula_do_curso(seed["aluno_id"], seed["curso_id"])
+        assert mat.status == StatusMatricula.ativo
+
     async def test_invoice_paid_formato_legado(self, client: AsyncClient, seed, monkeypatch):
         """Compat: invoice no formato antigo (`subscription` na raiz) segue funcionando."""
         monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", SECRET)

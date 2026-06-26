@@ -1,4 +1,5 @@
 """Indique-e-ganhe: atribuição no cadastro + recompensa (cupons p/ ambos)."""
+import asyncio
 import uuid
 
 from httpx import AsyncClient
@@ -122,5 +123,52 @@ class TestReferralRecompensa:
             # idempotente: rechamar não duplica (status já != compra_confirmada)
             async with AsyncSessionLocal() as db:
                 assert await referral.processar_recompensa(db, ind_id) is False
+        finally:
+            await _limpar_alunos(pref)
+
+    async def test_recompensa_concorrente_nao_duplica(self, monkeypatch):
+        """Lock de linha (with_for_update): webhook × job concorrentes sobre a MESMA
+        indicação geram só UM par de cupons (não 4). Sem o lock, ambos passariam
+        pela guarda de status e criariam cupons em dobro."""
+        from app.core import referral
+
+        async def fake_criar(codigo, tipo, valor, **kw):
+            return (f"coup_{codigo}", f"promo_{codigo}")
+
+        monkeypatch.setattr(referral, "criar_cupom_stripe", fake_criar)
+        monkeypatch.setattr(referral, "stripe_ativo", lambda: True)
+
+        pref = uuid.uuid4().hex[:8]
+        try:
+            async with AsyncSessionLocal() as db:
+                a = Aluno(
+                    nome="Ind", email=f"rca_{pref}@rodelcar.dev", senha_hash="x",
+                    codigo_indicacao=f"C{pref[:7].upper()}",
+                )
+                b = Aluno(nome="Indo", email=f"rcb_{pref}@rodelcar.dev", senha_hash="x")
+                db.add_all([a, b])
+                await db.flush()
+                ind = Indicacao(
+                    indicador_id=a.id, indicado_id=b.id, status="compra_confirmada"
+                )
+                db.add(ind)
+                await db.commit()
+                ind_id, aid, bid = ind.id, a.id, b.id
+
+            # Duas SESSÕES distintas processam a MESMA indicação em paralelo.
+            async def run():
+                async with AsyncSessionLocal() as db:
+                    return await referral.processar_recompensa(db, ind_id)
+
+            r1, r2 = await asyncio.gather(run(), run())
+            assert sorted([r1, r2]) == [False, True]  # só um recompensou
+
+            async with AsyncSessionLocal() as db:
+                cupons = (
+                    await db.execute(
+                        select(Cupom).where(Cupom.aluno_id.in_([aid, bid]))
+                    )
+                ).scalars().all()
+                assert len(cupons) == 2  # 2 no total (não 4)
         finally:
             await _limpar_alunos(pref)

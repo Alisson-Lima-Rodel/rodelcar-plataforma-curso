@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AllCourses } from "@/components/portal/all-courses";
 import { JsonLd } from "@/components/seo/json-ld";
-import { getCursos } from "@/lib/api";
+import { getCursos, getPlanos } from "@/lib/api";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -12,7 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default async function CursosPage() {
-  const courses = await getCursos();
+  const [courses, planos] = await Promise.all([getCursos(), getPlanos()]);
+  // Card "Formação Completa" usa a assinatura anual (acesso total ao catálogo).
+  const planoAnual =
+    planos.find((p) => p.intervalo === "anual") ?? planos[0] ?? null;
   const lista = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -26,7 +29,7 @@ export default async function CursosPage() {
   return (
     <main>
       <JsonLd data={lista} />
-      <AllCourses courses={courses} />
+      <AllCourses courses={courses} planoAnual={planoAnual} />
     </main>
   );
 }

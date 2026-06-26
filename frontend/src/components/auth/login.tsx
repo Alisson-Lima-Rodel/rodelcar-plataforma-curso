@@ -22,6 +22,26 @@ const TITLES: Record<Mode, { h: string; s: string }> = {
   recover: { h: "Recuperar acesso", s: "Enviaremos um link de redefinição." },
 };
 
+const SENHA_MIN = 8;
+
+/** Extrai do envelope 422 (`details`) uma mensagem amigável por campo. Não ecoa
+ * o valor digitado — o backend já remove `input` dos detalhes (LGPD). */
+function mensagemValidacao(details: unknown): string | null {
+  if (!Array.isArray(details)) return null;
+  for (const d of details) {
+    const loc = (d?.loc ?? []) as unknown[];
+    const campo = String(loc[loc.length - 1] ?? "");
+    const tipo = String(d?.type ?? "");
+    if (campo === "senha")
+      return tipo.includes("too_long")
+        ? "A senha pode ter no máximo 72 caracteres."
+        : `A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`;
+    if (campo === "email") return "Informe um e-mail válido.";
+    if (campo === "nome") return "Informe seu nome completo.";
+  }
+  return null;
+}
+
 function mensagemErro(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.code === "CREDENCIAIS_INVALIDAS")
@@ -30,7 +50,8 @@ function mensagemErro(e: unknown): string {
       return "Já existe uma conta com esse e-mail.";
     if (e.code === "RATE_LIMITED")
       return "Muitas tentativas. Aguarde um instante e tente de novo.";
-    if (e.code === "VALIDATION_ERROR") return "Confira os dados informados.";
+    if (e.code === "VALIDATION_ERROR")
+      return mensagemValidacao(e.details) ?? "Confira os dados informados.";
     return e.message;
   }
   return "Não foi possível concluir. Tente novamente.";
@@ -43,6 +64,7 @@ export function Login() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [showSenha, setShowSenha] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -88,6 +110,16 @@ export function Login() {
       );
       setMode("login");
       return;
+    }
+    if (mode === "signup") {
+      if (nome.trim().length < 2) {
+        setError("Informe seu nome completo (mínimo 2 caracteres).");
+        return;
+      }
+      if (senha.length < SENHA_MIN) {
+        setError(`A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`);
+        return;
+      }
     }
     setBusy(true);
     try {
@@ -320,7 +352,7 @@ export function Login() {
               <div className="field">
                 <div className="flex between center">
                   <label htmlFor="au-senha">Senha</label>
-                  {mode === "login" && (
+                  {mode === "login" ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -338,6 +370,22 @@ export function Login() {
                     >
                       Esqueci minha senha
                     </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowSenha((v) => !v)}
+                      aria-pressed={showSenha}
+                      style={{
+                        background: "none",
+                        border: 0,
+                        cursor: "pointer",
+                        fontSize: "0.82rem",
+                        color: "var(--accent)",
+                        padding: 0,
+                      }}
+                    >
+                      {showSenha ? "Ocultar" : "Mostrar"}
+                    </button>
                   )}
                 </div>
                 <div className="input-group">
@@ -347,12 +395,30 @@ export function Login() {
                   <input
                     id="au-senha"
                     className="input"
-                    type="password"
+                    type={mode === "signup" && showSenha ? "text" : "password"}
                     placeholder="••••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                   />
                 </div>
+                {mode === "signup" && (
+                  <span
+                    className="tag-mono subtle"
+                    style={{
+                      lineHeight: 1.4,
+                      color:
+                        senha.length === 0
+                          ? undefined
+                          : senha.length >= SENHA_MIN
+                            ? "var(--success)"
+                            : "var(--danger)",
+                    }}
+                  >
+                    {senha.length >= SENHA_MIN
+                      ? "✓ Tamanho de senha válido"
+                      : "Use no mínimo 8 caracteres."}
+                  </span>
+                )}
               </div>
             )}
           </div>

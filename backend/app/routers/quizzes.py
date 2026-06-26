@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
 from app.core.ratelimit import limiter
+from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
 from app.models import (
     Alternativa,
@@ -56,6 +57,9 @@ async def _quiz_e_matricula(
     ).scalar_one_or_none()
     if quiz is None:
         raise _err(404, "QUIZ_NAO_ENCONTRADO", "Quiz não encontrado.")
+    # Reconcilia vigência antes do gate de status (igual a aulas/progresso): uma
+    # matrícula vencida mas ainda status=ativo não deve responder/aprovar quiz.
+    await checar_vigencia_aluno(aluno.id, db)
     curso_id = await db.scalar(select(Modulo.curso_id).where(Modulo.id == quiz.modulo_id))
     mat = (
         await db.execute(

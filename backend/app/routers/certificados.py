@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.core.email_transacional import email_certificado
 from app.core.notificacoes import enviar_email_bruto, enviar_whatsapp_texto
 from app.core.ratelimit import limiter
+from app.core.vigencia import checar_vigencia_aluno
 from app.dependencies import get_current_aluno
 from app.models import (
     Aluno, Aula, Certificado, Curso, Matricula, Modulo, Progresso, Quiz,
@@ -69,6 +70,11 @@ async def emitir_certificado(
     aluno: Aluno = Depends(get_current_aluno),
     db: AsyncSession = Depends(get_db),
 ):
+    # Reconcilia vigência (lazy) ANTES do gate: uma matrícula com data_expiracao já
+    # vencida mas ainda status=ativo (entre rodadas do job/login) seria expirada
+    # aqui — senão emitiria prova de conclusão sem acesso legítimo vigente.
+    await checar_vigencia_aluno(aluno.id, db)
+
     matricula = (
         await db.execute(select(Matricula).where(Matricula.id == matricula_id))
     ).scalar_one_or_none()
@@ -114,6 +120,24 @@ async def emitir_certificado(
         .join(Modulo, Aula.modulo_id == Modulo.id)
         .where(Modulo.curso_id == matricula.curso_id)
     ) or 0
+
+    # Anti-fraude: exige duração cadastrada em TODAS as aulas. Sem isso, o gate de
+    # tempo assistido vira `0 >= 0` e passa trivial (100% instantâneo emitiria
+    # certificado). Força sincronizar a duração (Panda) antes de certificar.
+    sem_duracao = await db.scalar(
+        select(func.count(Aula.id))
+        .join(Modulo, Aula.modulo_id == Modulo.id)
+        .where(
+            Modulo.curso_id == matricula.curso_id,
+            func.coalesce(Aula.duracao_segundos, 0) <= 0,
+        )
+    ) or 0
+    if sem_duracao:
+        raise _erro(
+            409, "DURACAO_NAO_CADASTRADA",
+            "Curso com aula(s) sem duração cadastrada — certificado indisponível. "
+            "Avise o suporte para sincronizar a duração das aulas.",
+        )
 
     # Anti-fraude: além de `concluida`, a aula só conta se o tempo REAL assistido
     # (acumulado pelo servidor) cobrir >= CERT_MIN_WATCH_RATIO da sua duração.

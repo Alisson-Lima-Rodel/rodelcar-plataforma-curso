@@ -85,7 +85,16 @@ async def processar_recompensa(db: AsyncSession, indicacao_id: uuid.UUID) -> boo
     (só age em status='compra_confirmada'). Best-effort: sem Stripe, não faz nada.
     Em falha (Stripe down, colisão de código), arquiva os cupons já criados na
     Stripe (sem órfãos) e deixa a indicação em 'compra_confirmada' p/ o job retomar."""
-    indicacao = await db.get(Indicacao, indicacao_id)
+    # Lock de linha (with_for_update): serializa webhook × job concorrentes (e
+    # reentregas do Stripe) sobre a MESMA indicação. Sem isso, dois caminhos lêem
+    # status='compra_confirmada' ao mesmo tempo e emitem cupons em dobro (4 em vez
+    # de 2). Mesmo padrão de pg_advisory_xact_lock/with_for_update já usado no
+    # cancelamento (me.py) e no reembolso (admin.py).
+    indicacao = (
+        await db.execute(
+            select(Indicacao).where(Indicacao.id == indicacao_id).with_for_update()
+        )
+    ).scalar_one_or_none()
     if indicacao is None or indicacao.status != "compra_confirmada":
         return False
     if not stripe_ativo():
@@ -105,7 +114,7 @@ async def processar_recompensa(db: AsyncSession, indicacao_id: uuid.UUID) -> boo
         indicacao.recompensado_em = datetime.now(timezone.utc)
         await db.commit()
         return True
-    except (IntegrityError, RuntimeError, Exception):
+    except Exception:  # best-effort: rollback + arquiva cupons já criados na Stripe
         await db.rollback()
         # Arquiva na Stripe os cupons que chegaram a ser criados (evita órfãos).
         for promo_id in promos_criados:

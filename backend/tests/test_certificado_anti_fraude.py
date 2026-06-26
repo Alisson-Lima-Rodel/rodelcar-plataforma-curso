@@ -145,3 +145,35 @@ class TestGateAntiFraude:
         )
         assert resp.status_code == 201
         assert resp.json()["codigo_verificacao"].startswith("RC-")
+
+    async def test_duracao_zero_bloqueia_emissao(
+        self, client: AsyncClient, auth_headers: dict, curso_com_duracao, monkeypatch
+    ):
+        """Aula sem duração cadastrada (duracao_segundos=0) anularia o gate de tempo
+        (0>=0). A emissão é recusada (409 DURACAO_NAO_CADASTRADA) até sincronizar."""
+        import app.routers.certificados as cert_router
+
+        async def fake_email(*a, **k):
+            return "fake-id"
+
+        monkeypatch.setattr(cert_router, "enviar_email_bruto", fake_email)
+        ids, Session = curso_com_duracao
+
+        async with Session() as s:  # simula aula não-sincronizada com o Panda
+            await s.execute(
+                update(Aula)
+                .where(Aula.id == uuid.UUID(ids["aula_id"]))
+                .values(duracao_segundos=0)
+            )
+            await s.commit()
+
+        await client.post(
+            "/api/v1/progresso",
+            json={"aula_id": ids["aula_id"], "percentual": 100, "concluida": True},
+            headers=auth_headers,
+        )
+        resp = await client.post(
+            f"/api/v1/certificados/{ids['matricula_id']}", headers=auth_headers
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "DURACAO_NAO_CADASTRADA"

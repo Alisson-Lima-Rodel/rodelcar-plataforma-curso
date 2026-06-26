@@ -447,9 +447,23 @@ async def _liberar_catalogo(
             ))
         else:
             mat.status = StatusMatricula.ativo
-            mat.data_expiracao = period_end
-            mat.stripe_subscription_id = sub_id
-            mat.pagamento_id = pagamento_id
+            # Nunca ENCURTA: usa a maior entre a vigência atual e o fim do ciclo.
+            # Protege (a) compra avulsa de validade longa coberta pela assinatura e
+            # (b) reentrega de invoice de ciclo anterior (fora de ordem).
+            atual = mat.data_expiracao
+            if atual.tzinfo is None:
+                atual = atual.replace(tzinfo=timezone.utc)
+            mat.data_expiracao = max(atual, period_end)
+            # Preserva compra AVULSA independente (pagamento próprio e SEM assinatura):
+            # não re-amarra à assinatura nem descarta o pagamento_id — senão cancelar
+            # o plano expiraria um curso pago avulso e quebraria a janela de
+            # arrependimento. Renovação de matrícula que já é da assinatura segue normal.
+            avulso_independente = (
+                mat.pagamento_id is not None and mat.stripe_subscription_id is None
+            )
+            if not avulso_independente:
+                mat.stripe_subscription_id = sub_id
+                mat.pagamento_id = pagamento_id
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────────

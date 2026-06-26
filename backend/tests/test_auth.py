@@ -162,6 +162,24 @@ class TestRefresh:
         assert r.status_code == 401
         assert r.json()["error"]["code"] == "REFRESH_REUTILIZADO"
 
+    async def test_logout_invalida_access_token(
+        self, client: AsyncClient, test_aluno: dict
+    ):
+        """Logout derruba a sessão na hora: o access token vivo deixa de valer
+        (token_version incrementado), não só o refresh — sai de todos os aparelhos."""
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": test_aluno["email"], "senha": test_aluno["password"]},
+        )
+        access = login.json()["access_token"]
+        refresh = login.json()["refresh_token"]
+        h = {"Authorization": f"Bearer {access}"}
+        assert (await client.get("/api/v1/auth/me", headers=h)).status_code == 200
+        out = await client.post("/api/v1/auth/logout", json={"refresh_token": refresh})
+        assert out.status_code == 204
+        # access token morre imediatamente (não espera o exp de ~30min)
+        assert (await client.get("/api/v1/auth/me", headers=h)).status_code == 401
+
 
 # ── GET /api/v1/auth/me ───────────────────────────────────────────────────────
 class TestMe:

@@ -1,6 +1,10 @@
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy import update
+
+from app.core.db import AsyncSessionLocal
+from app.models import Progresso
 
 
 # ── POST /api/v1/progresso ────────────────────────────────────────────────────
@@ -100,6 +104,27 @@ class TestProgresso:
         assert resp.status_code == 422
         assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
+    async def test_percentual_monotonico_nao_regride(
+        self, client: AsyncClient, auth_headers: dict, test_data: dict
+    ):
+        """Ping com percentual MENOR não regride o progresso já alcançado (greatest)."""
+        aula = test_data["aula_ativa_id"]
+        r1 = await client.post(
+            "/api/v1/progresso",
+            json={"aula_id": aula, "percentual": 90, "concluida": False},
+            headers=auth_headers,
+        )
+        assert r1.status_code == 200
+        p1 = r1.json()["percentual"]
+        assert p1 >= 90  # >= por causa de possível estado anterior do test_data
+        r2 = await client.post(
+            "/api/v1/progresso",
+            json={"aula_id": aula, "percentual": 5, "concluida": False},
+            headers=auth_headers,
+        )
+        assert r2.status_code == 200
+        assert r2.json()["percentual"] == p1  # não regrediu
+
 
 # ── POST + GET /api/v1/certificados ──────────────────────────────────────────
 class TestCertificados:
@@ -153,6 +178,17 @@ class TestCertificados:
         )
         assert prog_resp.status_code == 200
         assert prog_resp.json()["curso_percentual"] == 100.0
+
+        # Acumula tempo assistido suficiente p/ o gate anti-fraude (aula_cert agora
+        # tem duracao=60; o gate exige segundos_assistidos >= 0.85*60). Setamos
+        # direto no banco em vez de simular vários pings com relógio real.
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(Progresso)
+                .where(Progresso.aula_id == uuid.UUID(test_data["aula_cert_id"]))
+                .values(segundos_assistidos=60)
+            )
+            await db.commit()
 
         # 2. Emite certificado
         cert_resp = await client.post(

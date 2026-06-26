@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from httpx import AsyncClient
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, update as sa_update
 
 from app.core.db import AsyncSessionLocal
 from app.models import Matricula, Progresso, StatusMatricula, TentativaQuiz
@@ -52,9 +52,22 @@ async def _seed_curso_modulo_aula(client, admin_token):
     a = await client.post(
         f"/api/v1/admin/modulos/{modulo_id}/aulas",
         headers=admin_token,
-        json={"titulo": "Aula 1", "ordem": 1},
+        # duração > 0: o gate anti-fraude do certificado exige duração cadastrada.
+        json={"titulo": "Aula 1", "ordem": 1, "duracao_segundos": 60},
     )
     return slug, curso_id, modulo_id, a.json()["id"]
+
+
+async def _creditar_tempo(aula_id: str, segundos: int = 60):
+    """Acumula segundos_assistidos direto no banco (satisfaz o gate anti-fraude
+    sem simular múltiplos pings com relógio real)."""
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            sa_update(Progresso)
+            .where(Progresso.aula_id == uuid.UUID(aula_id))
+            .values(segundos_assistidos=segundos)
+        )
+        await db.commit()
 
 
 async def _matricular(test_aluno, curso_id, status=StatusMatricula.ativo, dias=30):
@@ -156,6 +169,7 @@ class TestQuizAluno:
                 headers=auth_headers,
                 json={"aula_id": aula_id, "percentual": 100, "concluida": True},
             )
+            await _creditar_tempo(aula_id)  # satisfaz o gate de tempo assistido
             # aula feita mas quiz pendente => certificado bloqueado
             cert = await client.post(f"/api/v1/certificados/{mat_id}", headers=auth_headers)
             assert cert.status_code == 409 and cert.json()["error"]["code"] == "QUIZ_PENDENTE"
@@ -302,6 +316,7 @@ class TestQuizAluno:
                 headers=auth_headers,
                 json={"aula_id": aula_id, "percentual": 100, "concluida": True},
             )
+            await _creditar_tempo(aula_id)  # satisfaz o gate de tempo assistido
             r1, r2 = await asyncio.gather(
                 client.post(f"/api/v1/certificados/{mat_id}", headers=auth_headers),
                 client.post(f"/api/v1/certificados/{mat_id}", headers=auth_headers),

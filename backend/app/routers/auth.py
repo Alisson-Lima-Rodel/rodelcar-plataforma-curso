@@ -142,6 +142,23 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     return await _emitir_tokens(str(aluno.id), aluno.token_version, db)
 
 
+async def _revogar_familia(
+    db: AsyncSession, aluno_uuid: uuid.UUID, agora: datetime
+) -> None:
+    """Roubo/reuso de refresh: revoga TODA a família do aluno e incrementa
+    token_version (mata também os access tokens vivos, não só os refresh). Commita."""
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.aluno_id == aluno_uuid, RefreshToken.revogado.is_(False))
+        .values(revogado=True, revogado_em=agora)
+    )
+    await db.execute(
+        update(Aluno).where(Aluno.id == aluno_uuid)
+        .values(token_version=Aluno.token_version + 1)
+    )
+    await db.commit()
+
+
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit(auth_limit)
 async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
@@ -166,17 +183,7 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     # Reuso de token já rotacionado = sinal de roubo → revoga a família inteira E
     # incrementa token_version (mata também os access tokens vivos, não só os refresh).
     if rt.revogado:
-        await db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.aluno_id == aluno_uuid, RefreshToken.revogado.is_(False))
-            .values(revogado=True, revogado_em=agora)
-        )
-        await db.execute(
-            update(Aluno)
-            .where(Aluno.id == aluno_uuid)
-            .values(token_version=Aluno.token_version + 1)
-        )
-        await db.commit()
+        await _revogar_familia(db, aluno_uuid, agora)
         raise _err(
             401,
             "REFRESH_REUTILIZADO",
@@ -186,15 +193,34 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     if _aware(rt.expira_em) < agora:
         raise _err(401, "REFRESH_INVALIDO", "Refresh token inválido ou expirado.")
 
-    # Rotação: revoga o token atual e emite um novo par (commit atômico em _emitir_tokens).
-    rt.revogado = True
-    rt.revogado_em = agora
     aluno = await db.get(Aluno, aluno_uuid)
     # Aluno bloqueado não renova sessão (mesmo com refresh válido). O access já
     # cairia em get_current_aluno, mas barrar aqui evita rotacionar a família.
     if aluno is None or aluno.bloqueado:
-        await db.commit()  # persiste a revogação do token atual
+        await db.execute(  # persiste a revogação do token atual (CAS)
+            update(RefreshToken)
+            .where(RefreshToken.jti == jti, RefreshToken.revogado.is_(False))
+            .values(revogado=True, revogado_em=agora)
+        )
+        await db.commit()
         raise _err(403, "ALUNO_BLOQUEADO", "Acesso bloqueado. Fale com o suporte.")
+
+    # Rotação ATÔMICA (compare-and-swap): revoga o token atual SÓ se ainda vivo.
+    # rowcount=0 ⇒ outra requisição concorrente já rotacionou este mesmo token na
+    # janela entre o SELECT e agora → trata como reuso/roubo (wipe da família) em
+    # vez de emitir uma 2ª família de sessão válida.
+    res = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.jti == jti, RefreshToken.revogado.is_(False))
+        .values(revogado=True, revogado_em=agora)
+    )
+    if res.rowcount == 0:
+        await _revogar_familia(db, aluno_uuid, agora)
+        raise _err(
+            401,
+            "REFRESH_REUTILIZADO",
+            "Refresh token reutilizado — todas as sessões foram revogadas. Faça login novamente.",
+        )
     return await _emitir_tokens(str(aluno_uuid), aluno.token_version, db)
 
 
@@ -203,18 +229,35 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
 async def logout(
     request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Revoga o refresh token informado (idempotente)."""
+    """Revoga o refresh e derruba a sessão na hora (idempotente).
+
+    Logout = sair de TODOS os aparelhos: ao revogar de fato o refresh, incrementa
+    token_version para invalidar também os access tokens vivos (senão o access
+    seguiria aceito por até ~30min). Mesmo padrão do logout do admin. Reapresentar
+    um token já revogado é no-op (não re-incrementa → sem DoS de sessão por replay).
+    """
     try:
         payload = decode_token(body.refresh_token)
         jti = uuid.UUID(payload["jti"])
+        aluno_uuid = uuid.UUID(payload["sub"])
     except (jwt.PyJWTError, ValueError, KeyError):
         return Response(status_code=204)  # nada a fazer; não vaza se era válido
 
-    await db.execute(
+    agora = datetime.now(timezone.utc)
+    res = await db.execute(
         update(RefreshToken)
-        .where(RefreshToken.jti == jti, RefreshToken.revogado.is_(False))
-        .values(revogado=True, revogado_em=datetime.now(timezone.utc))
+        .where(
+            RefreshToken.jti == jti,
+            RefreshToken.aluno_id == aluno_uuid,
+            RefreshToken.revogado.is_(False),
+        )
+        .values(revogado=True, revogado_em=agora)
     )
+    if res.rowcount:  # só bumpa quando realmente revogou um token vivo do aluno
+        await db.execute(
+            update(Aluno).where(Aluno.id == aluno_uuid)
+            .values(token_version=Aluno.token_version + 1)
+        )
     await db.commit()
     return Response(status_code=204)
 

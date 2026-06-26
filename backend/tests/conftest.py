@@ -154,7 +154,12 @@ async def test_data(test_aluno):
         session.add(modulo_cert)
         await session.flush()
 
-        aula_cert = Aula(modulo_id=modulo_cert.id, titulo="Aula Cert", ordem=1)
+        # duração > 0: o gate anti-fraude do certificado agora EXIGE duração
+        # cadastrada (aula com duracao=0 não emite). O teste de emissão acumula
+        # segundos_assistidos suficientes.
+        aula_cert = Aula(
+            modulo_id=modulo_cert.id, titulo="Aula Cert", ordem=1, duracao_segundos=60
+        )
         session.add(aula_cert)
         await session.flush()
 

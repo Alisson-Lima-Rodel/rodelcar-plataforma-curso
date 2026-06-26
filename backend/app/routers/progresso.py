@@ -82,7 +82,9 @@ async def salvar_progresso(
     # No INSERT puro `segundos_assistidos` nasce 0; só acumula no UPDATE (a 1ª
     # batida de uma aula nova não credita tempo — não há janela anterior).
     update_set = {
-        "percentual": body.percentual,
+        # Monotônico (ponto mais distante): nunca regride por ping fora de ordem
+        # (corrida timeupdate/pause) nem por cliente enviando um valor menor.
+        "percentual": func.greatest(Progresso.percentual, body.percentual),
         "concluida": body.concluida,
         "segundos_assistidos": (
             Progresso.segundos_assistidos + cast(delta_assistido, Integer)
@@ -128,9 +130,21 @@ async def salvar_progresso(
 
     curso_percentual = round(sum_pct / total_aulas, 1) if total_aulas > 0 else 0.0
 
+    # Devolve o percentual REALMENTE gravado (monotônico): se o cliente mandou um
+    # valor menor, o `greatest` manteve o maior — a resposta reflete a verdade.
+    stored_pct = float(
+        await db.scalar(
+            select(Progresso.percentual).where(
+                Progresso.matricula_id == matricula.id,
+                Progresso.aula_id == body.aula_id,
+            )
+        )
+        or body.percentual
+    )
+
     return ProgressoResponse(
         aula_id=body.aula_id,
-        percentual=body.percentual,
+        percentual=stored_pct,
         concluida=body.concluida,
         curso_percentual=curso_percentual,
         posicao_segundos=body.posicao_segundos or 0,

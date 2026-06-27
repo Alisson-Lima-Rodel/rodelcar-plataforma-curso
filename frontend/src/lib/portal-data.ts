@@ -21,7 +21,9 @@ export interface Course {
   hours: string;
   lessons: number;
   rating: number;
-  students: number;
+  // `students` saiu da vitrine/página (sem base real); mantido opcional só p/ não
+  // quebrar os mocks legados de portal-data. Não renderizar.
+  students?: number;
   level: string;
   icon: string;
   badge: { variant: string; label: string };

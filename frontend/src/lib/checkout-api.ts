@@ -5,17 +5,20 @@
    (entrar OU criar conta) e a compra é retomada automaticamente no sucesso. */
 
 import { ApiError, API_URL, type ApiErrorEnvelope } from "./api";
-import { getAccessToken, matricularGratis } from "./auth-api";
+import { getAccessToken, matricularGratis, tryRefresh } from "./auth-api";
 
 export interface CheckoutCriado {
   checkout_url: string;
   session_id: string;
 }
 
-/** POST autenticado mínimo (o checkout exige login; sem token nem tenta). */
+/** POST autenticado mínimo (o checkout exige login; sem token nem tenta). Faz 1
+ *  retry após renovar o access no 401 (igual a authGet/authPost) — sem isso, um
+ *  access que expira com a tela de confirmação aberta perdia a venda em silêncio. */
 async function checkoutPost(
   path: string,
   body: unknown,
+  retry = true,
 ): Promise<CheckoutCriado> {
   const token = getAccessToken();
   if (!token)
@@ -33,6 +36,9 @@ async function checkoutPost(
     },
     body: JSON.stringify(body),
   });
+  if (res.status === 401 && retry && (await tryRefresh())) {
+    return checkoutPost(path, body, false);
+  }
   const text = await res.text();
   const data = text ? (JSON.parse(text) as unknown) : null;
   if (!res.ok) {

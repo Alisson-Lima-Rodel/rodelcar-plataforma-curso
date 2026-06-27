@@ -18,7 +18,14 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import limiter
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Curso, Matricula, PlanoAssinatura, StatusMatricula
+from app.models import (
+    Aluno,
+    Curso,
+    Matricula,
+    PlanoAssinatura,
+    StatusCurso,
+    StatusMatricula,
+)
 from app.schemas.pagamentos import (
     CheckoutAssinaturaRequest,
     CheckoutAvulsoRequest,
@@ -96,8 +103,15 @@ async def checkout_avulso(
     db: AsyncSession = Depends(get_db),
 ):
     _exige_stripe()
+    # Só curso ATIVO é vendável — em_desenvolvimento/inativo somem do site E não
+    # podem ser comprados por slug (mesma regra da vitrine; fecha a superfície de
+    # transação além da de exibição).
     curso = (
-        await db.execute(select(Curso).where(Curso.slug == body.curso_slug))
+        await db.execute(
+            select(Curso).where(
+                Curso.slug == body.curso_slug, Curso.status == StatusCurso.ativo
+            )
+        )
     ).scalar_one_or_none()
     if curso is None:
         raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")

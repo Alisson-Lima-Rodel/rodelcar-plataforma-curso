@@ -55,6 +55,15 @@ class TestConteudoAdmin:
             mods = cont.json()
             assert len(mods) == 1 and len(mods[0]["aulas"]) == 2
 
+            # 4b. publica o curso (já tem conteúdo) p/ aparecer no público —
+            # curso nasce "em_desenvolvimento" e só ativo é visível na vitrine.
+            pub = await client.patch(
+                f"/api/v1/admin/cursos/{curso_id}",
+                headers=admin_token,
+                json={"status": "ativo"},
+            )
+            assert pub.status_code == 200 and pub.json()["status"] == "ativo"
+
             # 5. preview exige login: SÓ a grátis, e a paga NUNCA vaza o video id
             prev = await client.get(
                 f"/api/v1/cursos/{slug}/preview", headers=auth_headers

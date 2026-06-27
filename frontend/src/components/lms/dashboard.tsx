@@ -240,15 +240,16 @@ export function Dashboard() {
       </div>
       {mats.length === 0 ? (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum curso vigente</p>
           <p className="muted" style={{ marginBottom: 14 }}>
-            Você ainda não está matriculado em nenhum curso.
+            Você ainda não tem um curso ativo. Explore o catálogo e comece hoje.
           </p>
           <Button
-            variant="secondary"
-            icon="book"
-            onClick={() => router.push("/cursos")}
+            variant="primary"
+            icon="spark"
+            onClick={() => router.push("/catalogo")}
           >
-            Ver cursos
+            Ver catálogo
           </Button>
         </div>
       ) : (

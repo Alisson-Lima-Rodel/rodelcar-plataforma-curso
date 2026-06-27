@@ -82,14 +82,14 @@ export function CourseCard({ c }: { c: Course }) {
           flex: 1,
         }}
       >
-        <div className="flex center gap-2" style={{ marginBottom: 9 }}>
-          <span className="tag-mono">
-            <Stars value={c.rating} size={12} />
-          </span>
-          <span className="tag-mono">
-            {c.rating} · {c.students.toLocaleString("pt-BR")} alunos
-          </span>
-        </div>
+        {c.rating > 0 && (
+          <div className="flex center gap-2" style={{ marginBottom: 9 }}>
+            <span className="tag-mono">
+              <Stars value={c.rating} size={12} />
+            </span>
+            <span className="tag-mono">{c.rating}</span>
+          </div>
+        )}
         <h3
           style={{
             fontSize: "1.18rem",

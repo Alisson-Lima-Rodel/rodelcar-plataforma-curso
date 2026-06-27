@@ -46,7 +46,14 @@ export interface EntitySchema {
   icon: string;
   title: (it: AdminItem) => string;
   search: (it: AdminItem) => string;
-  filter: { key: string; options: string[] };
+  // `initial` = opção selecionada por padrão (default "Todos"). `match` =
+  // predicado custom (ex.: "Ativo + Em desenvolvimento" cobre dois status).
+  filter: {
+    key: string;
+    options: string[];
+    initial?: string;
+    match?: (it: AdminItem, option: string) => boolean;
+  };
   columns: Column[];
   fields: FieldDef[];
   defaults: AdminItem;
@@ -116,17 +123,32 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
     icon: "book",
     title: (it) => String(it.titulo),
     search: (it) => `${it.titulo} ${it.badge_label}`,
+    // Padrão mostra Ativo + Em desenvolvimento (esconde os inativos).
     filter: {
-      key: "badge_label",
-      options: ["Todos", "Automatizado", "Automático", "Dupla embreagem"],
+      key: "status",
+      options: [
+        "Ativo + Em desenvolvimento",
+        "Ativo",
+        "Em desenvolvimento",
+        "Inativo",
+        "Todos",
+      ],
+      initial: "Ativo + Em desenvolvimento",
+      match: (it, opt) => {
+        if (opt === "Todos") return true;
+        if (opt === "Ativo + Em desenvolvimento")
+          return it.status === "Ativo" || it.status === "Em desenvolvimento";
+        return it.status === opt;
+      },
     },
     columns: [
       { key: "titulo", label: "Curso", kind: "strong" },
       { key: "badge_label", label: "Sistema", kind: "badgeSystem" },
-      { key: "nivel", label: "Nível" },
-      { key: "aulas_total", label: "Aulas", kind: "center" },
+      { key: "total_modulos", label: "Módulos", kind: "center" },
+      { key: "total_aulas", label: "Aulas", kind: "center" },
+      { key: "horas", label: "Tempo", kind: "center" },
       { key: "preco", label: "Preço", kind: "price" },
-      { key: "ativo", label: "Ativo", kind: "badgeAtivo" },
+      { key: "status", label: "Status", kind: "badgeStatus" },
     ],
     fields: [
       {
@@ -136,7 +158,12 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         col: "full",
         hint: "Aparece no card da vitrine e na página do curso.",
       },
-      { key: "slug", label: "Slug (URL)", type: "text" },
+      {
+        key: "slug",
+        label: "Slug (URL)",
+        type: "text",
+        hint: "Endereço do curso no site: /cursos/SEU-SLUG. Único, minúsculo, sem espaços ou acentos.",
+      },
       { key: "titulo", label: "Título do curso", type: "text", col: "full" },
       { key: "tagline", label: "Chamada (tagline)", type: "text", col: "full" },
       {
@@ -150,6 +177,13 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         label: "Nível",
         type: "select",
         options: ["Iniciante", "Intermediário", "Avançado"],
+      },
+      {
+        key: "status",
+        label: "Status",
+        type: "select",
+        options: ["Em desenvolvimento", "Ativo", "Inativo"],
+        hint: "Curso novo nasce 'Em desenvolvimento'. Só vai para 'Ativo' (aparece e vende) com pelo menos uma aula cadastrada.",
       },
       {
         key: "preco",
@@ -166,17 +200,16 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
         off: false,
         hint: "Aluno cadastrado se matricula de graça e acessa tudo (não cobra). Ímã de leads.",
       },
-      { key: "horas", label: "Carga horária", type: "text" },
       {
         key: "idiomas_legenda",
         label: "Legendas (idiomas)",
         type: "text",
         hint: 'Separe por vírgula (ex.: PT, EN, ES). Vira o selo "Legendado em…" na página de venda.',
       },
-      { key: "aulas_total", label: "Nº de aulas", type: "number" },
       { key: "rating", label: "Nota (0–5)", type: "number" },
-      { key: "alunos", label: "Nº de alunos", type: "number" },
       { key: "ordem", label: "Ordem na vitrine", type: "number" },
+      // Nº de aulas, módulos e tempo de vídeo são CALCULADOS do conteúdo
+      // cadastrado (aba "Conteúdo") — não se digita mais aqui.
     ],
     defaults: {
       thumbnail_url: "",
@@ -185,15 +218,12 @@ export const ENTITIES: Record<EntityKey, EntitySchema> = {
       tagline: "",
       badge_label: "Automatizado",
       nivel: "Intermediário",
+      status: "Em desenvolvimento",
       preco: 397,
       preco_antigo: 597,
       gratuito: false,
-      ativo: true,
-      horas: "6h00",
       idiomas_legenda: "",
-      aulas_total: 30,
       rating: 4.8,
-      alunos: 0,
       ordem: 0,
     },
   },

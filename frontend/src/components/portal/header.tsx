@@ -77,10 +77,10 @@ export function Header() {
           <Button
             variant="primary"
             size="sm"
-            icon="calendar"
+            icon="whatsapp"
             onClick={openSchedule}
           >
-            Agendar avaliação
+            Falar com a oficina
           </Button>
         </div>
       </div>

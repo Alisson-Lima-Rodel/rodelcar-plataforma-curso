@@ -61,6 +61,16 @@ def create_admin_token(sub: str, token_version: int = 0) -> str:
     )
 
 
+def create_admin_refresh_token(sub: str, token_version: int = 0) -> str:
+    """Refresh do painel admin (stateless). Carrega `tv`: o logout bumpa o
+    token_version e invalida access E refresh de uma vez. `type` distinto evita
+    cruzar com o refresh do aluno (que é stateful, com jti)."""
+    return _make_token(
+        {"sub": sub, "type": "admin_refresh", "tv": token_version},
+        timedelta(days=settings.JWT_ADMIN_REFRESH_EXPIRE_DAYS),
+    )
+
+
 def create_refresh_token(sub: str) -> tuple[str, str]:
     """Retorna (token, jti). O jti referencia a linha em refresh_tokens p/ rotação."""
     jti = str(uuid.uuid4())

@@ -59,22 +59,32 @@ function mensagemErro(e: unknown): string {
 
 export function Login() {
   const router = useRouter();
-  const { login, register } = useAuth();
+  const { login, register, aluno, logout } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
+  const [telefone, setTelefone] = useState("");
   const [senha, setSenha] = useState("");
   const [showSenha, setShowSenha] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [ref, setRef] = useState<string | null>(null);
+  // Compra pendente vinda do site público: se já houver sessão salva, em vez de
+  // comprar com ela direto, confirmamos quem é o usuário (item 4.1).
+  const [temCompra, setTemCompra] = useState(false);
+  const [trocarConta, setTrocarConta] = useState(false);
 
   // Compra iniciada no portal sem login: avisa e retoma após entrar/cadastrar.
   // Link de indicação (?ref=): já abre no cadastro e guarda o código.
   useEffect(() => {
     if (lerCompraPendente()) {
+      setTemCompra(true);
       setNotice("Entre ou crie sua conta para concluir a compra.");
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sessao") === "expirada") {
+      setNotice("Sua sessão expirou. Entre novamente para continuar.");
     }
     const r = new URLSearchParams(window.location.search).get("ref");
     if (r) {
@@ -116,6 +126,12 @@ export function Login() {
         setError("Informe seu nome completo (mínimo 2 caracteres).");
         return;
       }
+      // WhatsApp obrigatório: DDD + número (10 ou 11 dígitos; aceita máscara/+55).
+      const digitos = telefone.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+      if (digitos.length < 10 || digitos.length > 11) {
+        setError("Informe um WhatsApp válido com DDD (ex.: (51) 99999-9999).");
+        return;
+      }
       if (senha.length < SENHA_MIN) {
         setError(`A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`);
         return;
@@ -124,7 +140,7 @@ export function Login() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        await register(nome.trim(), email.trim(), senha, ref);
+        await register(nome.trim(), email.trim(), senha, telefone.trim(), ref);
         await concluirEntrada();
       } else {
         // Uma única tela de login: tenta admin primeiro; se a conta não for
@@ -144,6 +160,27 @@ export function Login() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Confirmação de compra: há compra pendente E já existe um aluno logado, e o
+  // usuário ainda não pediu para trocar de conta.
+  const confirmando = temCompra && !!aluno && !trocarConta;
+
+  const continuarComoLogado = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await concluirEntrada();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const entrarOutraConta = async () => {
+    await logout(); // limpa a sessão salva (como abrir em janela anônima)
+    setTrocarConta(true);
+    setMode("login");
+    setNotice("Entre ou crie sua conta para concluir a compra.");
   };
 
   const cta =
@@ -308,6 +345,42 @@ export function Login() {
             </div>
           )}
 
+          {confirmando && (
+            <div style={{ display: "grid", gap: 12, marginBottom: 4 }}>
+              <div
+                className="card"
+                style={{ padding: "14px 16px", display: "grid", gap: 2 }}
+              >
+                <span className="tag-mono subtle">Você está logado como</span>
+                <span style={{ fontWeight: 600 }}>{aluno?.email}</span>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                size="lg"
+                block
+                icon={busy ? undefined : "arrow"}
+                disabled={busy}
+                onClick={continuarComoLogado}
+              >
+                {busy ? "Aguarde..." : "Continuar e ir para o pagamento"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                block
+                icon="users"
+                disabled={busy}
+                onClick={entrarOutraConta}
+              >
+                Entrar com outra conta
+              </Button>
+            </div>
+          )}
+
+          {!confirmando && (
+          <>
           <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
             {mode === "signup" && (
               <div className="field">
@@ -341,18 +414,31 @@ export function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-              {mode === "login" && (
-                <span className="tag-mono subtle" style={{ lineHeight: 1.4 }}>
-                  Seu nível de acesso (aluno ou administrador) é identificado
-                  automaticamente.
-                </span>
-              )}
             </div>
+            {mode === "signup" && (
+              <div className="field">
+                <label htmlFor="au-zap">WhatsApp</label>
+                <div className="input-group">
+                  <span className="ico">
+                    <Icon name="whatsapp" size={17} />
+                  </span>
+                  <input
+                    id="au-zap"
+                    className="input"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="(51) 99999-9999"
+                    value={telefone}
+                    onChange={(e) => setTelefone(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
             {mode !== "recover" && (
               <div className="field">
                 <div className="flex between center">
                   <label htmlFor="au-senha">Senha</label>
-                  {mode === "login" ? (
+                  {mode === "login" && (
                     <button
                       type="button"
                       onClick={() => {
@@ -370,22 +456,6 @@ export function Login() {
                     >
                       Esqueci minha senha
                     </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowSenha((v) => !v)}
-                      aria-pressed={showSenha}
-                      style={{
-                        background: "none",
-                        border: 0,
-                        cursor: "pointer",
-                        fontSize: "0.82rem",
-                        color: "var(--accent)",
-                        padding: 0,
-                      }}
-                    >
-                      {showSenha ? "Ocultar" : "Mostrar"}
-                    </button>
                   )}
                 </div>
                 <div className="input-group">
@@ -395,11 +465,34 @@ export function Login() {
                   <input
                     id="au-senha"
                     className="input"
-                    type={mode === "signup" && showSenha ? "text" : "password"}
+                    type={showSenha ? "text" : "password"}
                     placeholder="••••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
+                    style={{ paddingRight: 42 }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowSenha((v) => !v)}
+                    aria-pressed={showSenha}
+                    aria-label={showSenha ? "Ocultar senha" : "Mostrar senha"}
+                    title={showSenha ? "Ocultar senha" : "Mostrar senha"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: 0,
+                      cursor: "pointer",
+                      color: "var(--text-subtle)",
+                      display: "grid",
+                      placeItems: "center",
+                      padding: 4,
+                    }}
+                  >
+                    <Icon name={showSenha ? "eyeOff" : "eye"} size={18} />
+                  </button>
                 </div>
                 {mode === "signup" && (
                   <span
@@ -482,6 +575,8 @@ export function Login() {
               </span>
             )}
           </div>
+          </>
+          )}
         </form>
       </div>
     </div>

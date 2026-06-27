@@ -21,7 +21,8 @@ async def listar_videos(db: AsyncSession = Depends(get_db)):
     rows = (
         await db.execute(
             select(Video)
-            .where(Video.status == "Ativo")
+            # Ativo (curadoria do admin) E disponível no YouTube (job diário).
+            .where(Video.status == "Ativo", Video.indisponivel.is_(False))
             .order_by(Video.ordem, Video.criado_em)
             .limit(100)  # teto defensivo p/ resposta pública
         )

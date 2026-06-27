@@ -82,10 +82,10 @@ export function Hero() {
               <Button
                 variant="primary"
                 size="lg"
-                icon="calendar"
+                icon="whatsapp"
                 onClick={openSchedule}
               >
-                Agendar avaliação
+                Falar com a oficina
               </Button>
               <Link href="/#vitrine" className="btn btn-secondary btn-lg">
                 Ver cursos

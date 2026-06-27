@@ -153,13 +153,15 @@ export function MyCourses() {
 
       {vigentes.length === 0 ? (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum curso vigente</p>
           <p className="muted" style={{ marginBottom: 14 }}>
-            Você não tem cursos vigentes no momento.
+            Você não tem cursos vigentes no momento. Explore o catálogo sem sair
+            da sua área.
           </p>
           <Button
-            variant="secondary"
-            icon="book"
-            onClick={() => router.push("/cursos")}
+            variant="primary"
+            icon="spark"
+            onClick={() => router.push("/catalogo")}
           >
             Ver catálogo
           </Button>

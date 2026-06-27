@@ -114,7 +114,6 @@ interface ApiCourseBase {
   horas?: string | null;
   aulas_total: number;
   rating?: number | null;
-  alunos: number;
   nivel?: string | null;
   icon?: string | null;
   badge_label?: string | null;
@@ -159,7 +158,6 @@ function mapBase(
     hours: c.horas ?? "",
     lessons: c.aulas_total,
     rating: c.rating ?? 0,
-    students: c.alunos,
     level: c.nivel ?? "",
     icon: c.icon ?? "gauge",
     badge: { variant: "", label: c.badge_label ?? "" },

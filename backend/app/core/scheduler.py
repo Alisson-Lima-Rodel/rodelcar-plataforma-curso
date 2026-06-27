@@ -20,6 +20,7 @@ from app.models import (
     StatusMatricula,
     StatusNotificacao,
     TipoNotificacao,
+    Video,
 )
 
 logger = logging.getLogger(__name__)
@@ -298,6 +299,45 @@ async def _job_recompensar_indicacoes() -> None:
         logger.exception("Erro não tratado no job de recompensas de indicação")
 
 
+async def _job_atualizar_videos() -> None:
+    """Atualiza views/likes/duração/canal dos vídeos da prova social e esconde os
+    que saíram do ar no YouTube. Diário (a contagem do YouTube muda devagar).
+
+    Best-effort por vídeo: só sobrescreve um campo quando veio valor novo (não
+    apaga dados em falha transitória). Disponibilidade só esconde quando é
+    confirmada como indisponível (False); None = transitório, não mexe.
+    """
+    try:
+        from app.core.youtube import buscar_metadados, verificar_disponibilidade
+
+        async with AsyncSessionLocal() as db:
+            videos = (
+                await db.execute(select(Video).where(Video.youtube_url.isnot(None)))
+            ).scalars().all()
+            mudou = 0
+            for v in videos:
+                disp = await verificar_disponibilidade(v.youtube_url)
+                if disp is True and v.indisponivel:
+                    v.indisponivel = False
+                    mudou += 1
+                elif disp is False and not v.indisponivel:
+                    v.indisponivel = True
+                    mudou += 1
+                # Atualiza metadados só quando o vídeo está acessível.
+                if disp is not False:
+                    dados = await buscar_metadados(v.youtube_url) or {}
+                    for campo in ("views", "likes", "duracao", "canal"):
+                        novo = dados.get(campo)
+                        if novo and novo != getattr(v, campo):
+                            setattr(v, campo, novo)
+                            mudou += 1
+            if mudou:
+                await db.commit()
+                logger.info("Vídeos atualizados (campos alterados: %d).", mudou)
+    except Exception:
+        logger.exception("Erro não tratado no job de atualização de vídeos")
+
+
 def iniciar_scheduler() -> None:
     scheduler.add_job(
         _job_vigencia_diaria,
@@ -324,6 +364,12 @@ def iniciar_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        _job_atualizar_videos,
+        CronTrigger(hour=6, minute=40, timezone="UTC"),
+        id="atualizar_videos",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _job_recompensar_indicacoes,
         CronTrigger(minute=45, timezone="UTC"),  # de hora em hora
         id="recompensar_indicacoes",
@@ -332,8 +378,8 @@ def iniciar_scheduler() -> None:
     scheduler.start()
     logger.info(
         "Scheduler iniciado — vigência 06:00, limpeza de tokens 06:10, "
-        "expurgo de leads 06:20, avaliações Google 06:30, recompensas de "
-        "indicação a cada hora (UTC)"
+        "expurgo de leads 06:20, avaliações Google 06:30, atualização de "
+        "vídeos 06:40, recompensas de indicação a cada hora (UTC)"
     )
 
 

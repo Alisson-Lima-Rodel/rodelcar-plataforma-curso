@@ -5,20 +5,28 @@ import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { telefoneValidoBR, useLeadWhatsapp } from "./whatsapp-lead";
 
-export interface ScheduleDialogProps {
+export interface EspecialistaDialogProps {
   open: boolean;
   onClose: () => void;
   onDone: () => void;
+  cursoTitulo: string;
+  cursoSlug: string;
 }
 
-const EMPTY = { nome: "", whatsapp: "", veiculo: "", cambio: "Automático convencional", sintoma: "" };
+const EMPTY = { nome: "", whatsapp: "", duvida: "" };
 
-/** Contato com a oficina: o cliente preenche os dados e a gente abre o WhatsApp
- *  da Rödelcar já com tudo escrito (e registra o lead no banco). Sem agendamento
- *  de horário — a oficina retorna pelo WhatsApp. */
-export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
+/** "Falar com especialista" na página do curso: nome, WhatsApp e a dúvida. Abre o
+ *  WhatsApp da Rödelcar já com a dúvida + o curso que o aluno estava vendo, e
+ *  registra o lead. Sem agendamento. */
+export function EspecialistaDialog({
+  open,
+  onClose,
+  onDone,
+  cursoTitulo,
+  cursoSlug,
+}: EspecialistaDialogProps) {
   const [form, setForm] = useState(EMPTY);
-  const [erros, setErros] = useState<{ nome?: string; whatsapp?: string }>({});
+  const [erros, setErros] = useState<{ nome?: string; whatsapp?: string; duvida?: string }>({});
   const { enviar, enviando } = useLeadWhatsapp(onDone);
 
   useEffect(() => {
@@ -47,39 +55,36 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
 
   const submit = () => {
     if (enviando) return;
-    // Valida e avisa, por campo, o que está incompleto (botão sempre clicável).
-    const e: { nome?: string; whatsapp?: string } = {};
+    const e: { nome?: string; whatsapp?: string; duvida?: string } = {};
     if (form.nome.trim().length < 2) e.nome = "Informe seu nome.";
     if (!telefoneValidoBR(form.whatsapp))
       e.whatsapp = "WhatsApp inválido — use DDD + número, ex.: (51) 99999-9999.";
+    if (form.duvida.trim().length < 3) e.duvida = "Escreva sua dúvida.";
     setErros(e);
     if (Object.keys(e).length > 0) return;
 
     const nome = form.nome.trim();
     const whatsapp = form.whatsapp.trim();
-    const veiculo = form.veiculo.trim() || "—";
-    const sintoma = form.sintoma.trim() || "—";
+    const duvida = form.duvida.trim();
     const texto =
-      `Olá! Quero falar com a Rödelcar.\n` +
+      `Olá! Tenho uma dúvida sobre o curso *${cursoTitulo}*.\n` +
       `Nome: ${nome}\n` +
       `WhatsApp: ${whatsapp}\n` +
-      `Veículo: ${veiculo}\n` +
-      `Câmbio: ${form.cambio}\n` +
-      `Sintoma: ${sintoma}`;
+      `Dúvida: ${duvida}`;
     enviar(
       {
         nome,
         telefone: whatsapp,
-        tipo_servico: "avaliacao_cambio",
-        mensagem: `Veículo: ${veiculo} · Câmbio: ${form.cambio} · Sintoma: ${sintoma}`,
-        origem: "site_whatsapp",
+        tipo_servico: "duvida_curso",
+        mensagem: `Curso: ${cursoTitulo} · Dúvida: ${duvida}`,
+        origem: `curso:${cursoSlug}`,
       },
       texto,
     );
   };
 
   return (
-    <div className="overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Falar com a oficina">
+    <div className="overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Falar com especialista">
       <div className="dialog blueprint" onClick={(e) => e.stopPropagation()}>
         {/* header */}
         <div style={{ padding: "22px 26px", borderBottom: "1px solid var(--border)", position: "relative", zIndex: 1 }}>
@@ -99,8 +104,8 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
                 <Icon name="whatsapp" size={20} style={{ color: "var(--primary)" }} />
               </span>
               <div>
-                <h3 style={{ fontSize: "1.18rem" }}>Falar com a oficina</h3>
-                <span className="tag-mono">Resposta pelo WhatsApp · diagnóstico de câmbio</span>
+                <h3 style={{ fontSize: "1.18rem" }}>Falar com especialista</h3>
+                <span className="tag-mono">Sobre: {cursoTitulo}</span>
               </div>
             </div>
             <button onClick={onClose} className="btn btn-ghost" style={{ width: 38, height: 38, padding: 0 }} aria-label="Fechar">
@@ -114,9 +119,9 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
           <div style={{ display: "grid", gap: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div className="field">
-                <label htmlFor="sd-nome">Nome completo</label>
+                <label htmlFor="esp-nome">Nome completo</label>
                 <input
-                  id="sd-nome"
+                  id="esp-nome"
                   className="input"
                   placeholder="Seu nome"
                   value={form.nome}
@@ -130,9 +135,9 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
                 )}
               </div>
               <div className="field">
-                <label htmlFor="sd-zap">WhatsApp</label>
+                <label htmlFor="esp-zap">WhatsApp</label>
                 <input
-                  id="sd-zap"
+                  id="esp-zap"
                   className="input"
                   type="tel"
                   inputMode="tel"
@@ -148,39 +153,21 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
                 )}
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div className="field">
-                <label htmlFor="sd-veiculo">Veículo</label>
-                <input id="sd-veiculo" className="input" placeholder="Ex.: Corolla 2018" value={form.veiculo} onChange={(e) => set("veiculo", e.target.value)} />
-              </div>
-              <div className="field">
-                <label htmlFor="sd-cambio">Câmbio</label>
-                <select id="sd-cambio" className="select" value={form.cambio} onChange={(e) => set("cambio", e.target.value)}>
-                  <option>Automático convencional</option>
-                  <option>CVT</option>
-                  <option>Dupla embreagem (DCT)</option>
-                  <option>Não sei</option>
-                </select>
-              </div>
-            </div>
             <div className="field">
-              <label htmlFor="sd-sintoma">Sintoma principal</label>
+              <label htmlFor="esp-duvida">Sua dúvida</label>
               <textarea
-                id="sd-sintoma"
+                id="esp-duvida"
                 className="textarea"
-                placeholder="Descreva o que está acontecendo: trancos, patinação, luz no painel..."
-                value={form.sintoma}
-                onChange={(e) => set("sintoma", e.target.value)}
+                placeholder="Sobre o que você quer saber antes de comprar?"
+                value={form.duvida}
+                onChange={(e) => set("duvida", e.target.value)}
+                aria-invalid={!!erros.duvida}
               />
-            </div>
-            <div
-              className="flex center gap-3"
-              style={{ padding: "12px 14px", background: "var(--surface-2)", borderRadius: 10, border: "1px solid var(--border)" }}
-            >
-              <Icon name="shield" size={20} style={{ color: "var(--success)", flexShrink: 0 }} />
-              <span className="muted" style={{ fontSize: "0.86rem" }}>
-                Atendimento sem compromisso. Abriremos o WhatsApp com seus dados — é só enviar.
-              </span>
+              {erros.duvida && (
+                <span className="tag-mono" style={{ color: "var(--danger)", lineHeight: 1.4 }}>
+                  {erros.duvida}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -191,13 +178,12 @@ export function ScheduleDialog({ open, onClose, onDone }: ScheduleDialogProps) {
             padding: "18px 26px",
             borderTop: "1px solid var(--border)",
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             alignItems: "center",
             position: "relative",
             zIndex: 1,
           }}
         >
-          <span className="tag-mono">Seus dados · diagnóstico de câmbio</span>
           <Button variant="primary" icon={enviando ? undefined : "whatsapp"} onClick={submit} disabled={enviando}>
             {enviando ? "Abrindo..." : "Enviar pelo WhatsApp"}
           </Button>

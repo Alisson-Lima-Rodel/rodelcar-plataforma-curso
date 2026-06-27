@@ -137,6 +137,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         aluno = Aluno(
             nome=body.nome,
             email=body.email,
+            telefone=body.telefone,  # WhatsApp (normalizado no schema)
             senha_hash=senha_hash,
             codigo_indicacao=await codigo_unico_indicacao(db),
         )

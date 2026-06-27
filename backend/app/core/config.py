@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 7
+    # Refresh do ADMIN tem vida MENOR que o do aluno: é a conta de maior
+    # privilégio e o refresh fica em localStorage (exposto a XSS). Janela curta
+    # (1 dia) reduz o alcance de um roubo, ainda mantendo a sessão > 30 min do
+    # access (evita re-login a cada 30 min). É stateless: o logout revoga via
+    # token_version.
+    JWT_ADMIN_REFRESH_EXPIRE_DAYS: int = 1
     RODELCAR_FERNET_KEY: str = ""
     INTERNAL_TOKEN: str = ""
     ENVIRONMENT: str = "development"

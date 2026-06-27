@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Avaliacao, Curso, Matricula, StatusMatricula
+from app.models import Aluno, Avaliacao, Curso, Matricula, StatusCurso, StatusMatricula
 from app.schemas.avaliacoes import (
     AvaliacaoCreate,
     AvaliacaoMinha,
@@ -48,7 +48,9 @@ async def _curso_por_slug(slug: str, db: AsyncSession) -> Curso:
     # regra da vitrine/página de venda).
     curso = (
         await db.execute(
-            select(Curso).where(Curso.slug == slug, Curso.ativo.is_(True))
+            select(Curso).where(
+                Curso.slug == slug, Curso.status == StatusCurso.ativo
+            )
         )
     ).scalar_one_or_none()
     if curso is None:

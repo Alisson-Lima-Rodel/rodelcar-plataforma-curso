@@ -35,6 +35,7 @@ const STATUS_MAP: Record<string, BadgeVariant> = {
   Publicado: "success",
   Aprovado: "success",
   Inativo: "",
+  "Em desenvolvimento": "warning",
   Bloqueado: "warning",
   Rascunho: "warning",
   Pendente: "warning",
@@ -562,7 +563,9 @@ export function EntityManager({
   extraActions,
 }: EntityManagerProps) {
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("Todos");
+  // Filtro pode ter um padrão próprio (ex.: cursos abrem em "Ativo + Em
+  // desenvolvimento", escondendo os inativos) e um matcher custom.
+  const [filter, setFilter] = useState(ent.filter.initial ?? "Todos");
   const [editing, setEditing] = useState<AdminItem | null>(autoNew ? {} : null);
   const [confirm, setConfirm] = useState<AdminItem | null>(null);
 
@@ -570,7 +573,9 @@ export function EntityManager({
 
   const filtered = items.filter((it) => {
     const okQ = !q || ent.search(it).toLowerCase().includes(q.toLowerCase());
-    const okF = filter === "Todos" || it[ent.filter.key] === filter;
+    const okF = ent.filter.match
+      ? ent.filter.match(it, filter)
+      : filter === "Todos" || it[ent.filter.key] === filter;
     return okQ && okF;
   });
 

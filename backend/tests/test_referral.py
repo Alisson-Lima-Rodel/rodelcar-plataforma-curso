@@ -34,7 +34,8 @@ class TestReferralCadastro:
             # indicador se cadastra e pega o próprio código
             r1 = await client.post(
                 "/api/v1/auth/register",
-                json={"nome": "Indicador", "email": f"ind_{pref}@rodelcar.dev", "senha": SENHA},
+                json={"nome": "Indicador", "email": f"ind_{pref}@rodelcar.dev", "senha": SENHA,
+                      "telefone": "51999990000"},
             )
             assert r1.status_code == 201
             h1 = {"Authorization": f"Bearer {r1.json()['access_token']}"}
@@ -47,6 +48,7 @@ class TestReferralCadastro:
                 json={
                     "nome": "Indicado", "email": f"indo_{pref}@rodelcar.dev",
                     "senha": SENHA, "codigo_indicacao": codigo,
+                    "telefone": "51999990000",
                 },
             )
             assert r2.status_code == 201
@@ -67,6 +69,7 @@ class TestReferralCadastro:
                 json={
                     "nome": "Solo", "email": f"solo_{pref}@rodelcar.dev",
                     "senha": SENHA, "codigo_indicacao": "NAOEXISTE9",
+                    "telefone": "51999990000",
                 },
             )
             assert r.status_code == 201  # cadastro segue mesmo com código inválido
@@ -134,7 +137,8 @@ class TestReferralRecompensa:
         try:
             r = await client.post(
                 "/api/v1/auth/register",
-                json={"nome": "Ind", "email": f"tr_a_{pref}@rodelcar.dev", "senha": SENHA},
+                json={"nome": "Ind", "email": f"tr_a_{pref}@rodelcar.dev", "senha": SENHA,
+                      "telefone": "51999990000"},
             )
             h = {"Authorization": f"Bearer {r.json()['access_token']}"}
             async with AsyncSessionLocal() as db:

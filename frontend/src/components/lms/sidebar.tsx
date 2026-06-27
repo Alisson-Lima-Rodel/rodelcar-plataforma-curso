@@ -26,6 +26,7 @@ const ITEMS: { id: string; label: string; icon: string }[] = [
   { id: "dashboard", label: "Painel", icon: "gauge" },
   { id: "player", label: "Continuar curso", icon: "play" },
   { id: "courses", label: "Meus cursos", icon: "book" },
+  { id: "catalog", label: "Explorar cursos", icon: "spark" },
   { id: "certificate", label: "Certificados", icon: "award" },
   { id: "community", label: "Comunidade", icon: "users" },
 ];

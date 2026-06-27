@@ -121,3 +121,26 @@ async def buscar_metadados(url: str) -> dict | None:
         if dados:
             return dados
     return await _via_oembed(url)
+
+
+async def verificar_disponibilidade(url: str) -> bool | None:
+    """O vídeo ainda existe e é público no YouTube?
+
+    True = disponível; False = apagado/privado (404/401/403 no oEmbed, ou `items`
+    vazio na Data API); None = não dá pra saber (rede/timeout, ou não é YouTube) —
+    NUNCA esconder por None, só por False. Usa oEmbed (não precisa de chave); o
+    oEmbed responde 404 p/ vídeo inexistente e 401 p/ privado/embed desabilitado.
+    """
+    if youtube_id(url) is None:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            r = await client.get(_OEMBED, params={"url": url, "format": "json"})
+    except Exception:
+        logger.info("oEmbed indisponível p/ checar disponibilidade de %s.", url)
+        return None
+    if r.status_code == 200:
+        return True
+    if r.status_code in (401, 403, 404):
+        return False
+    return None  # 5xx/429/etc.: transitório — não esconde

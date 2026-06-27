@@ -56,18 +56,20 @@ export async function register(
   nome: string,
   email: string,
   senha: string,
+  telefone: string,
   codigoIndicacao?: string | null,
 ): Promise<void> {
   const t = await postJson<TokenResponse>("/auth/register", {
     nome,
     email,
     senha,
+    telefone,
     codigo_indicacao: codigoIndicacao || undefined,
   });
   setTokens(t.access_token, t.refresh_token);
 }
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const refresh = localStorage.getItem(REFRESH_KEY);
   if (!refresh) return false;

@@ -6,11 +6,24 @@ import { EntityManager, type RowAction } from "./entity-manager";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import type { AdminItem, EntitySchema } from "@/lib/admin-data";
+import { ApiError } from "@/lib/api";
 import {
   bloquearAluno,
   recuperarSenhaAluno,
   type AdminCrud,
 } from "@/lib/admin-api";
+
+// Status do curso: valor do backend (enum) ↔ rótulo exibido no admin.
+const STATUS_CURSO_LABEL: Record<string, string> = {
+  em_desenvolvimento: "Em desenvolvimento",
+  ativo: "Ativo",
+  inativo: "Inativo",
+};
+const STATUS_CURSO_VALUE: Record<string, string> = {
+  "Em desenvolvimento": "em_desenvolvimento",
+  Ativo: "ativo",
+  Inativo: "inativo",
+};
 
 /** Link de redefinição gerado pelo admin, com atalhos p/ WhatsApp e e-mail. */
 function ResetLinkModal({
@@ -143,11 +156,17 @@ export function RemoteEntityManager({
   // O form genérico é escalar; campos de lista (ex.: idiomas_legenda do curso)
   // chegam como array da API → viram texto "PT, EN" no form e voltam a array no
   // save. Localizado aqui para não vazar arrays pelo AdminItem.
-  const items = ((data ?? []) as Record<string, unknown>[]).map((it) =>
-    Array.isArray(it.idiomas_legenda)
-      ? { ...it, idiomas_legenda: (it.idiomas_legenda as string[]).join(", ") }
-      : it,
-  ) as AdminItem[];
+  const items = ((data ?? []) as Record<string, unknown>[]).map((raw) => {
+    let it: Record<string, unknown> = raw;
+    if (Array.isArray(it.idiomas_legenda)) {
+      it = { ...it, idiomas_legenda: (it.idiomas_legenda as string[]).join(", ") };
+    }
+    // Curso: status do backend (enum) → rótulo no admin (filtro/coluna/form).
+    if (entityKey === "courses" && typeof it.status === "string") {
+      it = { ...it, status: STATUS_CURSO_LABEL[it.status] ?? it.status };
+    }
+    return it;
+  }) as AdminItem[];
 
   const onSave = async (item: AdminItem) => {
     const exists = items.some((x) => x.id === item.id);
@@ -159,12 +178,21 @@ export function RemoteEntityManager({
         .map((s) => s.trim())
         .filter(Boolean);
     }
+    // Curso: rótulo do status → valor do backend.
+    if (entityKey === "courses" && typeof payload.status === "string") {
+      payload.status = STATUS_CURSO_VALUE[payload.status] ?? payload.status;
+    }
     try {
       if (exists) await crud.update(String(id), payload);
       else await crud.create(payload);
       await qc.invalidateQueries({ queryKey });
-    } catch {
-      onToast("Não foi possível salvar — confira os campos.");
+    } catch (e) {
+      // Surface da mensagem do backend (ex.: ativar curso sem conteúdo → 409).
+      onToast(
+        e instanceof ApiError
+          ? e.message
+          : "Não foi possível salvar — confira os campos.",
+      );
     }
   };
 
@@ -177,19 +205,26 @@ export function RemoteEntityManager({
     }
   };
 
-  // Ativar/inativar curso direto na linha (à esquerda do editar).
+  // Ativar/inativar curso direto na linha (à esquerda do editar). Ativar exige
+  // conteúdo (o backend barra com 409 → mostramos a mensagem). Voltar a
+  // "Em desenvolvimento" é feito pelo formulário (select de status).
   const courseActions: RowAction[] = [
     {
-      label: (it) => (it.ativo ? "Inativar curso" : "Ativar curso"),
+      label: (it) => (it.status === "Ativo" ? "Inativar curso" : "Ativar curso"),
       icon: () => "power",
-      tone: (it) => (it.ativo ? "success" : "default"),
+      tone: (it) => (it.status === "Ativo" ? "success" : "default"),
       onClick: async (it) => {
+        const novo = it.status === "Ativo" ? "inativo" : "ativo";
         try {
-          await crud.update(String(it.id), { ativo: !it.ativo });
+          await crud.update(String(it.id), { status: novo });
           await qc.invalidateQueries({ queryKey });
-          onToast(it.ativo ? "Curso inativado" : "Curso ativado");
-        } catch {
-          onToast("Não foi possível alterar o curso.");
+          onToast(novo === "ativo" ? "Curso ativado" : "Curso inativado");
+        } catch (e) {
+          onToast(
+            e instanceof ApiError && e.code === "CURSO_SEM_CONTEUDO"
+              ? e.message
+              : "Não foi possível alterar o curso.",
+          );
         }
       },
     },

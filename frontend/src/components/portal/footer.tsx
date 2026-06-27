@@ -17,7 +17,7 @@ const COLS: [string, FooterLink[]][] = [
   [
     "Portal",
     [
-      { t: "Agendar avaliação" }, // ação: abre o dialog
+      { t: "Falar com a oficina" }, // ação: abre o dialog (WhatsApp)
       { t: "Câmbios automatizados", soon: true },
       { t: "Como funciona", soon: true },
       { t: "Garantia", soon: true },
@@ -67,7 +67,7 @@ export function Footer() {
     (e.currentTarget.style.color = "var(--text-subtle)");
 
   const renderLink = (it: FooterLink) => {
-    if (it.t === "Agendar avaliação") {
+    if (it.t === "Falar com a oficina") {
       return (
         <button
           onClick={openSchedule}
@@ -214,10 +214,10 @@ export function Footer() {
             <Button
               variant="secondary"
               size="sm"
-              icon="calendar"
+              icon="whatsapp"
               onClick={openSchedule}
             >
-              Agendar avaliação
+              Falar com a oficina
             </Button>
           </div>
           {COLS.map(([h, items]) => (

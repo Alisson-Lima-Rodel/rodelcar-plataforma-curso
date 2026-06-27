@@ -14,6 +14,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { usePortal } from "./portal-context";
 import { useCompra } from "./use-compra";
 import { PreviewModal } from "./preview-modal";
+import { EspecialistaDialog } from "./especialista-dialog";
 
 function fmtMes(iso: string): string {
   try {
@@ -146,8 +147,9 @@ export function CourseDetail({
 }) {
   const router = useRouter();
   const { aluno } = useAuth();
-  const { openSchedule } = usePortal();
+  const { showToast } = usePortal();
   const { iniciarCompra, comprando } = useCompra();
+  const [especialistaOpen, setEspecialistaOpen] = useState(false);
   const rich = course;
   const modules = rich.modules ?? [];
   const learn = rich.learn ?? [];
@@ -173,6 +175,19 @@ export function CourseDetail({
       {previewOpen && (
         <PreviewModal slug={rich.id} onClose={() => setPreviewOpen(false)} />
       )}
+      <EspecialistaDialog
+        open={especialistaOpen}
+        onClose={() => setEspecialistaOpen(false)}
+        onDone={() => {
+          setEspecialistaOpen(false);
+          showToast({
+            title: "Abrimos o WhatsApp",
+            msg: "É só enviar a mensagem. A Rödelcar responde por lá.",
+          });
+        }}
+        cursoTitulo={rich.title}
+        cursoSlug={rich.id}
+      />
       {/* breadcrumb + hero */}
       <section
         className="blueprint"
@@ -221,13 +236,12 @@ export function CourseDetail({
                     Legendado em {rich.idiomasLegenda.join("/")}
                   </Badge>
                 )}
-                <span className="flex center gap-2">
-                  <Stars value={rich.rating} size={15} />
-                  <span className="tag-mono">
-                    {rich.rating} · {rich.students.toLocaleString("pt-BR")}{" "}
-                    alunos
+                {rich.rating > 0 && (
+                  <span className="flex center gap-2">
+                    <Stars value={rich.rating} size={15} />
+                    <span className="tag-mono">{rich.rating}</span>
                   </span>
-                </span>
+                )}
               </div>
               <h1
                 style={{
@@ -463,8 +477,8 @@ export function CourseDetail({
                 <Button
                   variant="secondary"
                   block
-                  icon="calendar"
-                  onClick={openSchedule}
+                  icon="whatsapp"
+                  onClick={() => setEspecialistaOpen(true)}
                 >
                   Falar com especialista
                 </Button>
@@ -497,7 +511,7 @@ export function CourseDetail({
       {/* Avaliações dos alunos (reais; alimentam aggregateRating no JSON-LD) */}
       {avaliacoes && avaliacoes.total > 0 && (
         <section className="section-tight" style={{ paddingTop: 0 }}>
-          <div className="wrap" style={{ maxWidth: 820, marginLeft: 0 }}>
+          <div className="wrap">
             <div
               className="flex center gap-3"
               style={{ marginBottom: 18, flexWrap: "wrap" }}
@@ -646,14 +660,6 @@ export function CourseDetail({
                     : ehGratis
                       ? "Matricular grátis"
                       : `Comprar por R$ ${rich.price}`}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  icon="calendar"
-                  onClick={openSchedule}
-                >
-                  Agendar avaliação
                 </Button>
               </div>
             </div>

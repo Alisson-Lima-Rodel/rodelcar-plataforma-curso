@@ -80,6 +80,16 @@ class TipoCurso(str, enum.Enum):
     premium = "premium"
 
 
+class StatusCurso(str, enum.Enum):
+    # Rascunho: visível só no admin, não vende. Todo curso nasce aqui.
+    em_desenvolvimento = "em_desenvolvimento"
+    # Publicado: aparece na vitrine pública e na página de venda (vende).
+    ativo = "ativo"
+    # Arquivado: some do site, mas NÃO corta quem já comprou (acesso é barrado por
+    # status de matrícula, não pela vitrine).
+    inativo = "inativo"
+
+
 class StatusMatricula(str, enum.Enum):
     ativo = "ativo"
     expirado = "expirado"
@@ -245,11 +255,14 @@ class Curso(Base):
     gratuito: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
-    # Curso ativo: aparece na vitrine pública e na página de venda. Inativo some do
-    # site (catálogo, slug e preview), mas NÃO corta quem já comprou — o acesso ao
-    # conteúdo continua sendo barrado por status de matrícula, não pela vitrine.
-    ativo: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true"
+    # Estado de publicação (3 fases). Nasce `em_desenvolvimento` (rascunho); só
+    # `ativo` aparece na vitrine/página de venda e pode ser comprado; `inativo`
+    # some do site, mas NÃO corta quem já comprou (barrado por status de matrícula).
+    # Só vai para `ativo` se houver conteúdo cadastrado (regra no router).
+    status: Mapped[StatusCurso] = mapped_column(
+        Enum(StatusCurso, name="statuscurso"),
+        default=StatusCurso.em_desenvolvimento,
+        server_default=StatusCurso.em_desenvolvimento.value,
     )
 
     modulos: Mapped[list[Modulo]] = relationship(
@@ -530,6 +543,12 @@ class Video(Base):
     # Avaliação curada exibida na prova social (YouTube não expõe nota pública).
     estrelas: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
     status: Mapped[str] = mapped_column(String(20), default="Ativo")  # Ativo | Inativo
+    # Vídeo saiu do ar no YouTube (apagado/privado), detectado pelo job diário.
+    # Some da capa sem o admin precisar agir; volta sozinho se o vídeo reaparecer.
+    # Separado de `status` (intenção do admin) p/ não sobrescrever a curadoria.
+    indisponivel: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = _created_at()
 

@@ -23,8 +23,8 @@ export function PortalChrome({ children }: { children: ReactNode }) {
   const scheduleDone = () => {
     setDialogOpen(false);
     setToast({
-      title: "Agendamento confirmado",
-      msg: "Enviaremos a confirmação no WhatsApp",
+      title: "Abrimos o WhatsApp",
+      msg: "É só enviar a mensagem com seus dados. A Rödelcar responde por lá.",
     });
   };
 

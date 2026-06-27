@@ -4,20 +4,56 @@
 import { ApiError, API_URL, type ApiErrorEnvelope } from "./api";
 
 const ADMIN_KEY = "rodelcar_admin_access";
+const ADMIN_REFRESH_KEY = "rodelcar_admin_refresh";
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(ADMIN_KEY);
 }
-function setAdminToken(t: string) {
-  localStorage.setItem(ADMIN_KEY, t);
+function setAdminTokens(access: string, refresh: string) {
+  localStorage.setItem(ADMIN_KEY, access);
+  localStorage.setItem(ADMIN_REFRESH_KEY, refresh);
 }
 export function clearAdminToken() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(ADMIN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
 }
 
-async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** Renova o access a partir do refresh do admin. true = renovou; false = refresh
+ *  ausente/expirado (sessão acabou de vez) — exceto erro de rede (transitório,
+ *  não desloga). */
+async function adminTryRefresh(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const refresh = localStorage.getItem(ADMIN_REFRESH_KEY);
+  if (!refresh) return false;
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/admin/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+  } catch {
+    return false; // rede: não derruba a sessão
+  }
+  if (!res.ok) {
+    clearAdminToken();
+    return false;
+  }
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+  };
+  setAdminTokens(data.access_token, data.refresh_token);
+  return true;
+}
+
+async function adminFetch<T>(
+  path: string,
+  init?: RequestInit,
+  retry = true,
+): Promise<T> {
   const token = getAdminToken();
   let res: Response;
   try {
@@ -34,6 +70,29 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
       0,
       "NETWORK",
       "Não foi possível conectar ao servidor.",
+      null,
+    );
+  }
+  // Token expirou (30 min): tenta renovar 1× e repete. Se o refresh também
+  // morreu, desloga limpo e manda re-logar — em vez de falhar em silêncio nos
+  // menus (bugs 7.8/7.9). Só as rotas que EMITEM token (login/refresh/logout)
+  // ficam de fora do laço; /auth/me é endpoint autenticado normal e PRECISA do
+  // retry (é a 1ª chamada ao reabrir o painel — sem ele a sessão "expirava" na
+  // cara mesmo com refresh válido).
+  const isTokenEndpoint =
+    path.startsWith("/admin/auth/login") ||
+    path.startsWith("/admin/auth/refresh") ||
+    path.startsWith("/admin/auth/logout");
+  if (res.status === 401 && retry && token && !isTokenEndpoint) {
+    if (await adminTryRefresh()) return adminFetch<T>(path, init, false);
+    clearAdminToken();
+    if (typeof window !== "undefined") {
+      window.location.href = "/login?sessao=expirada";
+    }
+    throw new ApiError(
+      401,
+      "TOKEN_INVALIDO",
+      "Sessão expirada. Faça login novamente.",
       null,
     );
   }
@@ -61,11 +120,14 @@ export interface AdminMe {
 }
 
 export async function adminLogin(email: string, senha: string): Promise<void> {
-  const t = await adminFetch<{ access_token: string }>("/admin/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, senha }),
-  });
-  setAdminToken(t.access_token);
+  const t = await adminFetch<{ access_token: string; refresh_token: string }>(
+    "/admin/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, senha }),
+    },
+  );
+  setAdminTokens(t.access_token, t.refresh_token);
 }
 
 /** Logout: limpa o token local E revoga a sessão no servidor (o backend bumpa

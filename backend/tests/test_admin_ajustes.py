@@ -13,7 +13,17 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.models import Admin, Aluno, Curso, PapelAdmin, PasswordReset, TipoCurso
+from app.models import (
+    Admin,
+    Aluno,
+    Aula,
+    Curso,
+    Modulo,
+    PapelAdmin,
+    PasswordReset,
+    StatusCurso,
+    TipoCurso,
+)
 
 
 def _session():
@@ -54,7 +64,11 @@ async def admin_headers(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def curso_temp():
-    """Cria um curso (ativo) direto no banco e o remove no fim."""
+    """Cria um curso (ativo, com módulo+aula) direto no banco e o remove no fim.
+
+    O conteúdo é necessário porque ativar um curso pelo painel agora exige ao
+    menos uma aula (CURSO_SEM_CONTEUDO); o teste de reativação depende disso.
+    """
     engine, Session = _session()
     slug = f"aj-{uuid.uuid4().hex[:8]}"
     async with Session() as s:
@@ -64,13 +78,23 @@ async def curso_temp():
             tipo=TipoCurso.avulso,
             preco=100.0,
             validade_dias=365,
-            ativo=True,
+            status=StatusCurso.ativo,
         )
         s.add(curso)
+        await s.flush()
+        modulo = Modulo(curso_id=curso.id, titulo="Módulo Ajustes", ordem=1)
+        s.add(modulo)
+        await s.flush()
+        aula = Aula(modulo_id=modulo.id, titulo="Aula Ajustes", ordem=1)
+        s.add(aula)
         await s.commit()
         curso_id = curso.id
+        modulo_id = modulo.id
+        aula_id = aula.id
     yield {"id": str(curso_id), "slug": slug}
     async with Session() as s:
+        await s.execute(delete(Aula).where(Aula.id == aula_id))
+        await s.execute(delete(Modulo).where(Modulo.id == modulo_id))
         obj = await s.get(Curso, curso_id)
         if obj:
             await s.delete(obj)
@@ -108,19 +132,19 @@ class TestCursoAtivo:
         r = await client.patch(
             f"/api/v1/admin/cursos/{cid}",
             headers=admin_headers,
-            json={"ativo": False},
+            json={"status": "inativo"},
         )
         assert r.status_code == 200
-        assert r.json()["ativo"] is False
+        assert r.json()["status"] == "inativo"
 
         # Sumiu da vitrine pública e o slug dá 404.
         lista = await client.get("/api/v1/cursos?size=100")
         assert not any(c["slug"] == slug for c in lista.json()["items"])
         assert (await client.get(f"/api/v1/cursos/{slug}")).status_code == 404
 
-        # Reativa → volta.
+        # Reativa → volta (o curso tem conteúdo, então a ativação é permitida).
         await client.patch(
-            f"/api/v1/admin/cursos/{cid}", headers=admin_headers, json={"ativo": True}
+            f"/api/v1/admin/cursos/{cid}", headers=admin_headers, json={"status": "ativo"}
         )
         assert (await client.get(f"/api/v1/cursos/{slug}")).status_code == 200
 

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.models import Aula, Curso, Modulo, TipoCurso
+from app.models import Aula, Curso, Modulo, StatusCurso, TipoCurso
 
 # Conteúdo de detalhe (descrição, "o que aprende" e módulos/aulas) — o mesmo que
 # o portal exibe hoje para todos os cursos. Cada aula é (titulo, "mm:ss").
@@ -105,6 +105,7 @@ async def _seed_curso(session, data: dict, ordem: int) -> bool:
         preco_antigo=data["preco_antigo"],
         validade_dias=365,
         destaque=False,
+        status=StatusCurso.ativo,  # seed nasce publicado p/ aparecer na vitrine
         ordem=ordem,
         tagline=data["tagline"],
         horas=data["horas"],

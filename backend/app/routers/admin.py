@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
+import jwt
 import stripe
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import EmailStr
@@ -16,7 +17,9 @@ from app.core.email_transacional import email_reset_senha
 from app.core.notificacoes import enviar_email_bruto
 from app.core.ratelimit import auth_limit, limiter
 from app.core.security import (
+    create_admin_refresh_token,
     create_admin_token,
+    decode_token,
     dummy_verify,
     gerar_reset_token,
     hash_password,
@@ -60,6 +63,7 @@ from app.models import (
     Progresso,
     Questao,
     Quiz,
+    StatusCurso,
     StatusMatricula,
     StatusPagamento,
     TentativaQuiz,
@@ -83,6 +87,7 @@ _SO_ADMIN = (PapelAdmin.administrador,)
 from app.schemas.admin import (
     AdminLoginRequest,
     AdminMe,
+    AdminRefreshRequest,
     AdminTokenResponse,
     AdminUserCreate,
     AdminUserItem,
@@ -164,6 +169,34 @@ async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSessio
     await db.commit()
     return AdminTokenResponse(
         access_token=create_admin_token(str(admin.id), admin.token_version),
+        refresh_token=create_admin_refresh_token(str(admin.id), admin.token_version),
+        expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/auth/refresh", response_model=AdminTokenResponse)
+@limiter.limit(auth_limit)
+async def admin_refresh(
+    request: Request, body: AdminRefreshRequest, db: AsyncSession = Depends(get_db)
+):
+    """Renova o access do painel a partir do refresh (sessão dura mais que os 30
+    min do access; sem isso, os menus passavam a falhar "depois de um tempo").
+    Inválido/expirado/revogado (token_version) → 401, e o front manda re-logar."""
+    # Conversões dentro do try: sub ausente (KeyError) ou não-UUID (ValueError)
+    # viram 401 limpo, não 500 (espelha o fluxo do aluno em auth.py).
+    try:
+        payload = decode_token(body.refresh_token)
+        admin_id = uuid.UUID(payload["sub"])
+    except (jwt.PyJWTError, ValueError, KeyError):
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+    if payload.get("type") != "admin_refresh":
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+    admin = await db.get(Admin, admin_id)
+    if admin is None or not admin.ativo or payload.get("tv") != admin.token_version:
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+    return AdminTokenResponse(
+        access_token=create_admin_token(str(admin.id), admin.token_version),
+        refresh_token=create_admin_refresh_token(str(admin.id), admin.token_version),
         expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
     )
 
@@ -188,15 +221,81 @@ async def admin_logout(
 cursos = APIRouter(prefix="/cursos", dependencies=[Depends(require_papel(*_CONTEUDO))])
 
 
+def _horas_label(segundos: int | None) -> str | None:
+    """Soma de durações (s) → '8h40' (tempo total de vídeo). 0 → None."""
+    total = int(segundos or 0)
+    if total <= 0:
+        return None
+    h, resto = divmod(total, 3600)
+    return f"{h}h{resto // 60:02d}"
+
+
+async def _curso_counts(db: AsyncSession, curso_id: uuid.UUID) -> tuple[int, int, int]:
+    """(nº de módulos, nº de aulas, soma das durações em s) do conteúdo cadastrado."""
+    total_modulos = (
+        await db.scalar(select(func.count(Modulo.id)).where(Modulo.curso_id == curso_id))
+    ) or 0
+    total_aulas = (
+        await db.scalar(
+            select(func.count(Aula.id))
+            .select_from(Aula)
+            .join(Modulo, Aula.modulo_id == Modulo.id)
+            .where(Modulo.curso_id == curso_id)
+        )
+    ) or 0
+    soma_dur = (
+        await db.scalar(
+            select(func.coalesce(func.sum(Aula.duracao_segundos), 0))
+            .select_from(Aula)
+            .join(Modulo, Aula.modulo_id == Modulo.id)
+            .where(Modulo.curso_id == curso_id)
+        )
+    ) or 0
+    return total_modulos, total_aulas, soma_dur
+
+
+def _curso_admin(curso: Curso, total_modulos: int, total_aulas: int, soma_dur: int) -> CursoAdmin:
+    """Monta a resposta do admin com as contagens CALCULADAS (não as do ORM)."""
+    return CursoAdmin(
+        id=curso.id,
+        slug=curso.slug,
+        titulo=curso.titulo,
+        tagline=curso.tagline,
+        descricao=curso.descricao,
+        tipo=curso.tipo,
+        preco=curso.preco,
+        preco_antigo=curso.preco_antigo,
+        rating=curso.rating,
+        nivel=curso.nivel,
+        icon=curso.icon,
+        badge_label=curso.badge_label,
+        validade_dias=curso.validade_dias,
+        destaque=curso.destaque,
+        gratuito=curso.gratuito,
+        status=curso.status,
+        ordem=curso.ordem,
+        thumbnail_url=curso.thumbnail_url,
+        idiomas_legenda=curso.idiomas_legenda or [],
+        total_modulos=total_modulos,
+        total_aulas=total_aulas,
+        horas=_horas_label(soma_dur),
+    )
+
+
 @cursos.get("", response_model=list[CursoAdmin])
 async def listar_cursos(db: AsyncSession = Depends(get_db)):
-    return (await db.execute(select(Curso).order_by(Curso.ordem, Curso.titulo))).scalars().all()
+    rows = (
+        await db.execute(select(Curso).order_by(Curso.ordem, Curso.titulo))
+    ).scalars().all()
+    return [_curso_admin(c, *(await _curso_counts(db, c.id))) for c in rows]
 
 
 @cursos.post("", response_model=CursoAdmin, status_code=201)
 async def criar_curso(body: CursoCreate, db: AsyncSession = Depends(get_db)):
     if await db.scalar(select(Curso.id).where(Curso.slug == body.slug)):
         raise _err(409, "SLUG_EM_USO", "Já existe um curso com esse slug.")
+    # Todo curso nasce "em_desenvolvimento" (CursoCreate não aceita status; o
+    # default do modelo cuida disso). Só vai para "ativo" via PATCH, com conteúdo.
     curso = Curso(**body.model_dump(), aprende=[])
     # Sincroniza com a Stripe: curso avulso nasce vendável (Product+Price).
     if curso.tipo == TipoCurso.avulso and stripe_ativo():
@@ -209,7 +308,7 @@ async def criar_curso(body: CursoCreate, db: AsyncSession = Depends(get_db)):
     db.add(curso)
     await db.commit()
     await db.refresh(curso)
-    return curso
+    return _curso_admin(curso, 0, 0, 0)  # curso novo: sem conteúdo ainda
 
 
 @cursos.patch("/{curso_id}", response_model=CursoAdmin)
@@ -233,6 +332,14 @@ async def atualizar_curso(
             403, "SO_ADMIN_GRATUITO",
             "Só um Administrador pode marcar/desmarcar um curso como gratuito.",
         )
+    # Publicar (→ ativo) exige conteúdo: ao menos uma aula cadastrada (7.6).
+    if data.get("status") == StatusCurso.ativo and curso.status != StatusCurso.ativo:
+        _, n_aulas, _ = await _curso_counts(db, curso.id)
+        if n_aulas < 1:
+            raise _err(
+                409, "CURSO_SEM_CONTEUDO",
+                "Cadastre ao menos um módulo com uma aula antes de ativar o curso.",
+            )
     if "slug" in data and data["slug"] != curso.slug:
         if await db.scalar(select(Curso.id).where(Curso.slug == data["slug"])):
             raise _err(409, "SLUG_EM_USO", "Já existe um curso com esse slug.")
@@ -261,7 +368,7 @@ async def atualizar_curso(
         setattr(curso, k, v)
     await db.commit()
     await db.refresh(curso)
-    return curso
+    return _curso_admin(curso, *(await _curso_counts(db, curso.id)))
 
 
 @cursos.delete("/{curso_id}", status_code=204)

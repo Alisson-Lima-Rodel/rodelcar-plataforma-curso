@@ -20,6 +20,7 @@ from app.models import (
     Curso,
     Matricula,
     PlanoAssinatura,
+    StatusCurso,
     StatusMatricula,
     TipoCurso,
 )
@@ -56,6 +57,7 @@ async def checkout_seed(client: AsyncClient):
             tipo=TipoCurso.avulso,
             preco=Decimal("497.00"),
             validade_dias=365,
+            status=StatusCurso.ativo,  # só curso ativo é comprável
             stripe_price_id=f"price_{pref}",
         )
         curso_sem_price = Curso(
@@ -64,6 +66,7 @@ async def checkout_seed(client: AsyncClient):
             tipo=TipoCurso.avulso,
             preco=Decimal("100.00"),
             validade_dias=365,
+            status=StatusCurso.ativo,  # ativo p/ chegar ao check de price (não barrar por status)
         )
         plano = PlanoAssinatura(
             nome=f"Mensal {pref}",

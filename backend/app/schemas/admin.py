@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.models import PapelAdmin, TipoCurso
+from app.models import PapelAdmin, StatusCurso, TipoCurso
 
 # Domínios fechados de status (validados no boundary; evita valor fora do conjunto
 # que sumiria silenciosamente da filtragem pública por igualdade exata).
@@ -40,23 +40,8 @@ def _url_http_obrigatoria(v: str | None) -> str:
     return v
 
 
-def _telefone_br(v: str | None) -> str | None:
-    """Normaliza e valida telefone BR: guarda só dígitos (DDD + número, 10–11).
-
-    Aceita máscara/“+55” na entrada (descarta o 55 do país se vier com 12–13
-    dígitos). Vazio/None vira None. Inválido → 422 com mensagem clara. O valor
-    normalizado é o que alimenta o link `wa.me/55...` no painel.
-    """
-    if v is None:
-        return None
-    digitos = "".join(c for c in v if c.isdigit())
-    if not digitos:
-        return None
-    if len(digitos) in (12, 13) and digitos.startswith("55"):
-        digitos = digitos[2:]
-    if len(digitos) not in (10, 11):
-        raise ValueError("Telefone deve ter DDD + número (10 ou 11 dígitos).")
-    return digitos
+# Telefone BR (DDD + número): validador compartilhado com o cadastro público.
+from app.core.validators import telefone_br as _telefone_br
 
 
 # ── Auth do painel ────────────────────────────────────────────────────────────
@@ -67,8 +52,15 @@ class AdminLoginRequest(BaseModel):
 
 class AdminTokenResponse(BaseModel):
     access_token: str
+    # Refresh do painel: renova o access sem novo login (sessão dura mais que os
+    # 30 min do access). Revogado em lote pelo logout (bump de token_version).
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class AdminRefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class AdminMe(BaseModel):
@@ -92,20 +84,22 @@ class CursoAdmin(BaseModel):
     tipo: TipoCurso
     preco: float
     preco_antigo: float | None = None
-    horas: str | None = None
-    aulas_total: int
     rating: float | None = None
-    alunos: int
     nivel: str | None = None
     icon: str | None = None
     badge_label: str | None = None
     validade_dias: int
     destaque: bool
     gratuito: bool
-    ativo: bool
+    status: StatusCurso
     ordem: int
     thumbnail_url: str | None = None
     idiomas_legenda: list[str] = []
+    # Contagens CALCULADAS do conteúdo cadastrado (read-only; o admin não digita
+    # mais). Preenchidas pelo router ao montar a resposta (não vêm do ORM).
+    total_modulos: int = 0
+    total_aulas: int = 0
+    horas: str | None = None  # tempo total de vídeo, ex.: "8h40"
 
 
 class CursoCreate(BaseModel):
@@ -116,20 +110,18 @@ class CursoCreate(BaseModel):
     tipo: TipoCurso = TipoCurso.avulso
     preco: float = Field(default=0, ge=0)  # nunca negativo (vai pro Stripe/banco)
     preco_antigo: float | None = Field(default=None, ge=0)
-    horas: str | None = Field(default=None, max_length=20)
-    aulas_total: int = Field(default=0, ge=0)
     rating: float | None = Field(default=None, ge=0, le=9.9)  # Numeric(2,1)
-    alunos: int = Field(default=0, ge=0)
     nivel: str | None = Field(default=None, max_length=40)
     icon: str | None = Field(default=None, max_length=40)
     badge_label: str | None = Field(default=None, max_length=40)
     validade_dias: int = Field(default=365, gt=0)
     destaque: bool = False
     gratuito: bool = False
-    ativo: bool = True
     ordem: int = Field(default=0, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
     idiomas_legenda: list[str] = Field(default_factory=list)
+    # `status` NÃO é aceito na criação: todo curso nasce "em_desenvolvimento"
+    # (forçado no router). `aulas_total`/`horas` são calculados; `alunos` foi removido.
 
 
 class CursoUpdate(BaseModel):
@@ -140,17 +132,14 @@ class CursoUpdate(BaseModel):
     tipo: TipoCurso | None = None
     preco: float | None = Field(default=None, ge=0)
     preco_antigo: float | None = Field(default=None, ge=0)
-    horas: str | None = Field(default=None, max_length=20)
-    aulas_total: int | None = Field(default=None, ge=0)
     rating: float | None = Field(default=None, ge=0, le=9.9)
-    alunos: int | None = Field(default=None, ge=0)
     nivel: str | None = Field(default=None, max_length=40)
     icon: str | None = Field(default=None, max_length=40)
     badge_label: str | None = Field(default=None, max_length=40)
     validade_dias: int | None = Field(default=None, gt=0)
     destaque: bool | None = None
     gratuito: bool | None = None
-    ativo: bool | None = None
+    status: StatusCurso | None = None
     ordem: int | None = Field(default=None, ge=0)
     thumbnail_url: str | None = Field(default=None, max_length=500)
     idiomas_legenda: list[str] | None = None

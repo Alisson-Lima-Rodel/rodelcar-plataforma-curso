@@ -10,14 +10,17 @@ import { PREMIUM, type Course } from "@/lib/portal-data";
 import { type PlanoPublico } from "@/lib/api";
 import { CourseCard } from "./course-card";
 import { usePortal } from "./portal-context";
-import { useCompra } from "./use-compra";
+import { useCompra, type CompraContexto } from "./use-compra";
 
 export function AllCourses({
   courses,
   planoAnual,
+  contexto = "publico",
 }: {
   courses: Course[];
   planoAnual: PlanoPublico | null;
+  // "lms" = catálogo dentro da Área do Aluno: compra direto (sem novo login).
+  contexto?: CompraContexto;
 }) {
   const { showToast } = usePortal();
   const { iniciarCompra, comprando } = useCompra();
@@ -36,7 +39,7 @@ export function AllCourses({
       });
       return;
     }
-    iniciarCompra({ tipo: "plano", planoId: planoAnual.id });
+    iniciarCompra({ tipo: "plano", planoId: planoAnual.id }, contexto);
   };
 
   const systems = useMemo(() => {
@@ -69,13 +72,15 @@ export function AllCourses({
           }}
         />
         <div className="wrap" style={{ position: "relative", zIndex: 1 }}>
-          <Link
-            href="/#vitrine"
-            className="btn btn-ghost btn-sm"
-            style={{ marginBottom: 20, paddingLeft: 0 }}
-          >
-            <Icon name="arrowLeft" size={16} /> Voltar
-          </Link>
+          {contexto !== "lms" && (
+            <Link
+              href="/#vitrine"
+              className="btn btn-ghost btn-sm"
+              style={{ marginBottom: 20, paddingLeft: 0 }}
+            >
+              <Icon name="arrowLeft" size={16} /> Voltar
+            </Link>
+          )}
           <div
             className="eyebrow"
             style={{ marginBottom: 14, color: "var(--primary)" }}

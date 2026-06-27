@@ -19,6 +19,7 @@ from app.models import (
     Modulo,
     PapelAdmin,
     Progresso,
+    StatusCurso,
     StatusMatricula,
     TipoCurso,
 )
@@ -69,6 +70,7 @@ async def test_data(test_aluno):
             tipo=TipoCurso.avulso,
             preco=100.0,
             validade_dias=365,
+            status=StatusCurso.ativo,
         )
         session.add(curso_ativo)
         await session.flush()
@@ -96,6 +98,7 @@ async def test_data(test_aluno):
             tipo=TipoCurso.avulso,
             preco=100.0,
             validade_dias=30,
+            status=StatusCurso.ativo,
         )
         session.add(curso_expirado)
         await session.flush()
@@ -125,6 +128,7 @@ async def test_data(test_aluno):
             tipo=TipoCurso.avulso,
             preco=100.0,
             validade_dias=365,
+            status=StatusCurso.ativo,
         )
         session.add(curso_sem_mat)
         await session.flush()
@@ -146,6 +150,7 @@ async def test_data(test_aluno):
             tipo=TipoCurso.avulso,
             preco=100.0,
             validade_dias=365,
+            status=StatusCurso.ativo,
         )
         session.add(curso_cert)
         await session.flush()

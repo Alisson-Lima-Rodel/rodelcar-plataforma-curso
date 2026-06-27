@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.models import Aula, Curso, Modulo, TipoCurso
+from app.models import Aula, Curso, Modulo, StatusCurso, TipoCurso
 
 
 @pytest_asyncio.fixture
@@ -28,6 +28,7 @@ async def cursos_seed():
         validade_dias=365,
         thumbnail_url="https://cdn.rodelcar.com.br/cursos/i-motion.jpg",
         destaque=False,
+        status=StatusCurso.ativo,
     )
     avulso.modulos = [
         Modulo(
@@ -53,6 +54,7 @@ async def cursos_seed():
         validade_dias=365,
         thumbnail_url="https://cdn.rodelcar.com.br/cursos/premium.jpg",
         destaque=True,
+        status=StatusCurso.ativo,
     )
     premium.modulos = [
         Modulo(

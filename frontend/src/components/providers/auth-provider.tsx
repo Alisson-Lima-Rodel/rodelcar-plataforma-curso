@@ -27,6 +27,7 @@ interface AuthContextValue {
     nome: string,
     email: string,
     senha: string,
+    telefone: string,
     codigoIndicacao?: string | null,
   ) => Promise<void>;
   logout: () => Promise<void>;
@@ -75,9 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       nome: string,
       email: string,
       senha: string,
+      telefone: string,
       codigoIndicacao?: string | null,
     ) => {
-      await apiRegister(nome, email, senha, codigoIndicacao);
+      await apiRegister(nome, email, senha, telefone, codigoIndicacao);
       setAluno(await getMe());
       setStatus("authed");
     },

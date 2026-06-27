@@ -376,13 +376,17 @@ export function Player() {
   }
   if (!slug) {
     return (
-      <StateMessage title="Você ainda não está matriculado em nenhum curso.">
+      <StateMessage title="Nenhum curso vigente">
+        <p className="muted" style={{ fontSize: "0.93rem", marginBottom: 14 }}>
+          Você ainda não tem um curso ativo. Veja o catálogo e comece agora —
+          sem sair da sua área.
+        </p>
         <Button
-          variant="secondary"
-          icon="book"
-          onClick={() => router.push("/cursos")}
+          variant="primary"
+          icon="spark"
+          onClick={() => router.push(lmsHref("catalog"))}
         >
-          Ver cursos
+          Ver catálogo
         </Button>
       </StateMessage>
     );
@@ -420,9 +424,15 @@ export function Player() {
         <button
           className="btn btn-ghost btn-sm"
           style={{ paddingLeft: 0 }}
-          onClick={() => router.push(lmsHref("dashboard"))}
+          // Volta para a tela anterior (de onde o aluno abriu o curso); sem
+          // histórico (entrou direto na URL), cai no painel.
+          onClick={() =>
+            window.history.length > 1
+              ? router.back()
+              : router.push(lmsHref("dashboard"))
+          }
         >
-          <Icon name="arrowLeft" size={16} /> Painel
+          <Icon name="arrowLeft" size={16} /> Voltar
         </button>
         <span className="tag-mono">
           {data.curso.titulo}

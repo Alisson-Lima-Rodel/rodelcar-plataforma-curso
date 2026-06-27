@@ -34,6 +34,7 @@ from app.models import (
     Pagamento,
     Progresso,
     Quiz,
+    StatusCurso,
     StatusMatricula,
     TentativaQuiz,
 )
@@ -271,8 +272,14 @@ async def matricular_gratis(
 ):
     """Matrícula GRATUITA: aluno cadastrado entra num curso marcado como `gratuito`
     sem Stripe. Ímã de leads. Idempotente: re-chamar reativa/renova a vigência."""
+    # Só curso ATIVO é matriculável por slug (em_desenvolvimento/inativo não —
+    # mesma regra do checkout, fecha a superfície de transação gratuita).
     curso = (
-        await db.execute(select(Curso).where(Curso.slug == slug))
+        await db.execute(
+            select(Curso).where(
+                Curso.slug == slug, Curso.status == StatusCurso.ativo
+            )
+        )
     ).scalar_one_or_none()
     if curso is None:
         raise _err(404, "CURSO_NAO_ENCONTRADO", "Curso não encontrado.")

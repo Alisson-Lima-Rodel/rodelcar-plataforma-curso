@@ -49,6 +49,27 @@ class TestMatriculaGratis:
         assert c.json()["gratuito"] is True
         curso_id = c.json()["id"]
         try:
+            # Curso nasce em_desenvolvimento; ativar (p/ aparecer na vitrine
+            # pública) exige conteúdo: cria módulo + aula e publica.
+            m = await client.post(
+                f"/api/v1/admin/cursos/{curso_id}/modulos",
+                headers=admin_token,
+                json={"titulo": "Módulo 1", "ordem": 1},
+            )
+            assert m.status_code == 201
+            a = await client.post(
+                f"/api/v1/admin/modulos/{m.json()['id']}/aulas",
+                headers=admin_token,
+                json={"titulo": "Aula 1", "ordem": 1},
+            )
+            assert a.status_code == 201
+            pub = await client.patch(
+                f"/api/v1/admin/cursos/{curso_id}",
+                headers=admin_token,
+                json={"status": "ativo"},
+            )
+            assert pub.status_code == 200
+
             # 1ª matrícula → nova
             r1 = await client.post(
                 f"/api/v1/me/matriculas/gratis/{slug}", headers=auth_headers

@@ -23,12 +23,11 @@ class CursoListItem(BaseModel):
     total_aulas: int
     tem_preview: bool = False  # tem ao menos uma aula grátis
     destaque: bool
-    # marketing / vitrine
+    # marketing / vitrine — `horas`/`aulas_total` são CALCULADOS do conteúdo.
     tagline: str | None = None
     horas: str | None = None
     aulas_total: int = 0
     rating: float | None = None
-    alunos: int = 0
     nivel: str | None = None
     icon: str | None = None
     badge_label: str | None = None
@@ -82,12 +81,11 @@ class CursoDetail(BaseModel):
     validade_dias: int
     thumbnail_url: str | None = None
     gratuito: bool = False  # curso 100% grátis (matrícula free)
-    # marketing / vitrine
+    # marketing / vitrine — `horas`/`aulas_total` são CALCULADOS do conteúdo.
     tagline: str | None = None
     horas: str | None = None
     aulas_total: int = 0
     rating: float | None = None
-    alunos: int = 0
     nivel: str | None = None
     icon: str | None = None
     badge_label: str | None = None

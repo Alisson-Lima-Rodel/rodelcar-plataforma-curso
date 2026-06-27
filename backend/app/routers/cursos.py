@@ -7,7 +7,7 @@ from app.core import panda
 from app.core.config import settings
 from app.core.db import get_db
 from app.dependencies import get_current_aluno
-from app.models import Aluno, Aula, Curso, Modulo, TipoCurso
+from app.models import Aluno, Aula, Curso, Modulo, StatusCurso, TipoCurso
 from app.routers.avaliacoes import media_e_total
 from app.schemas.cursos import (
     AulaPreview,
@@ -36,6 +36,16 @@ def _descricao_curta(descricao: str | None) -> str | None:
 def _dur_label(segundos: int | None) -> str:
     m, s = divmod(int(segundos or 0), 60)
     return f"{m:02d}:{s:02d}"
+
+
+def _horas_label(segundos: int | None) -> str | None:
+    """Soma de durações (s) → '8h40' (tempo total de vídeo do curso). 0 → None."""
+    total = int(segundos or 0)
+    if total <= 0:
+        return None
+    h, resto = divmod(total, 3600)
+    m = resto // 60
+    return f"{h}h{m:02d}"
 
 
 @router.get("", response_model=CursoListResponse)
@@ -68,11 +78,19 @@ async def listar_cursos(
         .correlate(Curso)
         .scalar_subquery()
     )
+    total_duracao = (
+        select(func.coalesce(func.sum(Aula.duracao_segundos), 0))
+        .select_from(Aula)
+        .join(Modulo, Aula.modulo_id == Modulo.id)
+        .where(Modulo.curso_id == Curso.id)
+        .correlate(Curso)
+        .scalar_subquery()
+    )
 
-    # Só cursos ATIVOS na vitrine pública (inativo some do site, mas continua
-    # acessível a quem já comprou — isso é barrado por matrícula, não aqui).
-    base = select(Curso).where(Curso.ativo.is_(True))
-    count_stmt = select(func.count(Curso.id)).where(Curso.ativo.is_(True))
+    # Só cursos ATIVOS na vitrine pública (em desenvolvimento/inativo somem do
+    # site; inativo continua acessível a quem já comprou — barrado por matrícula).
+    base = select(Curso).where(Curso.status == StatusCurso.ativo)
+    count_stmt = select(func.count(Curso.id)).where(Curso.status == StatusCurso.ativo)
     if tipo is not None:
         base = base.where(Curso.tipo == tipo)
         count_stmt = count_stmt.where(Curso.tipo == tipo)
@@ -84,6 +102,7 @@ async def listar_cursos(
             total_modulos.label("total_modulos"),
             total_aulas.label("total_aulas"),
             aulas_gratis.label("aulas_gratis"),
+            total_duracao.label("total_duracao"),
         )
         .order_by(Curso.ordem, Curso.titulo)
         .offset((page - 1) * size)
@@ -108,15 +127,15 @@ async def listar_cursos(
             tem_preview=n_gratis > 0,
             destaque=curso.destaque,
             tagline=curso.tagline,
-            horas=curso.horas,
-            aulas_total=curso.aulas_total,
+            # Calculados do conteúdo (não dos campos manuais antigos).
+            horas=_horas_label(n_duracao),
+            aulas_total=n_aulas,
             rating=curso.rating,
-            alunos=curso.alunos,
             nivel=curso.nivel,
             icon=curso.icon,
             badge_label=curso.badge_label,
         )
-        for curso, n_modulos, n_aulas, n_gratis in rows
+        for curso, n_modulos, n_aulas, n_gratis, n_duracao in rows
     ]
     return CursoListResponse(items=items, total=total, page=page, size=size)
 
@@ -132,7 +151,9 @@ async def aulas_preview(
     gratuitas, e só para aluno cadastrado (as pagas nunca vazam)."""
     curso = (
         await db.execute(
-            select(Curso.id).where(Curso.slug == slug, Curso.ativo.is_(True))
+            select(Curso.id).where(
+                Curso.slug == slug, Curso.status == StatusCurso.ativo
+            )
         )
     ).scalar_one_or_none()
     if curso is None:
@@ -173,7 +194,7 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
     curso = (
         await db.execute(
             select(Curso)
-            .where(Curso.slug == slug, Curso.ativo.is_(True))
+            .where(Curso.slug == slug, Curso.status == StatusCurso.ativo)
             .options(selectinload(Curso.modulos).selectinload(Modulo.aulas))
         )
     ).scalar_one_or_none()
@@ -209,6 +230,10 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
 
     rating_medio, rating_count = await media_e_total(db, curso.id)
 
+    # Calculados do conteúdo (nº de aulas e tempo total de vídeo).
+    total_aulas = sum(len(m.aulas) for m in curso.modulos)
+    total_duracao = sum(a.duracao_segundos for m in curso.modulos for a in m.aulas)
+
     return CursoDetail(
         id=curso.id,
         slug=curso.slug,
@@ -221,10 +246,9 @@ async def obter_curso(slug: str, db: AsyncSession = Depends(get_db)):
         thumbnail_url=curso.thumbnail_url,
         gratuito=curso.gratuito,
         tagline=curso.tagline,
-        horas=curso.horas,
-        aulas_total=curso.aulas_total,
+        horas=_horas_label(total_duracao),
+        aulas_total=total_aulas,
         rating=curso.rating,
-        alunos=curso.alunos,
         nivel=curso.nivel,
         icon=curso.icon,
         badge_label=curso.badge_label,

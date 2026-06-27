@@ -32,6 +32,7 @@ from app.models import (
     Progresso,
     Questao,
     Quiz,
+    StatusCurso,
     StatusMatricula,
     TentativaQuiz,
     TipoCurso,
@@ -52,7 +53,7 @@ async def curso_e2e():
     async with AsyncSessionLocal() as db:
         curso = Curso(
             slug=f"e2e-{pref}", titulo="E2E Curso", tipo=TipoCurso.avulso,
-            preco=0, validade_dias=365, gratuito=True, ativo=True, aulas_total=2,
+            preco=0, validade_dias=365, gratuito=True, status=StatusCurso.ativo,
         )
         db.add(curso)
         await db.flush()
@@ -141,7 +142,8 @@ async def test_jornada_completa_do_aluno(client: AsyncClient, curso_e2e: dict):
 
     # ── 1. CADASTRO ──────────────────────────────────────────────────────────
     r = await client.post("/api/v1/auth/register",
-                          json={"nome": "Aluno E2E", "email": email, "senha": SENHA})
+                          json={"nome": "Aluno E2E", "email": email, "senha": SENHA,
+                                "telefone": "51999990000"})
     assert r.status_code == 201, r.text
     tok = r.json()
     assert tok.get("access_token") and tok.get("refresh_token")

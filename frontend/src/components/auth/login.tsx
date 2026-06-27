@@ -127,7 +127,9 @@ export function Login() {
         return;
       }
       // WhatsApp obrigatório: DDD + número (10 ou 11 dígitos; aceita máscara/+55).
-      const digitos = telefone.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+      const digitos = telefone
+        .replace(/\D/g, "")
+        .replace(/^55(?=\d{10,11}$)/, "");
       if (digitos.length < 10 || digitos.length > 11) {
         setError("Informe um WhatsApp válido com DDD (ex.: (51) 99999-9999).");
         return;
@@ -295,14 +297,16 @@ export function Login() {
 
           <div style={{ marginBottom: 24 }}>
             <h1 style={{ fontSize: "1.7rem", marginBottom: 6 }}>
-              {TITLES[mode].h}
+              {confirmando ? "Confirmar conta" : TITLES[mode].h}
             </h1>
             <p className="muted" style={{ fontSize: "0.96rem" }}>
-              {TITLES[mode].s}
+              {confirmando
+                ? "Você já está logado. Confira a conta e continue para o pagamento."
+                : TITLES[mode].s}
             </p>
           </div>
 
-          {notice && (
+          {notice && !confirmando && (
             <div
               className="flex center gap-3"
               style={{
@@ -380,202 +384,204 @@ export function Login() {
           )}
 
           {!confirmando && (
-          <>
-          <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
-            {mode === "signup" && (
-              <div className="field">
-                <label htmlFor="au-nome">Nome completo</label>
-                <div className="input-group">
-                  <span className="ico">
-                    <Icon name="users" size={17} />
-                  </span>
-                  <input
-                    id="au-nome"
-                    className="input"
-                    placeholder="Seu nome"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                  />
+            <>
+              <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
+                {mode === "signup" && (
+                  <div className="field">
+                    <label htmlFor="au-nome">Nome completo</label>
+                    <div className="input-group">
+                      <span className="ico">
+                        <Icon name="users" size={17} />
+                      </span>
+                      <input
+                        id="au-nome"
+                        className="input"
+                        placeholder="Seu nome"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="field">
+                  <label htmlFor="au-email">E-mail</label>
+                  <div className="input-group">
+                    <span className="ico">
+                      <Icon name="message" size={17} />
+                    </span>
+                    <input
+                      id="au-email"
+                      className="input"
+                      type="email"
+                      placeholder="voce@oficina.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
                 </div>
+                {mode === "signup" && (
+                  <div className="field">
+                    <label htmlFor="au-zap">WhatsApp</label>
+                    <div className="input-group">
+                      <span className="ico">
+                        <Icon name="whatsapp" size={17} />
+                      </span>
+                      <input
+                        id="au-zap"
+                        className="input"
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="(51) 99999-9999"
+                        value={telefone}
+                        onChange={(e) => setTelefone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+                {mode !== "recover" && (
+                  <div className="field">
+                    <div className="flex between center">
+                      <label htmlFor="au-senha">Senha</label>
+                      {mode === "login" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("recover");
+                            setError("");
+                          }}
+                          style={{
+                            background: "none",
+                            border: 0,
+                            cursor: "pointer",
+                            fontSize: "0.82rem",
+                            color: "var(--accent)",
+                            padding: 0,
+                          }}
+                        >
+                          Esqueci minha senha
+                        </button>
+                      )}
+                    </div>
+                    <div className="input-group">
+                      <span className="ico">
+                        <Icon name="lock" size={17} />
+                      </span>
+                      <input
+                        id="au-senha"
+                        className="input"
+                        type={showSenha ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={senha}
+                        onChange={(e) => setSenha(e.target.value)}
+                        style={{ paddingRight: 42 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSenha((v) => !v)}
+                        aria-pressed={showSenha}
+                        aria-label={
+                          showSenha ? "Ocultar senha" : "Mostrar senha"
+                        }
+                        title={showSenha ? "Ocultar senha" : "Mostrar senha"}
+                        style={{
+                          position: "absolute",
+                          right: 10,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: 0,
+                          cursor: "pointer",
+                          color: "var(--text-subtle)",
+                          display: "grid",
+                          placeItems: "center",
+                          padding: 4,
+                        }}
+                      >
+                        <Icon name={showSenha ? "eyeOff" : "eye"} size={18} />
+                      </button>
+                    </div>
+                    {mode === "signup" && (
+                      <span
+                        className="tag-mono subtle"
+                        style={{
+                          lineHeight: 1.4,
+                          color:
+                            senha.length === 0
+                              ? undefined
+                              : senha.length >= SENHA_MIN
+                                ? "var(--success)"
+                                : "var(--danger)",
+                        }}
+                      >
+                        {senha.length >= SENHA_MIN
+                          ? "✓ Tamanho de senha válido"
+                          : "Use no mínimo 8 caracteres."}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-            <div className="field">
-              <label htmlFor="au-email">E-mail</label>
-              <div className="input-group">
-                <span className="ico">
-                  <Icon name="message" size={17} />
-                </span>
-                <input
-                  id="au-email"
-                  className="input"
-                  type="email"
-                  placeholder="voce@oficina.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
-            {mode === "signup" && (
-              <div className="field">
-                <label htmlFor="au-zap">WhatsApp</label>
-                <div className="input-group">
-                  <span className="ico">
-                    <Icon name="whatsapp" size={17} />
-                  </span>
-                  <input
-                    id="au-zap"
-                    className="input"
-                    type="tel"
-                    inputMode="tel"
-                    placeholder="(51) 99999-9999"
-                    value={telefone}
-                    onChange={(e) => setTelefone(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            {mode !== "recover" && (
-              <div className="field">
-                <div className="flex between center">
-                  <label htmlFor="au-senha">Senha</label>
-                  {mode === "login" && (
+
+              {/* ação dominante */}
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                block
+                icon={busy ? undefined : icon}
+                disabled={busy}
+              >
+                {busy ? "Aguarde..." : cta}
+              </Button>
+
+              <div className="hr" style={{ margin: "22px 0" }} />
+              <div style={{ textAlign: "center" }}>
+                {mode === "login" ? (
+                  <span className="muted" style={{ fontSize: "0.9rem" }}>
+                    Ainda não tem conta?{" "}
                     <button
                       type="button"
                       onClick={() => {
-                        setMode("recover");
+                        setMode("signup");
+                        setError("");
+                        setNotice("");
+                      }}
+                      style={{
+                        background: "none",
+                        border: 0,
+                        color: "var(--primary)",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      Criar conta
+                    </button>
+                  </span>
+                ) : (
+                  <span className="muted" style={{ fontSize: "0.9rem" }}>
+                    Já tem conta?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("login");
                         setError("");
                       }}
                       style={{
                         background: "none",
                         border: 0,
+                        color: "var(--primary)",
                         cursor: "pointer",
-                        fontSize: "0.82rem",
-                        color: "var(--accent)",
-                        padding: 0,
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
                       }}
                     >
-                      Esqueci minha senha
+                      Entrar
                     </button>
-                  )}
-                </div>
-                <div className="input-group">
-                  <span className="ico">
-                    <Icon name="lock" size={17} />
-                  </span>
-                  <input
-                    id="au-senha"
-                    className="input"
-                    type={showSenha ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    style={{ paddingRight: 42 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSenha((v) => !v)}
-                    aria-pressed={showSenha}
-                    aria-label={showSenha ? "Ocultar senha" : "Mostrar senha"}
-                    title={showSenha ? "Ocultar senha" : "Mostrar senha"}
-                    style={{
-                      position: "absolute",
-                      right: 10,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: 0,
-                      cursor: "pointer",
-                      color: "var(--text-subtle)",
-                      display: "grid",
-                      placeItems: "center",
-                      padding: 4,
-                    }}
-                  >
-                    <Icon name={showSenha ? "eyeOff" : "eye"} size={18} />
-                  </button>
-                </div>
-                {mode === "signup" && (
-                  <span
-                    className="tag-mono subtle"
-                    style={{
-                      lineHeight: 1.4,
-                      color:
-                        senha.length === 0
-                          ? undefined
-                          : senha.length >= SENHA_MIN
-                            ? "var(--success)"
-                            : "var(--danger)",
-                    }}
-                  >
-                    {senha.length >= SENHA_MIN
-                      ? "✓ Tamanho de senha válido"
-                      : "Use no mínimo 8 caracteres."}
                   </span>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* ação dominante */}
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            block
-            icon={busy ? undefined : icon}
-            disabled={busy}
-          >
-            {busy ? "Aguarde..." : cta}
-          </Button>
-
-          <div className="hr" style={{ margin: "22px 0" }} />
-          <div style={{ textAlign: "center" }}>
-            {mode === "login" ? (
-              <span className="muted" style={{ fontSize: "0.9rem" }}>
-                Ainda não tem conta?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setError("");
-                    setNotice("");
-                  }}
-                  style={{
-                    background: "none",
-                    border: 0,
-                    color: "var(--primary)",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  Criar conta
-                </button>
-              </span>
-            ) : (
-              <span className="muted" style={{ fontSize: "0.9rem" }}>
-                Já tem conta?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setError("");
-                  }}
-                  style={{
-                    background: "none",
-                    border: 0,
-                    color: "var(--primary)",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  Entrar
-                </button>
-              </span>
-            )}
-          </div>
-          </>
+            </>
           )}
         </form>
       </div>

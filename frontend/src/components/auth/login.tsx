@@ -171,6 +171,10 @@ export function Login() {
   // Confirmação de compra: há compra pendente E já existe um aluno logado, e o
   // usuário ainda não pediu para trocar de conta.
   const confirmando = temCompra && !!aluno && !trocarConta;
+  // Compra em andamento (logando + criando a sessão Stripe). Enquanto isso, não
+  // mostra nem o form nem o card de confirmação — evita o "flash" do card de
+  // confirmar logo após o login, antes do redirect pra Stripe.
+  const processandoCompra = busy && temCompra;
 
   const continuarComoLogado = async () => {
     if (busy) return;
@@ -353,7 +357,24 @@ export function Login() {
             </div>
           )}
 
-          {confirmando && (
+          {processandoCompra && (
+            <div
+              className="flex center gap-3"
+              style={{
+                padding: "18px 14px",
+                borderRadius: 10,
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <Icon name="bolt" size={18} style={{ color: "var(--primary)" }} />
+              <span style={{ fontSize: "0.92rem" }}>
+                Redirecionando para o pagamento seguro…
+              </span>
+            </div>
+          )}
+
+          {confirmando && !processandoCompra && (
             <div style={{ display: "grid", gap: 12, marginBottom: 4 }}>
               <div
                 className="card"
@@ -387,7 +408,7 @@ export function Login() {
             </div>
           )}
 
-          {!confirmando && (
+          {!confirmando && !processandoCompra && (
             <>
               <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
                 {mode === "signup" && (

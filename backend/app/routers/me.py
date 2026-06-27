@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.stripe_admin import stripe_ativo
 from app.core.stripe_refunds import (
@@ -545,19 +546,29 @@ async def player_curso(
             ).scalars().all()
         )
 
+    ratio = settings.CERT_MIN_WATCH_RATIO
     modulos: list[PlayerModulo] = []
     total = 0
     concluidas = 0
+    cert_aulas_ok = 0          # aulas que satisfazem o gate do certificado
+    tem_aula_sem_duracao = False
     soma_pct = 0.0
     for m in sorted(curso.modulos, key=lambda x: x.ordem):
         aulas = []
         for a in sorted(m.aulas, key=lambda x: x.ordem):
             p = pmap.get(a.id)
-            feita = bool(p.concluida) if p else False
+            feita = bool(p.concluida) if p else False   # checkmark do usuário (UI)
             pct = float(p.percentual) if p else 0.0
             total += 1
             concluidas += 1 if feita else 0
             soma_pct += pct
+            # Cert-elegível = mesmo critério do emitir_certificado: concluída +
+            # tempo REAL assistido >= ratio*duração + duração cadastrada (>0).
+            dur = a.duracao_segundos or 0
+            if dur <= 0:
+                tem_aula_sem_duracao = True
+            elif p and p.concluida and p.segundos_assistidos >= dur * ratio:
+                cert_aulas_ok += 1
             aulas.append(
                 PlayerAula(
                     id=a.id,
@@ -582,15 +593,16 @@ async def player_curso(
         )
 
     pct_curso = round(soma_pct / total, 1) if total else 0.0
-    # Concluído = matrícula ATIVA + todas as aulas feitas + todos os quizzes ativos
-    # aprovados. O status ativo entra aqui para casar com o gate do certificado
-    # (que recusa matrícula inativa): sem isso, um aluno expirado veria "concluído"
-    # e o botão de certificado, mas tomaria 409 ao emitir.
+    # Concluído = exatamente o gate do emitir_certificado: matrícula ATIVA + todas
+    # as aulas cert-elegíveis (concluída + tempo assistido + duração>0) + todos os
+    # quizzes ativos aprovados. Casar com o gate evita prometer na UI um certificado
+    # que o POST recusaria (409 CURSO_NAO_CONCLUIDO / QUIZ_PENDENTE / DURACAO_*).
     quizzes_ok = all(q.id in aprovados for q in quiz_rows)
     concluido = (
         matricula.status == StatusMatricula.ativo
         and total > 0
-        and concluidas == total
+        and not tem_aula_sem_duracao
+        and cert_aulas_ok == total
         and quizzes_ok
     )
 

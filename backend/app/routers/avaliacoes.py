@@ -60,8 +60,12 @@ async def media_e_total(db: AsyncSession, curso_id: uuid.UUID) -> tuple[float | 
     """Média (1 casa) e contagem das avaliações aprovadas — reusado no JSON-LD."""
     media, total = (
         await db.execute(
-            select(func.avg(Avaliacao.nota), func.count(Avaliacao.id)).where(
-                Avaliacao.curso_id == curso_id, Avaliacao.status == _APROVADO
+            select(func.avg(Avaliacao.nota), func.count(Avaliacao.id))
+            .join(Aluno, Avaliacao.aluno_id == Aluno.id)
+            .where(
+                Avaliacao.curso_id == curso_id,
+                Avaliacao.status == _APROVADO,
+                Aluno.bloqueado.is_(False),  # autor banido não conta na prova social
             )
         )
     ).one()
@@ -75,7 +79,11 @@ async def listar_avaliacoes(slug: str, db: AsyncSession = Depends(get_db)):
         await db.execute(
             select(Avaliacao, Aluno.nome)
             .join(Aluno, Avaliacao.aluno_id == Aluno.id)
-            .where(Avaliacao.curso_id == curso.id, Avaliacao.status == _APROVADO)
+            .where(
+                Avaliacao.curso_id == curso.id,
+                Avaliacao.status == _APROVADO,
+                Aluno.bloqueado.is_(False),  # esconde review de autor banido
+            )
             .order_by(Avaliacao.criado_em.desc())
             .limit(50)
         )

@@ -248,11 +248,13 @@ def _reset_rate_limiter():
     O storage do slowapi é in-memory e persiste na sessão; sem o reset, o teto
     estrito de auth (5/min) vaza de um teste para o outro e gera 429 espúrio.
     """
-    from app.core.ratelimit import limiter
+    from app.core.ratelimit import limiter, reset_conta
 
     limiter.reset()
+    reset_conta()
     yield
     limiter.reset()
+    reset_conta()
 
 
 @pytest_asyncio.fixture

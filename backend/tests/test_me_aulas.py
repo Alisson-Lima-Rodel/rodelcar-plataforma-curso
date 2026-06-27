@@ -92,15 +92,16 @@ class TestAulas:
         assert resp.status_code == 403
         assert resp.json()["error"]["code"] == "MATRICULA_EXPIRADA"
 
-    async def test_aula_sem_matricula_retorna_403(
+    async def test_aula_sem_matricula_retorna_404(
         self, client: AsyncClient, auth_headers: dict, test_data: dict
     ):
-        """Curso sem matrícula alguma retorna 403 ACESSO_NEGADO."""
+        """Sem NENHUMA matrícula no curso retorna 404 (igual a aula inexistente) —
+        não revela quais aula_id existem em cursos que o aluno não acessa."""
         resp = await client.get(
             f"/api/v1/aulas/{test_data['aula_sem_mat_id']}", headers=auth_headers
         )
-        assert resp.status_code == 403
-        assert resp.json()["error"]["code"] == "ACESSO_NEGADO"
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "AULA_NAO_ENCONTRADA"
 
     async def test_aula_sem_token_retorna_401(
         self, client: AsyncClient, test_data: dict

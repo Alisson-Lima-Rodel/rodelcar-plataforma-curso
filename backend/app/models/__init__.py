@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, MultiFernet
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import (
     Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text, Integer,
     UniqueConstraint, func,
@@ -46,7 +46,18 @@ class EncryptedStr(TypeDecorator):
     def process_result_value(self, value: str | None, dialect) -> str | None:
         if value is None:
             return None
-        return _get_fernet().decrypt(value.encode()).decode()
+        try:
+            return _get_fernet().decrypt(value.encode()).decode()
+        except InvalidToken:
+            # Chave Fernet ausente/rotacionada fora de ordem: NÃO propaga (a coluna
+            # é lida em todo SELECT do Aluno → estouraria 500 em cada request
+            # autenticada = DoS de autenticação). Loga e devolve None.
+            import logging
+            logging.getLogger(__name__).error(
+                "Falha ao decifrar campo cifrado (RODELCAR_FERNET_KEY ausente/"
+                "rotacionada?). Verifique as chaves Fernet."
+            )
+            return None
 
 
 class Base(DeclarativeBase):

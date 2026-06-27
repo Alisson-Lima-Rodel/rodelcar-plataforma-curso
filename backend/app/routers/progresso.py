@@ -61,11 +61,20 @@ async def salvar_progresso(
                 )
             )
         ).scalar_one_or_none()
-        code = "MATRICULA_EXPIRADA" if any_status is not None else "ACESSO_NEGADO"
+        if any_status is None:
+            # Nunca teve matrícula: 404 IGUAL a aula inexistente (anti-enumeração).
+            raise HTTPException(
+                status_code=404,
+                detail={"error": {
+                    "code": "AULA_NAO_ENCONTRADA",
+                    "message": "Aula não encontrada.",
+                    "details": None,
+                }},
+            )
         raise HTTPException(
             status_code=403,
             detail={"error": {
-                "code": code,
+                "code": "MATRICULA_EXPIRADA",
                 "message": "Acesso ao conteúdo não permitido.",
                 "details": None,
             }},

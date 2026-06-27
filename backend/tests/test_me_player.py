@@ -3,10 +3,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.core.db import AsyncSessionLocal
 from app.models import (
     Aula,
     Curso,
@@ -133,6 +134,15 @@ class TestPlayerCurso:
             headers=auth_headers,
             json={"aula_id": a2, "percentual": 100, "concluida": True},
         )
+        # `concluido` agora exige tempo REAL assistido (alinhado ao certificado).
+        # Acumula segundos suficientes nas duas aulas (>= 0.85 * duração).
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(Progresso)
+                .where(Progresso.aula_id.in_([uuid.UUID(a1), uuid.UUID(a2)]))
+                .values(segundos_assistidos=1000)
+            )
+            await db.commit()
         data = (
             await client.get(
                 f"/api/v1/me/cursos/{player_seed['slug']}", headers=auth_headers

@@ -9,6 +9,8 @@ import logging
 from functools import lru_cache
 
 from limits import parse
+from limits.storage import storage_from_string
+from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -66,3 +68,28 @@ limiter = Limiter(
     default_limits=[public_limit],
     storage_uri=_storage_uri,
 )
+
+# ── Teto de FALHAS de login POR CONTA (e-mail), além do teto por IP ───────────
+# Freia brute-force horizontal (muitos IPs contra uma conta). Reusa o mesmo
+# storage (memória em dev; Redis em produção via RATELIMIT_STORAGE_URI). Só
+# falhas consomem o orçamento (`registrar_falha_login`); o login bem-sucedido
+# nunca chama `hit` → não há lockout duro nem DoS de bloqueio da vítima.
+_conta_storage = storage_from_string(_storage_uri or "memory://")
+_conta_strategy = FixedWindowRateLimiter(_conta_storage)
+
+
+def conta_login_bloqueada(email: str) -> bool:
+    """True se a conta já estourou o teto de falhas na janela (checa SEM consumir)."""
+    item = parse(_validated(settings.RATE_LIMIT_AUTH_ACCOUNT))
+    return not _conta_strategy.test(item, "login", email)
+
+
+def registrar_falha_login(email: str) -> None:
+    """Consome 1 do orçamento de falhas da conta — chamado só em senha errada."""
+    item = parse(_validated(settings.RATE_LIMIT_AUTH_ACCOUNT))
+    _conta_strategy.hit(item, "login", email)
+
+
+def reset_conta() -> None:
+    """Zera o contador por conta (usado entre testes)."""
+    _conta_storage.reset()

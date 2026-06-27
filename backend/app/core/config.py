@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_PUBLIC: str = "120/minute"
     # Teto estrito para autenticação (anti brute-force). Override por env.
     RATE_LIMIT_AUTH: str = "5/minute"
+    # Teto de FALHAS de login por CONTA (e-mail), além do teto por IP. Freia o
+    # brute-force horizontal (mesma conta atacada por muitos IPs). Só falhas
+    # consomem o orçamento; um login bem-sucedido nunca é barrado (sem lockout
+    # duro → evita DoS de bloqueio da vítima). Generoso de propósito.
+    RATE_LIMIT_AUTH_ACCOUNT: str = "10/minute"
     # Storage do rate limiter. Vazio = memória (só serve p/ 1 processo/instância).
     # Em produção multi-instância, aponte para Redis: redis://host:6379/0
     RATELIMIT_STORAGE_URI: str = ""

@@ -59,9 +59,10 @@ class TestProgresso:
         assert resp.status_code == 200
         assert resp.json()["curso_percentual"] == 100.0
 
-    async def test_progresso_sem_matricula_retorna_403(
+    async def test_progresso_sem_matricula_retorna_404(
         self, client: AsyncClient, auth_headers: dict, test_data: dict
     ):
+        """Sem matrícula no curso → 404 (igual a aula inexistente; anti-enumeração)."""
         resp = await client.post(
             "/api/v1/progresso",
             json={
@@ -71,8 +72,8 @@ class TestProgresso:
             },
             headers=auth_headers,
         )
-        assert resp.status_code == 403
-        assert resp.json()["error"]["code"] == "ACESSO_NEGADO"
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "AULA_NAO_ENCONTRADA"
 
     async def test_progresso_aula_inexistente_retorna_404(
         self, client: AsyncClient, auth_headers: dict

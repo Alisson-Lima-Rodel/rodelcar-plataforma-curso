@@ -3,13 +3,18 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.ratelimit import auth_limit, limiter
+from app.core.ratelimit import (
+    auth_limit,
+    conta_login_bloqueada,
+    limiter,
+    registrar_falha_login,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -77,14 +82,23 @@ async def _emitir_tokens(aluno_id: str, token_version: int, db: AsyncSession) ->
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(auth_limit)
 async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    # Teto de FALHAS por conta (além do teto por IP): freia brute-force horizontal
+    # distribuído por muitos IPs sobre o mesmo e-mail. Checado ANTES de verificar
+    # (não vaza tempo) e só falhas consomem o orçamento — login certo nunca barra.
+    conta = body.email.strip().lower()
+    if conta_login_bloqueada(conta):
+        raise _err(429, "RATE_LIMITED", "Muitas tentativas para esta conta. Aguarde um instante.")
+
     result = await db.execute(select(Aluno).where(Aluno.email == body.email))
     aluno = result.scalar_one_or_none()
 
     # Equaliza o tempo de resposta quando o e-mail não existe (anti-enumeração).
     if aluno is None:
+        registrar_falha_login(conta)
         dummy_verify()
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     if not verify_password(body.senha, aluno.senha_hash):
+        registrar_falha_login(conta)
         raise _err(401, "CREDENCIAIS_INVALIDAS", "Email ou senha incorretos.")
     # Acesso bloqueado manualmente pelo admin: barra o login até ser liberado.
     if aluno.bloqueado:
@@ -229,12 +243,14 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
 async def logout(
     request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Revoga o refresh e derruba a sessão na hora (idempotente).
+    """Logout = sair de TODOS os aparelhos (idempotente).
 
-    Logout = sair de TODOS os aparelhos: ao revogar de fato o refresh, incrementa
-    token_version para invalidar também os access tokens vivos (senão o access
-    seguiria aceito por até ~30min). Mesmo padrão do logout do admin. Reapresentar
-    um token já revogado é no-op (não re-incrementa → sem DoS de sessão por replay).
+    Apaga a família de refresh do aluno e incrementa token_version (mata os access
+    tokens vivos na hora — senão seguiriam aceitos por até ~30min). APAGAR (em vez
+    de marcar revogado) impede que reapresentar um token de logout caia no caminho
+    de reuso→wipe do /refresh. Só um refresh VIVO do próprio aluno dispara o
+    logout: token já revogado/rotacionado/inexistente é no-op — assim um replay de
+    token antigo não força wipe de sessão (DoS).
     """
     try:
         payload = decode_token(body.refresh_token)
@@ -243,17 +259,17 @@ async def logout(
     except (jwt.PyJWTError, ValueError, KeyError):
         return Response(status_code=204)  # nada a fazer; não vaza se era válido
 
-    agora = datetime.now(timezone.utc)
-    res = await db.execute(
-        update(RefreshToken)
-        .where(
+    vivo = await db.scalar(
+        select(RefreshToken.id).where(
             RefreshToken.jti == jti,
             RefreshToken.aluno_id == aluno_uuid,
             RefreshToken.revogado.is_(False),
         )
-        .values(revogado=True, revogado_em=agora)
     )
-    if res.rowcount:  # só bumpa quando realmente revogou um token vivo do aluno
+    if vivo is not None:
+        await db.execute(
+            delete(RefreshToken).where(RefreshToken.aluno_id == aluno_uuid)
+        )
         await db.execute(
             update(Aluno).where(Aluno.id == aluno_uuid)
             .values(token_version=Aluno.token_version + 1)

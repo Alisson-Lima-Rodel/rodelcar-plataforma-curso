@@ -72,11 +72,13 @@ async def obter_aula(
                     "details": None,
                 }},
             )
+        # Nunca teve matrícula: responde 404 IGUAL a aula inexistente — não revela
+        # ao aluno quais aula_id existem em cursos que ele não acessa (anti-enumeração).
         raise HTTPException(
-            status_code=403,
+            status_code=404,
             detail={"error": {
-                "code": "ACESSO_NEGADO",
-                "message": "Você não possui matrícula neste curso.",
+                "code": "AULA_NAO_ENCONTRADA",
+                "message": "Aula não encontrada.",
                 "details": None,
             }},
         )

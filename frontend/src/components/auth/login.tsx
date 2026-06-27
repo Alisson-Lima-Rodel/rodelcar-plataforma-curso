@@ -59,7 +59,7 @@ function mensagemErro(e: unknown): string {
 
 export function Login() {
   const router = useRouter();
-  const { login, register, aluno, logout } = useAuth();
+  const { login, register, aluno, logout, status } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -74,6 +74,11 @@ export function Login() {
   // comprar com ela direto, confirmamos quem é o usuário (item 4.1).
   const [temCompra, setTemCompra] = useState(false);
   const [trocarConta, setTrocarConta] = useState(false);
+  // Define UMA vez (quando a auth resolve) se a tela abre no modo "confirmar
+  // conta" (chegou logado) ou "login" (chegou deslogado). Decidir uma vez evita
+  // o caminho ficar "pulando de tela": ao logar pelo form, NÃO troca para o card
+  // de confirmação — segue no form (botão carregando) até ir pra Stripe.
+  const [modoConfirmar, setModoConfirmar] = useState<boolean | null>(null);
 
   // Compra iniciada no portal sem login: avisa e retoma após entrar/cadastrar.
   // Link de indicação (?ref=): já abre no cadastro e guarda o código.
@@ -95,6 +100,14 @@ export function Login() {
       );
     }
   }, []);
+
+  // No fluxo de compra, decide UMA vez (quando a auth resolve) se abre no card de
+  // confirmação (chegou logado) ou no form (chegou deslogado). Não muda depois.
+  useEffect(() => {
+    if (temCompra && modoConfirmar === null && status !== "loading") {
+      setModoConfirmar(status === "authed" && !!aluno);
+    }
+  }, [temCompra, modoConfirmar, status, aluno]);
 
   /** Pós-login do aluno: retoma a compra pendente (redireciona p/ a Stripe) ou
    * segue para o painel. */
@@ -149,14 +162,17 @@ export function Login() {
         await register(nome.trim(), email.trim(), senha, telefone.trim(), ref);
         await concluirEntrada();
       } else {
-        // Uma única tela de login: tenta admin primeiro; se a conta não for
-        // admin (401), entra como aluno. O nível de acesso é o da conta.
-        try {
-          await adminLogin(email.trim(), senha);
-          router.push("/admin");
-          return;
-        } catch (e) {
-          if (!(e instanceof ApiError) || e.status !== 401) throw e;
+        // Login unificado: tenta admin primeiro; se não for admin (401), entra
+        // como aluno. No fluxo de COMPRA pula o admin (quem compra é aluno) —
+        // corta um round-trip e deixa o caminho até a Stripe mais direto.
+        if (!temCompra) {
+          try {
+            await adminLogin(email.trim(), senha);
+            router.push("/admin");
+            return;
+          } catch (e) {
+            if (!(e instanceof ApiError) || e.status !== 401) throw e;
+          }
         }
         await login(email.trim(), senha);
         await concluirEntrada();
@@ -168,13 +184,13 @@ export function Login() {
     }
   };
 
-  // Confirmação de compra: há compra pendente E já existe um aluno logado, e o
-  // usuário ainda não pediu para trocar de conta.
-  const confirmando = temCompra && !!aluno && !trocarConta;
-  // Compra em andamento (logando + criando a sessão Stripe). Enquanto isso, não
-  // mostra nem o form nem o card de confirmação — evita o "flash" do card de
-  // confirmar logo após o login, antes do redirect pra Stripe.
-  const processandoCompra = busy && temCompra;
+  // Card de confirmação: só quando a tela ABRIU já logada (modoConfirmar) e o
+  // usuário não pediu para trocar de conta. Quem chega deslogado e loga pelo form
+  // NÃO vê este card (segue no form até a Stripe) — sem troca de tela.
+  const confirmando = modoConfirmar === true && !trocarConta;
+  // Auth ainda resolvendo no fluxo de compra: mostra um "carregando" curto em vez
+  // de piscar o form antes de decidir entre form/confirmar.
+  const aguardandoAuth = temCompra && modoConfirmar === null;
 
   const continuarComoLogado = async () => {
     if (busy) return;
@@ -314,7 +330,7 @@ export function Login() {
             </p>
           </div>
 
-          {notice && !confirmando && (
+          {notice && !confirmando && !aguardandoAuth && (
             <div
               className="flex center gap-3"
               style={{
@@ -357,7 +373,7 @@ export function Login() {
             </div>
           )}
 
-          {processandoCompra && (
+          {aguardandoAuth && (
             <div
               className="flex center gap-3"
               style={{
@@ -368,13 +384,13 @@ export function Login() {
               }}
             >
               <Icon name="bolt" size={18} style={{ color: "var(--primary)" }} />
-              <span style={{ fontSize: "0.92rem" }}>
-                Redirecionando para o pagamento seguro…
+              <span className="muted" style={{ fontSize: "0.92rem" }}>
+                Carregando…
               </span>
             </div>
           )}
 
-          {confirmando && !processandoCompra && (
+          {confirmando && (
             <div style={{ display: "grid", gap: 12, marginBottom: 4 }}>
               <div
                 className="card"
@@ -408,7 +424,7 @@ export function Login() {
             </div>
           )}
 
-          {!confirmando && !processandoCompra && (
+          {!confirmando && !aguardandoAuth && (
             <>
               <div style={{ display: "grid", gap: 14, marginBottom: 18 }}>
                 {mode === "signup" && (

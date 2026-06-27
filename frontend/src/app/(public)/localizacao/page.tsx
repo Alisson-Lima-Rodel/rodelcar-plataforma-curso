@@ -18,9 +18,15 @@ export const metadata: Metadata = {
 // Consulta usada tanto no botão "Como chegar" quanto no mapa incorporado.
 const MAPS_QUERY =
   "RödelCar Câmbios, Rua Esperança 521, Estância Velha, Canoas - RS, 92030-500";
-const MAPS_EMBED = `https://www.google.com/maps?q=${encodeURIComponent(
+// Endpoint OFICIAL de embed do Google (o mesmo do "Compartilhar → Incorporar"),
+// keyless. Apontamos direto para /maps/embed em vez de ?output=embed porque este
+// faz um 301 com `X-Frame-Options: SAMEORIGIN` que o navegador bloqueia no iframe.
+// O formato `pb=!1m2!2m1!1s<consulta>` é a variante "busca por texto" (sem coords).
+const MAPS_EMBED = `https://www.google.com/maps/embed?origin=mfe&pb=!1m2!2m1!1s${encodeURIComponent(
   MAPS_QUERY,
-)}&output=embed`;
+)
+  .replace(/%20/g, "+")
+  .replace(/%2C/g, ",")}`;
 
 export default function LocalizacaoPage() {
   const jsonld = {

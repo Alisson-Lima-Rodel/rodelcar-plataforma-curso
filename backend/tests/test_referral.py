@@ -1,9 +1,10 @@
 """Indique-e-ganhe: atribuição no cadastro + recompensa (cupons p/ ambos)."""
 import asyncio
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from httpx import AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.core.db import AsyncSessionLocal
 from app.models import Aluno, Cupom, Indicacao
@@ -123,6 +124,52 @@ class TestReferralRecompensa:
             # idempotente: rechamar não duplica (status já != compra_confirmada)
             async with AsyncSessionLocal() as db:
                 assert await referral.processar_recompensa(db, ind_id) is False
+        finally:
+            await _limpar_alunos(pref)
+
+    async def test_total_recompensados_conta_so_cupons_ativos(self, client: AsyncClient):
+        """A tela mostra só cupons ativos: total_recompensados conta apenas
+        recompensas cujo cupom do indicador ainda está ativo e válido."""
+        pref = uuid.uuid4().hex[:8]
+        try:
+            r = await client.post(
+                "/api/v1/auth/register",
+                json={"nome": "Ind", "email": f"tr_a_{pref}@rodelcar.dev", "senha": SENHA},
+            )
+            h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            async with AsyncSessionLocal() as db:
+                ind = (await db.execute(
+                    select(Aluno).where(Aluno.email == f"tr_a_{pref}@rodelcar.dev")
+                )).scalar_one()
+                indicado = Aluno(nome="Indo", email=f"tr_b_{pref}@rodelcar.dev", senha_hash="x")
+                db.add(indicado)
+                await db.flush()
+                cupom = Cupom(
+                    codigo=f"REF{pref.upper()}", tipo="percentual", valor=10, ativo=True,
+                    validade=datetime.now(timezone.utc) + timedelta(days=90),
+                    aluno_id=ind.id,
+                )
+                db.add(cupom)
+                await db.flush()
+                db.add(Indicacao(
+                    indicador_id=ind.id, indicado_id=indicado.id,
+                    status="recompensado", cupom_indicador_id=cupom.id,
+                ))
+                await db.commit()
+                cupom_id = cupom.id
+
+            # cupom ativo → 1 recompensado + 1 cupom (alinhados)
+            d = (await client.get("/api/v1/me/indicacoes", headers=h)).json()
+            assert d["total_recompensados"] == 1
+            assert len(d["cupons"]) == 1
+
+            # desativa o cupom → 0 recompensados + 0 cupons (continua batendo)
+            async with AsyncSessionLocal() as db:
+                await db.execute(update(Cupom).where(Cupom.id == cupom_id).values(ativo=False))
+                await db.commit()
+            d = (await client.get("/api/v1/me/indicacoes", headers=h)).json()
+            assert d["total_recompensados"] == 0
+            assert d["cupons"] == []
         finally:
             await _limpar_alunos(pref)
 

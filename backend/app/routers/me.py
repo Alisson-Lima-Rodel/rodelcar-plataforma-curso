@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -352,12 +352,20 @@ async def minhas_indicacoes(
     total = await db.scalar(
         select(func.count(Indicacao.id)).where(Indicacao.indicador_id == aluno.id)
     )
+    agora = datetime.now(timezone.utc)
+    # Conta só recompensas cujo cupom do indicador AINDA está ativo e válido —
+    # bate com a lista de cupons exibida (não infla com recompensas cujo cupom já
+    # expirou ou foi desativado pelo admin).
     recompensados = await db.scalar(
-        select(func.count(Indicacao.id)).where(
-            Indicacao.indicador_id == aluno.id, Indicacao.status == "recompensado"
+        select(func.count(Indicacao.id))
+        .join(Cupom, Indicacao.cupom_indicador_id == Cupom.id)
+        .where(
+            Indicacao.indicador_id == aluno.id,
+            Indicacao.status == "recompensado",
+            Cupom.ativo.is_(True),
+            or_(Cupom.validade.is_(None), Cupom.validade > agora),
         )
     )
-    agora = datetime.now(timezone.utc)
     cupons = (
         await db.execute(
             select(Cupom)

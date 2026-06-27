@@ -35,7 +35,7 @@ from app.core.stripe_admin import (
 )
 from app.core.storage import MAX_BYTES, StorageError, storage_ativo, upload_imagem
 from app.core.stripe_refunds import executar_cancelamento, limite_cancelamento
-from app.core.youtube import buscar_metadados
+from app.core.youtube import buscar_metadados, verificar_disponibilidade
 from app.dependencies import get_current_admin, require_papel
 from app.core.stripe_coupons import (
     arquivar_cupom_stripe,
@@ -606,6 +606,38 @@ router.include_router(_crud_router("/depoimentos", Depoimento, DepoimentoAdmin, 
 router.include_router(_crud_router(
     "/videos", Video, VideoAdmin, VideoCreate, VideoUpdate, enrich=_enriquecer_video
 ))
+
+
+@router.post(
+    "/videos/{video_id}/atualizar",
+    response_model=VideoAdmin,
+    dependencies=[Depends(require_papel(*_CONTEUDO))],
+)
+async def atualizar_video_youtube(
+    video_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    """Força AGORA a atualização de views/likes/duração/canal de UM vídeo a partir
+    do YouTube (sem esperar o job diário) e ajusta `indisponivel`. SOBRESCREVE os
+    contadores (diferente do cadastro, que só preenche vazios). Exige
+    YOUTUBE_API_KEY p/ views/likes; sem ela, só título/canal vêm via oEmbed."""
+    video = await db.get(Video, video_id)
+    if video is None:
+        raise _err(404, "NAO_ENCONTRADO", "Vídeo não encontrado.")
+    if not video.youtube_url:
+        raise _err(409, "SEM_URL", "Vídeo sem URL do YouTube.")
+    disp = await verificar_disponibilidade(video.youtube_url)
+    if disp is False:
+        video.indisponivel = True
+    elif disp is True:
+        video.indisponivel = False
+        meta = await buscar_metadados(video.youtube_url) or {}
+        for campo in ("views", "likes", "duracao", "canal"):
+            valor = meta.get(campo)
+            if valor:
+                setattr(video, campo, str(valor)[: _VIDEO_LIMITES[campo]])
+    await db.commit()
+    await db.refresh(video)
+    return video
 router.include_router(_crud_router("/faqs", Faq, FaqAdmin, FaqCreate, FaqUpdate))
 router.include_router(_crud_router(
     "/turmas-midia", TurmaMidia, TurmaMidiaAdmin, TurmaMidiaCreate, TurmaMidiaUpdate

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { AdminItem, EntitySchema } from "@/lib/admin-data";
 import { ApiError } from "@/lib/api";
 import {
+  atualizarVideoYoutube,
   bloquearAluno,
   recuperarSenhaAluno,
   type AdminCrud,
@@ -261,12 +262,36 @@ export function RemoteEntityManager({
     },
   ];
 
+  // Atualizar views/likes/duração de UM vídeo do YouTube sob demanda (sem
+  // esperar o job diário das 06:40 UTC).
+  const videoActions: RowAction[] = [
+    {
+      label: () => "Atualizar views/likes do YouTube",
+      icon: () => "youtube",
+      onClick: async (it) => {
+        try {
+          await atualizarVideoYoutube(String(it.id));
+          await qc.invalidateQueries({ queryKey });
+          onToast("Vídeo atualizado do YouTube");
+        } catch (e) {
+          onToast(
+            e instanceof ApiError
+              ? e.message
+              : "Não foi possível atualizar o vídeo.",
+          );
+        }
+      },
+    },
+  ];
+
   const extraActions =
     entityKey === "courses"
       ? courseActions
       : entityKey === "students"
         ? studentActions
-        : undefined;
+        : entityKey === "videos"
+          ? videoActions
+          : undefined;
 
   if (isLoading) {
     return (

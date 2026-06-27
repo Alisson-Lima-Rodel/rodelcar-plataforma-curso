@@ -274,6 +274,10 @@ export const recuperarSenhaAluno = (alunoId: string) =>
     method: "POST",
   });
 
+// ── Vídeos da prova social (atualizar views/likes do YouTube sob demanda) ─────
+export const atualizarVideoYoutube = (id: string) =>
+  adminFetch<AdminRow>(`/admin/videos/${id}/atualizar`, { method: "POST" });
+
 // ── Métricas diárias (visão geral) ────────────────────────────────────────────
 export interface MetricaDiaria {
   dia: string;

@@ -7,6 +7,14 @@ services:
       # Supabase: postgresql+asyncpg://rodelcar_app:SENHA@db.<ref>.supabase.co:5432/postgres
       DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL no .env (conexão do Supabase)}
       DATABASE_SSL: ${DATABASE_SSL:-}
+      # Pool de conexões. (POOL_SIZE+MAX_OVERFLOW) × WEB_CONCURRENCY tem que caber
+      # no teto do pooler Supabase em modo sessão (15 clientes) — senão EMAXCONNSESSION.
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-5}
+      DB_POOL_RECYCLE: ${DB_POOL_RECYCLE:-1800}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      # true = loga TODO SQL (debug). Default off: ligado, inunda o terminal.
+      SQL_ECHO: ${SQL_ECHO:-false}
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (>=32 chars aleatorios; nunca o placeholder do repo)}
       RODELCAR_FERNET_KEY: ${RODELCAR_FERNET_KEY:-}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}

@@ -22,6 +22,24 @@ class Settings(BaseSettings):
     # Força TLS no driver. Vazio = detecta pelo host (.supabase.co exige SSL).
     # Defina "require"/"verify-full" para forçar manualmente.
     DATABASE_SSL: str = ""
+    # Pool de conexões do SQLAlchemy. O pooler do Supabase em MODO SESSÃO (porta
+    # 5432) limita o nº de CLIENTES por papel (15 no plano free). O default do
+    # SQLAlchemy (pool_size=5 + max_overflow=10 = 15) encosta exatamente nesse
+    # teto e não sobra folga para o psql/MCP/jobs → a rajada de SSR no boot estoura
+    # `EMAXCONNSESSION`. Mantemos a soma abaixo de 15: 5+5=10 por processo.
+    # ATENÇÃO multi-worker: o teto vale por PROCESSO, então em produção a soma
+    # (DB_POOL_SIZE+DB_MAX_OVERFLOW) × WEB_CONCURRENCY tem que caber no limite do
+    # papel — ou use o pooler em MODO TRANSAÇÃO (porta 6543), que escala muito mais.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 5
+    # Recicla conexões antes que o pooler as derrube por ociosidade (s).
+    DB_POOL_RECYCLE: int = 1800
+    # Espera por uma conexão livre antes de erro (s) — sob rajada, a query AGUARDA
+    # uma conexão em vez de abrir mais um cliente e estourar o teto.
+    DB_POOL_TIMEOUT: int = 30
+    # Loga TODO SQL emitido (SQLAlchemy echo). Default desligado: ligado, inunda o
+    # terminal com milhares de linhas INFO no boot. Suba SQL_ECHO=true p/ depurar.
+    SQL_ECHO: bool = False
     JWT_SECRET: str = "dev-secret"
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 30

@@ -561,7 +561,7 @@ export function CourseDetail({
 
       {/* Premium + FAQ */}
       <section className="section-tight" style={{ paddingTop: 0 }}>
-        <div className="wrap" style={{ maxWidth: 820, marginLeft: 0 }}>
+        <div className="wrap">
           <div
             className="card blueprint"
             style={{

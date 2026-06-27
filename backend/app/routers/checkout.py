@@ -5,6 +5,8 @@ conteúdo é liberado SOMENTE pelo webhook (`/webhooks/pagamento/stripe`), nunca
 `success_url` (o redirect é só UX e pode ser forjado).
 """
 
+import hashlib
+import json
 import logging
 from decimal import Decimal
 
@@ -130,13 +132,6 @@ async def checkout_avulso(
         raise _err(409, "JA_MATRICULADO", "Você já tem acesso a este curso.")
 
     customer_id = await _ensure_customer(db, aluno)
-    # Idempotency key por (aluno, curso): fecha a janela de corrida do guard acima
-    # (a matrícula só existe após o webhook). Dois checkouts simultâneos do mesmo
-    # curso retornam a MESMA sessão (Stripe deduplica), evitando dupla cobrança.
-    # Sufixo por método: a degradação card+pix → card usa params diferentes, que
-    # exigem chaves distintas. A chave expira em 24h no Stripe; passada a compra,
-    # o guard de matrícula assume.
-    idem = f"avulso:{aluno.id}:{curso.id}"
     kwargs = dict(
         mode="payment",
         customer=customer_id,
@@ -147,11 +142,26 @@ async def checkout_avulso(
         success_url=settings.stripe_success_url + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=settings.stripe_cancel_url,
     )
+
+    # Idempotency key = (aluno, curso) + HASH dos parâmetros. Dois cliques
+    # IDÊNTICOS retornam a MESMA sessão (dedup → evita dupla cobrança na janela
+    # antes do webhook). Mas se QUALQUER parâmetro mudar (price_id após troca de
+    # preço, customer, success_url…), a chave muda — senão o Stripe recusa reusar
+    # a mesma chave com params diferentes (IdempotencyError → 502, checkout
+    # quebrado numa 2ª tentativa dentro de 24h). O método (card+pix vs card) entra
+    # no hash, então a degradação para cartão usa naturalmente outra chave.
+    def _idem_key(metodos: list[str]) -> str:
+        payload = json.dumps(
+            {**kwargs, "payment_method_types": metodos}, sort_keys=True, default=str
+        )
+        h = hashlib.sha256(payload.encode()).hexdigest()[:16]
+        return f"avulso:{aluno.id}:{curso.id}:{h}"
+
     try:
         session = await run_in_threadpool(
             stripe.checkout.Session.create,
             payment_method_types=["card", "pix"],
-            idempotency_key=f"{idem}:cardpix",
+            idempotency_key=_idem_key(["card", "pix"]),
             **kwargs,
         )
     except stripe.error.InvalidRequestError as exc:
@@ -166,7 +176,7 @@ async def checkout_avulso(
             session = await run_in_threadpool(
                 stripe.checkout.Session.create,
                 payment_method_types=["card"],
-                idempotency_key=f"{idem}:card",
+                idempotency_key=_idem_key(["card"]),
                 **kwargs,
             )
         except stripe.error.StripeError as exc2:

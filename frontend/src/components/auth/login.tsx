@@ -11,7 +11,7 @@ import { adminLogin } from "@/lib/admin-api";
 import {
   executarCompra,
   lerCompraPendente,
-  limparCompraPendente,
+  mensagemErroCompra,
 } from "@/lib/checkout-api";
 
 type Mode = "login" | "signup" | "recover";
@@ -102,10 +102,14 @@ export function Login() {
     const intent = lerCompraPendente();
     if (intent) {
       try {
-        await executarCompra(intent); // window.location → Stripe
+        await executarCompra(intent); // window.location → Stripe (sucesso sai daqui)
         return;
-      } catch {
-        limparCompraPendente(); // compra falhou; segue p/ o painel (pode tentar de novo)
+      } catch (e) {
+        // NÃO manda pro painel em silêncio: mostra o erro e mantém a intenção
+        // (o aluno pode tentar de novo). Antes, qualquer falha do checkout caía
+        // no painel e parecia "ignorou o pagamento".
+        setError(mensagemErroCompra(e));
+        return;
       }
     }
     router.push("/painel");

@@ -27,7 +27,8 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:", // thumbnails de curso vêm de CDN/Supabase arbitrário
   "font-src 'self'", // next/font auto-hospeda no build
-  "frame-src 'self' https://checkout.stripe.com https://*.tv.pandavideo.com.br",
+  // www/maps.google.com = mapa incorporado (iframe) na página de Localização.
+  "frame-src 'self' https://checkout.stripe.com https://*.tv.pandavideo.com.br https://www.google.com https://maps.google.com",
   // SDK/player fazem XHR/postMessage (player. + *.tv.); o uploader TUS (admin) é
   // uploader-*.pandavideo.com.br → tudo coberto por *.pandavideo.com.br.
   `connect-src 'self' https://*.pandavideo.com.br${apiOrigin ? " " + apiOrigin : ""}${

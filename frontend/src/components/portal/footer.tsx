@@ -35,10 +35,10 @@ const COLS: [string, FooterLink[]][] = [
   [
     "Oficina",
     [
-      { t: "Sobre a Rödelcar", soon: true },
-      { t: "Localização", soon: true },
+      { t: "Sobre a Rödelcar", href: "/sobre" },
+      { t: "Localização", href: "/localizacao" },
       { t: "Depoimentos", href: "/#prova" },
-      { t: "Contato", href: `mailto:${BRAND.email}` },
+      { t: "Contato", href: "/contato" },
     ],
   ],
 ];

@@ -738,6 +738,9 @@ h4 {
   .premium-grid {
     grid-template-columns: 1fr !important;
   }
+  .local-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 @media (max-width: 640px) {
   .wrap {

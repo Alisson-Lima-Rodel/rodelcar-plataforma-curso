@@ -75,6 +75,12 @@ export const BRAND = {
   email: "taylormec.rs@gmail.com",
   whatsapp: "(51) 9574-0655",
   whatsappLink: "https://wa.me/555195740655",
+  // Link da ficha no Google Maps (busca pelo nome + endereço da oficina).
+  mapsLink:
+    "https://www.google.com/maps/search/?api=1&query=" +
+    encodeURIComponent(
+      "RödelCar Câmbios, Rua Esperança 521, Estância Velha, Canoas - RS, 92030-500",
+    ),
   youtube: "https://www.youtube.com/@rodelcar.cambio",
   instagram: "https://www.instagram.com/rodelcar.cambios",
   threads: "https://www.threads.com/@rodelcar.cambios",

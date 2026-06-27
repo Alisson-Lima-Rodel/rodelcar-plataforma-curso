@@ -6,8 +6,8 @@ não é dígito e descarta o "55" do país quando vier com 12–13 dígitos — 
 regra do validador `telefone_br`. É best-effort: telefones legados fora do padrão
 BR (não 10/11 dígitos) são apenas reduzidos a dígitos, não descartados.
 
-Rodar uma vez:
-    docker compose run --rm --entrypoint python backend scripts/normalizar_telefones_lead.py
+Rodar uma vez (modo módulo, p/ o pacote `app` ficar no path):
+    docker compose run --rm --entrypoint python backend -m scripts.normalizar_telefones_lead
 """
 import asyncio
 

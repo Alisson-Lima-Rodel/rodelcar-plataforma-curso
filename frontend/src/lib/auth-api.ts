@@ -211,6 +211,8 @@ export interface MatriculaItem {
   cancelavel: boolean;
   cancelavel_ate: string | null;
   motivo_bloqueio: "RECURSO_CONSUMIDO" | "LIMITE_REEMBOLSOS" | null;
+  // Curso ainda à venda (ativo): habilita "Comprar" para recomprar acesso encerrado.
+  curso_disponivel: boolean;
 }
 
 export interface CancelamentoResultado {

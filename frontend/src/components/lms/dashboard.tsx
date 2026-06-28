@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getDashboard, getMatriculas } from "@/lib/auth-api";
 import { ReferralCard } from "./referral-card";
+import { useCompra } from "@/components/portal/use-compra";
 import { lmsHref } from "@/lib/lms-nav";
 import type { Kpi as KpiType } from "@/lib/student-data";
 import { Kpi } from "./kpi";
@@ -41,6 +42,8 @@ function greeting() {
 export function Dashboard() {
   const router = useRouter();
   const { aluno } = useAuth();
+  // Recompra dentro do LMS (já logado → vai direto ao checkout).
+  const { iniciarCompra, comprando } = useCompra();
   const goCurso = (id: string, slug: string) =>
     router.push(`${lmsHref(id)}?slug=${encodeURIComponent(slug)}`);
   const [hello, setHello] = useState("Olá");
@@ -335,20 +338,43 @@ export function Dashboard() {
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div
-                    className="price"
-                    style={{
-                      fontSize: "1.6rem",
-                      color: complete ? "var(--success)" : "var(--primary)",
-                    }}
-                  >
-                    {Math.round(m.progresso_percentual)}%
-                  </div>
-                  <Icon
-                    name="chevronRight"
-                    size={18}
-                    style={{ color: "var(--text-subtle)" }}
-                  />
+                  {m.status !== "ativo" && m.curso_disponivel ? (
+                    // Acesso encerrado, mas o curso ainda está à venda → recomprar.
+                    // span com stopPropagation: não dispara o onClick da trilha.
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        icon="bolt"
+                        disabled={comprando}
+                        onClick={() =>
+                          iniciarCompra(
+                            { tipo: "curso", slug: m.curso.slug },
+                            "lms",
+                          )
+                        }
+                      >
+                        {comprando ? "Abrindo..." : "Comprar"}
+                      </Button>
+                    </span>
+                  ) : (
+                    <>
+                      <div
+                        className="price"
+                        style={{
+                          fontSize: "1.6rem",
+                          color: complete ? "var(--success)" : "var(--primary)",
+                        }}
+                      >
+                        {Math.round(m.progresso_percentual)}%
+                      </div>
+                      <Icon
+                        name="chevronRight"
+                        size={18}
+                        style={{ color: "var(--text-subtle)" }}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             );

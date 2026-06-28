@@ -29,6 +29,9 @@ class MatriculaItem(BaseModel):
     # Quando NÃO é autoatendível por anti-abuso (mas seria pelo prazo): direciona
     # ao suporte. RECURSO_CONSUMIDO (>20% assistido) | LIMITE_REEMBOLSOS.
     motivo_bloqueio: str | None = None
+    # Curso ainda à venda (Curso.status == ativo): permite ao aluno com acesso
+    # encerrado/expirado recomprar (botão "Comprar" → checkout). Se inativo, sem botão.
+    curso_disponivel: bool = False
 
 
 class MatriculaListResponse(BaseModel):

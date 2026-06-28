@@ -170,6 +170,7 @@ async def listar_matriculas(
                 # só informa o motivo quando seria cancelável pelo prazo mas o
                 # anti-abuso barrou (aí a UI manda falar com o suporte).
                 motivo_bloqueio=bloqueio if (reembolsavel and bloqueio) else None,
+                curso_disponivel=mat.curso.status == StatusCurso.ativo,
             )
         )
 

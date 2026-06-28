@@ -14,6 +14,7 @@ import {
   type MatriculaItem,
 } from "@/lib/auth-api";
 import { ReviewForm } from "./review-form";
+import { useCompra } from "@/components/portal/use-compra";
 
 function fmtData(iso: string): string {
   try {
@@ -59,6 +60,8 @@ const ORIGEM_LABEL: Record<MatriculaItem["origem"], string> = {
 export function MyCourses() {
   const router = useRouter();
   const qc = useQueryClient();
+  // Recompra dentro do LMS (já logado → vai direto ao checkout).
+  const { iniciarCompra, comprando } = useCompra();
   const [aviso, setAviso] = useState<{
     tipo: "ok" | "erro";
     msg: string;
@@ -153,7 +156,9 @@ export function MyCourses() {
 
       {vigentes.length === 0 ? (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
-          <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum curso vigente</p>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>
+            Nenhum curso vigente
+          </p>
           <p className="muted" style={{ marginBottom: 14 }}>
             Você não tem cursos vigentes no momento. Explore o catálogo sem sair
             da sua área.
@@ -259,6 +264,23 @@ export function MyCourses() {
                   <span className="tag-mono">
                     expirou {fmtData(m.data_expiracao)}
                   </span>
+                  {m.curso_disponivel && (
+                    // Curso ainda à venda → recomprar acesso encerrado.
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon="bolt"
+                      disabled={comprando}
+                      onClick={() =>
+                        iniciarCompra(
+                          { tipo: "curso", slug: m.curso.slug },
+                          "lms",
+                        )
+                      }
+                    >
+                      {comprando ? "Abrindo..." : "Comprar"}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

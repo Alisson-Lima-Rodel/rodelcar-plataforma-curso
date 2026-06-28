@@ -26,9 +26,6 @@ export default async function HomePage() {
       getGoogleReviews(),
       getTurmasMidia(),
     ]);
-  // Card Premium vende a assinatura anual (acesso total ao catálogo).
-  const planoAnual =
-    planos.find((p) => p.intervalo === "anual") ?? planos[0] ?? null;
   return (
     <main>
       <Hero />
@@ -38,7 +35,7 @@ export default async function HomePage() {
         google={google}
       />
       <Turmas photos={turmas.length ? turmas : undefined} />
-      <Vitrine courses={courses} planoAnual={planoAnual} />
+      <Vitrine courses={courses} planos={planos} />
     </main>
   );
 }

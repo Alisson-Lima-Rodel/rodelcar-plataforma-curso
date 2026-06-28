@@ -16,7 +16,14 @@ _INSECURE_DEFAULTS = {
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # `.env` da raiz do projeto (../.env quando rodando de dentro de backend/) e,
+    # se existir, um backend/.env local (este vence). Sem isto, `uvicorn` rodado
+    # em backend/ não achava o .env (que fica na raiz) e caía no default
+    # localhost:5432. Em Docker/produção as variáveis vêm do ambiente (têm
+    # precedência sobre o arquivo), então isto não altera o deploy.
+    model_config = SettingsConfigDict(
+        env_file=("../.env", ".env"), extra="ignore"
+    )
 
     DATABASE_URL: str = "postgresql+asyncpg://rodelcar:rodelcar@localhost:5432/rodelcar"
     # Força TLS no driver. Vazio = detecta pelo host (.supabase.co exige SSL).

@@ -429,6 +429,7 @@ async def dashboard(
             titulo=aula.titulo,
             curso_slug=curso.slug,
             percentual=float(prog.percentual),
+            panda_external_id=aula.panda_external_id,
         )
 
     # Alertas: matrículas ativas expirando em ≤ 15 dias

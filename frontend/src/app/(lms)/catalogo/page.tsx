@@ -6,9 +6,7 @@ import { getCursos, getPlanos } from "@/lib/api";
  *  novo (exceção do item 6.2). */
 export default async function CatalogoLmsPage() {
   const [courses, planos] = await Promise.all([getCursos(), getPlanos()]);
-  const planoAnual =
-    planos.find((p) => p.intervalo === "anual") ?? planos[0] ?? null;
   return (
-    <AllCourses courses={courses} planoAnual={planoAnual} contexto="lms" />
+    <AllCourses courses={courses} planos={planos} contexto="lms" />
   );
 }

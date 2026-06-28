@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/ui/icon";
 import { activeLmsId } from "@/lib/lms-nav";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -28,10 +28,13 @@ export function LmsShell({ children }: { children: ReactNode }) {
   const { status, aluno, logout } = useAuth();
   const t = TITLES[activeLmsId(pathname)] ?? TITLES.dashboard;
   const [navOpen, setNavOpen] = useState(false);
+  // Durante o "Sair" vamos DIRETO ao site público — o guard abaixo não deve
+  // mandar para /login nesse intervalo (senão pisca o login antes de ir para /).
+  const saindo = useRef(false);
 
-  // Guarda de rota: sem sessão → manda pro login.
+  // Guarda de rota: sem sessão → manda pro login (exceto durante o logout).
   useEffect(() => {
-    if (status === "unauthed") router.replace("/login");
+    if (status === "unauthed" && !saindo.current) router.replace("/login");
   }, [status, router]);
 
   // Fecha a gaveta ao trocar de rota e trava o scroll do corpo enquanto aberta.
@@ -63,8 +66,10 @@ export function LmsShell({ children }: { children: ReactNode }) {
   }
 
   const sair = async () => {
+    saindo.current = true; // impede o guard de piscar /login
     await logout();
-    router.replace("/login");
+    // Sair leva DIRETO ao site público (não ao /login). Navegação "dura" limpa tudo.
+    window.location.assign("/");
   };
 
   return (

@@ -15,6 +15,21 @@ import { lmsHref } from "@/lib/lms-nav";
 import type { Kpi as KpiType } from "@/lib/student-data";
 import { Kpi } from "./kpi";
 
+// Capa da aula = preview do vídeo no Panda (mesmo CDN do player). Derivada do
+// embed base (NEXT_PUBLIC_PANDA_EMBED_BASE: player-vz-XXXX.tv… → cdn/vz-XXXX) +
+// o external_id da aula. Sem env/id, cai no placeholder.
+const PANDA_BASE = process.env.NEXT_PUBLIC_PANDA_EMBED_BASE ?? "";
+function capaAula(externalId?: string | null): string | null {
+  if (!externalId || !PANDA_BASE) return null;
+  try {
+    const host = new URL(PANDA_BASE).host;
+    const vz = host.split(".")[0].replace(/^player-/, "");
+    return `https://cdn.pandavideo.com/${vz}/${externalId}/preview.webp`;
+  } catch {
+    return null;
+  }
+}
+
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return "Bom dia";
@@ -41,6 +56,7 @@ export function Dashboard() {
 
   const first = (aluno?.nome ?? "").split(" ")[0] || "aluno";
   const dash = dashQ.data;
+  const capa = capaAula(dash?.ultima_aula?.panda_external_id);
   const mats = matQ.data?.items ?? [];
   const progressoMedio = mats.length
     ? Math.round(
@@ -163,12 +179,19 @@ export function Dashboard() {
               borderRadius: 0,
               border: "none",
               borderRight: "1px solid var(--border)",
+              ...(capa
+                ? {
+                    backgroundImage: `url("${capa}")`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }
+                : {}),
             }}
           >
             <div className="play-btn">
               <Icon name="play" size={22} />
             </div>
-            <span className="thumb-label">[ aula · 16:9 ]</span>
+            {!capa && <span className="thumb-label">[ aula · 16:9 ]</span>}
           </div>
           <div
             style={{

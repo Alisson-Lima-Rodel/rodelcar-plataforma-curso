@@ -68,6 +68,9 @@ class UltimaAula(BaseModel):
     titulo: str
     curso_slug: str
     percentual: float
+    # Id do embed do Panda (video_external_id) — o front monta a capa (preview)
+    # da aula no card "Retomar de onde parou". None se a aula ainda não sincronizou.
+    panda_external_id: str | None = None
 
 
 class Alerta(BaseModel):

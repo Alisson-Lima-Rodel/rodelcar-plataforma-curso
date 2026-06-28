@@ -14,11 +14,11 @@ import { useCompra, type CompraContexto } from "./use-compra";
 
 export function AllCourses({
   courses,
-  planoAnual,
+  planos,
   contexto = "publico",
 }: {
   courses: Course[];
-  planoAnual: PlanoPublico | null;
+  planos: PlanoPublico[];
   // "lms" = catálogo dentro da Área do Aluno: compra direto (sem novo login).
   contexto?: CompraContexto;
 }) {
@@ -26,21 +26,27 @@ export function AllCourses({
   const { iniciarCompra, comprando } = useCompra();
   const [filter, setFilter] = useState("Todos");
 
+  // Plano em destaque no card (anual, ou o 1º ativo); os DEMAIS ativos viram uma
+  // lista — dinâmico pelo que está cadastrado/ativo.
+  const planoAnual =
+    planos.find((p) => p.intervalo === "anual") ?? planos[0] ?? null;
+  const outrosPlanos = planos.filter((p) => p.id !== planoAnual?.id);
   // Preço real vem do plano (backend); o estático é só fallback de exibição.
   const precoPremium = planoAnual?.preco ?? PREMIUM.price;
   const parcelaPremium = `12x de R$ ${(precoPremium / 12)
     .toFixed(2)
     .replace(".", ",")}`;
-  const assinarPremium = () => {
-    if (!planoAnual) {
+  const assinarPlanoPub = (plano: PlanoPublico | null) => {
+    if (!plano) {
       showToast({
         title: "Indisponível no momento",
         msg: "A Formação Completa está temporariamente indisponível.",
       });
       return;
     }
-    iniciarCompra({ tipo: "plano", planoId: planoAnual.id }, contexto);
+    iniciarCompra({ tipo: "plano", planoId: plano.id }, contexto);
   };
+  const assinarPremium = () => assinarPlanoPub(planoAnual);
 
   const systems = useMemo(() => {
     const counts = new Map<string, number>();
@@ -164,6 +170,63 @@ export function AllCourses({
                 </div>
               </div>
             </Reveal>
+          </div>
+        </section>
+      )}
+
+      {/* Outros planos ativos (dinâmico pelo cadastro do admin) */}
+      {outrosPlanos.length > 0 && (
+        <section
+          className="section-tight"
+          style={{ paddingTop: 20, paddingBottom: 0 }}
+        >
+          <div className="wrap">
+            <div
+              className="flex center between"
+              style={{ marginBottom: 12, gap: 12, flexWrap: "wrap" }}
+            >
+              <h3 style={{ fontSize: "1.2rem" }}>Outros planos</h3>
+              <span className="tag-mono">acesso total ao catálogo</span>
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {outrosPlanos.map((p) => (
+                <div
+                  key={p.id}
+                  className="card flex center between"
+                  style={{ padding: "16px 20px", gap: 16, flexWrap: "wrap" }}
+                >
+                  <div className="flex center gap-3">
+                    <Badge variant="premium" icon="award">
+                      {p.nome}
+                    </Badge>
+                    <span className="tag-mono">
+                      {p.intervalo === "mensal"
+                        ? "cobrança mensal"
+                        : p.intervalo === "anual"
+                          ? "cobrança anual"
+                          : p.intervalo}
+                    </span>
+                  </div>
+                  <div className="flex center gap-4" style={{ flexWrap: "wrap" }}>
+                    <span className="price" style={{ fontSize: "1.5rem" }}>
+                      R$ {p.preco.toLocaleString("pt-BR")}
+                      <span className="tag-mono" style={{ marginLeft: 6 }}>
+                        /{p.intervalo === "mensal" ? "mês" : "ano"}
+                      </span>
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon="bolt"
+                      onClick={() => assinarPlanoPub(p)}
+                      disabled={comprando}
+                    >
+                      Assinar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}

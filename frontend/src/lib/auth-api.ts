@@ -188,6 +188,7 @@ export interface DashboardData {
     titulo: string;
     curso_slug: string;
     percentual: number;
+    panda_external_id: string | null;
   } | null;
   alertas: { tipo: string; nivel: string; mensagem: string }[];
   resumo: {

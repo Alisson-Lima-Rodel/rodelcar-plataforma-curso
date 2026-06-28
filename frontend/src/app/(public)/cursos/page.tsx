@@ -13,9 +13,6 @@ export const metadata: Metadata = {
 
 export default async function CursosPage() {
   const [courses, planos] = await Promise.all([getCursos(), getPlanos()]);
-  // Card "Formação Completa" usa a assinatura anual (acesso total ao catálogo).
-  const planoAnual =
-    planos.find((p) => p.intervalo === "anual") ?? planos[0] ?? null;
   const lista = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -29,7 +26,7 @@ export default async function CursosPage() {
   return (
     <main>
       <JsonLd data={lista} />
-      <AllCourses courses={courses} planoAnual={planoAnual} />
+      <AllCourses courses={courses} planos={planos} />
     </main>
   );
 }

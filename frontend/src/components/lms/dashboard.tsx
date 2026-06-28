@@ -15,16 +15,17 @@ import { lmsHref } from "@/lib/lms-nav";
 import type { Kpi as KpiType } from "@/lib/student-data";
 import { Kpi } from "./kpi";
 
-// Capa da aula = preview do vídeo no Panda (mesmo CDN do player). Derivada do
-// embed base (NEXT_PUBLIC_PANDA_EMBED_BASE: player-vz-XXXX.tv… → cdn/vz-XXXX) +
-// o external_id da aula. Sem env/id, cai no placeholder.
+// Capa da aula = thumbnail ESTÁTICA do vídeo no Panda (não o preview animado),
+// mesmo CDN do player. Derivada do embed base (NEXT_PUBLIC_PANDA_EMBED_BASE:
+// player-vz-XXXX.tv… → cdn/vz-XXXX) + o external_id da aula. Sem env/id, cai no
+// placeholder.
 const PANDA_BASE = process.env.NEXT_PUBLIC_PANDA_EMBED_BASE ?? "";
 function capaAula(externalId?: string | null): string | null {
   if (!externalId || !PANDA_BASE) return null;
   try {
     const host = new URL(PANDA_BASE).host;
     const vz = host.split(".")[0].replace(/^player-/, "");
-    return `https://cdn.pandavideo.com/${vz}/${externalId}/preview.webp`;
+    return `https://cdn.pandavideo.com/${vz}/${externalId}/thumbnail.jpg`;
   } catch {
     return null;
   }
@@ -263,7 +264,9 @@ export function Dashboard() {
       </div>
       {mats.length === 0 ? (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
-          <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum curso vigente</p>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>
+            Nenhum curso vigente
+          </p>
           <p className="muted" style={{ marginBottom: 14 }}>
             Você ainda não tem um curso ativo. Explore o catálogo e comece hoje.
           </p>

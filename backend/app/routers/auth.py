@@ -89,7 +89,9 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     if conta_login_bloqueada(conta):
         raise _err(429, "RATE_LIMITED", "Muitas tentativas para esta conta. Aguarde um instante.")
 
-    result = await db.execute(select(Aluno).where(Aluno.email == body.email))
+    # Busca case-insensitive: e-mails antigos podem não estar normalizados. Casa
+    # com a chave do rate-limit (já em minúsculas) e evita login falhar por caixa.
+    result = await db.execute(select(Aluno).where(func.lower(Aluno.email) == conta))
     aluno = result.scalar_one_or_none()
 
     # Equaliza o tempo de resposta quando o e-mail não existe (anti-enumeração).
@@ -113,7 +115,12 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 @limiter.limit(auth_limit)
 async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Cria a conta do aluno e já devolve o par de tokens (auto-login)."""
-    existe = await db.scalar(select(Aluno.id).where(Aluno.email == body.email))
+    # Normaliza o e-mail (minúsculas) p/ evitar contas duplicadas só por caixa e
+    # casar com a busca case-insensitive do login.
+    email_norm = body.email.strip().lower()
+    existe = await db.scalar(
+        select(Aluno.id).where(func.lower(Aluno.email) == email_norm)
+    )
     if existe is not None:
         raise _err(409, "EMAIL_JA_CADASTRADO", "Já existe uma conta com esse e-mail.")
 
@@ -136,7 +143,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     for _ in range(3):
         aluno = Aluno(
             nome=body.nome,
-            email=body.email,
+            email=email_norm,
             telefone=body.telefone,  # WhatsApp (normalizado no schema)
             senha_hash=senha_hash,
             codigo_indicacao=await codigo_unico_indicacao(db),
@@ -147,7 +154,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
             break
         except IntegrityError:
             await db.rollback()
-            if await db.scalar(select(Aluno.id).where(Aluno.email == body.email)):
+            if await db.scalar(select(Aluno.id).where(func.lower(Aluno.email) == email_norm)):
                 raise _err(409, "EMAIL_JA_CADASTRADO", "Já existe uma conta com esse e-mail.")
             aluno = None  # colisão de código → tenta de novo
     if aluno is None:  # pragma: no cover (colisão repetida é praticamente impossível)

@@ -94,11 +94,15 @@ async def criar_upload(
     return {"video_id": vid, "upload_url": location}
 
 
-async def obter_video(video_id: str) -> dict:
-    """GET /videos/{id} — propriedades (length, thumbnail, status, subtitles…)."""
+async def obter_video(video_id: str, *, timeout: float = 15) -> dict:
+    """GET /videos/{id} — propriedades (length, thumbnail, status, subtitles…).
+
+    `timeout` curto (ex.: 4s) quando chamado no caminho do ALUNO (lazy-heal do
+    embed) para não pendurar a resposta da aula se o Panda estiver lento/fora.
+    """
     _exigir_chave()
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(
                 f"{API_BASE}/videos/{video_id}", headers=_auth_headers()
             )

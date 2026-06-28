@@ -101,7 +101,7 @@ async def obter_aula(
     embed_id = aula.panda_external_id
     if not embed_id and aula.panda_video_id and settings.panda_ativo:
         try:
-            video = await panda.obter_video(aula.panda_video_id)
+            video = await panda.obter_video(aula.panda_video_id, timeout=4)
             ext = panda.external_id(video)
             if ext:
                 aula.panda_external_id = ext

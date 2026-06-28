@@ -67,9 +67,12 @@ export function LmsShell({ children }: { children: ReactNode }) {
 
   const sair = async () => {
     saindo.current = true; // impede o guard de piscar /login
-    await logout();
-    // Sair leva DIRETO ao site público (não ao /login). Navegação "dura" limpa tudo.
-    window.location.assign("/");
+    try {
+      await logout();
+    } finally {
+      // Vai DIRETO ao site público mesmo se o logout falhar (navegação "dura").
+      window.location.assign("/");
+    }
   };
 
   return (

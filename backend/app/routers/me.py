@@ -411,7 +411,12 @@ async def dashboard(
             .join(Modulo, Aula.modulo_id == Modulo.id)
             .join(Curso, Modulo.curso_id == Curso.id)
             .join(Matricula, Progresso.matricula_id == Matricula.id)
-            .where(Matricula.aluno_id == aluno.id)
+            # Só matrícula ATIVA: não oferecer "retomar" um curso estornado/
+            # expirado (abriria o player e bateria no 403 da aula).
+            .where(
+                Matricula.aluno_id == aluno.id,
+                Matricula.status == StatusMatricula.ativo,
+            )
             .order_by(Progresso.atualizado_em.desc())
             .limit(1)
         )

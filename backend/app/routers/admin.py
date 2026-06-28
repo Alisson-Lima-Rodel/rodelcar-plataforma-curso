@@ -920,8 +920,16 @@ async def sincronizar_aula_panda(
     except panda.PandaIndisponivel as exc:
         raise _err(502, "PANDA_ERRO", str(exc))
     dur = panda.duracao_segundos(video)
+    ext = panda.external_id(video)
+    mudou = False
     if dur is not None and dur != a.duracao_segundos:
         a.duracao_segundos = dur
+        mudou = True
+    # Id do embed (?v=): difere do id da API. Sem ele, o player não toca.
+    if ext and ext != a.panda_external_id:
+        a.panda_external_id = ext
+        mudou = True
+    if mudou:
         await db.commit()
     return AulaSyncResponse(
         panda_video_id=a.panda_video_id,

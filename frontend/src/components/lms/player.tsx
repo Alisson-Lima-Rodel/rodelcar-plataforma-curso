@@ -285,17 +285,25 @@ export function Player() {
     setQuerySlug(new URLSearchParams(window.location.search).get("slug"));
   }, []);
 
+  // Matrículas sempre carregadas (cache compartilhado com a sidebar): além de
+  // derivar o curso padrão, decidem se o curso aberto está ATIVO — curso
+  // estornado/expirado NÃO abre o player (barramos antes do 403 da aula).
   const matQ = useQuery({
     queryKey: ["me", "matriculas"],
     queryFn: getMatriculas,
-    enabled: querySlug === null,
   });
-  const slug = querySlug || matQ.data?.items?.[0]?.curso.slug || null;
+  const items = matQ.data?.items ?? [];
+  // slug vem de ?slug=; na falta, usa a 1ª matrícula ATIVA (nunca uma inativa).
+  const slug =
+    querySlug || items.find((m) => m.status === "ativo")?.curso.slug || null;
+  const currentMat = slug ? items.find((m) => m.curso.slug === slug) : null;
+  // Curso aberto sem acesso vigente (ex.: reembolsado): não tenta carregar.
+  const blocked = !!currentMat && currentMat.status !== "ativo";
 
   const playerQ = useQuery<PlayerCurso>({
     queryKey: ["me", "player", slug],
     queryFn: () => getCursoPlayer(slug as string),
-    enabled: !!slug,
+    enabled: !!slug && !blocked,
   });
   const data = playerQ.data;
 
@@ -338,6 +346,20 @@ export function Player() {
     },
   });
 
+  // Desmarcar conclusão (toggle): volta a aula para "pendente". O percentual é
+  // monotônico no backend (greatest) — não regride; só a flag `concluida` volta a
+  // false, então o check/badge/contagem revertem.
+  const unmarkM = useMutation({
+    mutationFn: (aulaId: string) => salvarProgresso(aulaId, 0, false),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["me", "player", slug] }),
+        qc.invalidateQueries({ queryKey: ["me", "dashboard"] }),
+        qc.invalidateQueries({ queryKey: ["me", "matriculas"] }),
+      ]);
+    },
+  });
+
   // Auto-save vindo do player (timeupdate/pause/ended). Só invalida o resto da UI
   // quando a aula vira "concluída" — pings de progresso não disparam refetch.
   const progressM = useMutation({
@@ -367,14 +389,54 @@ export function Player() {
   };
 
   // ── Estados de carga / vazio / erro ─────────────────────────────────────────
-  if (querySlug === null && matQ.isLoading) {
+  if (querySlug === undefined || matQ.isLoading) {
     return (
       <div className="content">
         <span className="tag-mono muted">Carregando seu curso…</span>
       </div>
     );
   }
+  // Curso aberto está inativo (estornado/expirado): orienta em vez de quebrar.
+  if (blocked) {
+    return (
+      <StateMessage title="Este curso não está ativo">
+        <p className="muted" style={{ fontSize: "0.93rem", marginBottom: 14 }}>
+          O acesso a este curso foi encerrado (cancelado ou expirado). Veja em
+          Meus cursos o que está ativo, ou faça uma nova compra para voltar a
+          assistir.
+        </p>
+        <Button
+          variant="primary"
+          icon="book"
+          onClick={() => router.push(lmsHref("courses"))}
+        >
+          Ver meus cursos
+        </Button>
+      </StateMessage>
+    );
+  }
   if (!slug) {
+    // Tem matrículas, mas nenhuma ativa → Meus cursos; senão, catálogo.
+    if (items.length > 0) {
+      return (
+        <StateMessage title="Nenhum curso ativo">
+          <p
+            className="muted"
+            style={{ fontSize: "0.93rem", marginBottom: 14 }}
+          >
+            Seus acessos estão encerrados. Veja em Meus cursos o que está ativo,
+            ou renove para continuar.
+          </p>
+          <Button
+            variant="primary"
+            icon="book"
+            onClick={() => router.push(lmsHref("courses"))}
+          >
+            Ver meus cursos
+          </Button>
+        </StateMessage>
+      );
+    }
     return (
       <StateMessage title="Nenhum curso vigente">
         <p className="muted" style={{ fontSize: "0.93rem", marginBottom: 14 }}>
@@ -475,9 +537,22 @@ export function Player() {
                   {currentLesson?.duracao_label ?? "—"}
                 </Badge>
                 {currentLesson?.concluida && (
-                  <Badge variant="success" icon="check">
-                    Concluída
-                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => unmarkM.mutate(currentLesson.id)}
+                    disabled={unmarkM.isPending}
+                    title="Clique para marcar como pendente"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Badge variant="success" icon="check">
+                      {unmarkM.isPending ? "Salvando…" : "Concluída"}
+                    </Badge>
+                  </button>
                 )}
               </div>
             </div>

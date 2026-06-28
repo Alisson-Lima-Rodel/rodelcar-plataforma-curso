@@ -22,7 +22,7 @@ function fmtShort(iso: string): string {
   }
 }
 
-const ITEMS: { id: string; label: string; icon: string }[] = [
+const ITEMS: { id: string; label: string; icon: string; href?: string }[] = [
   { id: "dashboard", label: "Painel", icon: "gauge" },
   { id: "player", label: "Continuar curso", icon: "play" },
   { id: "courses", label: "Meus cursos", icon: "book" },
@@ -45,11 +45,25 @@ export function Sidebar({
     queryKey: ["me", "matriculas"],
     queryFn: getMatriculas,
   });
-  const ativas = (matQ.data?.items ?? []).filter((m) => m.status === "ativo");
+  const mats = matQ.data?.items ?? [];
+  const ativas = mats.filter((m) => m.status === "ativo");
   // vigência exibida = a que expira primeiro
   const proxima = ativas.length
     ? ativas.reduce((a, b) => (a.dias_restantes <= b.dias_restantes ? a : b))
     : null;
+
+  // Navegação dependente das matrículas:
+  // • sem nenhuma compra → só "Explorar cursos" (caminho para comprar);
+  // • "Continuar curso" abre o 1º curso ATIVO; sem ativo, cai em "Meus cursos"
+  //   (não abre o player de um curso estornado/expirado e bater no 403).
+  const continuarHref = proxima
+    ? `/curso?slug=${encodeURIComponent(proxima.curso.slug)}`
+    : lmsHref("courses");
+  const navItems = mats.length
+    ? ITEMS.map((it) =>
+        it.id === "player" ? { ...it, href: continuarHref } : it,
+      )
+    : ITEMS.filter((it) => it.id === "catalog");
 
   return (
     <aside className="sidebar">
@@ -63,10 +77,10 @@ export function Sidebar({
       </Link>
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {ITEMS.map((it) => (
+        {navItems.map((it) => (
           <Link
             key={it.id}
-            href={lmsHref(it.id)}
+            href={it.href ?? lmsHref(it.id)}
             className={`nav-item ${active === it.id ? "active" : ""}`.trim()}
             onClick={onNavigate}
           >

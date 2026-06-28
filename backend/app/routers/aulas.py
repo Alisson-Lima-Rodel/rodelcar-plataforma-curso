@@ -95,6 +95,21 @@ async def obter_aula(
     # Token DRM por sessão (None se DRM desligado → embed público).
     token = panda.assinar_drm_token()
 
+    # Id do EMBED (?v=): o player usa o video_external_id do Panda, que DIFERE do
+    # panda_video_id (id da REST API). Resolve e cacheia 1x — persiste no commit
+    # abaixo (junto do Evento); se o Panda falhar, cai no panda_video_id.
+    embed_id = aula.panda_external_id
+    if not embed_id and aula.panda_video_id and settings.panda_ativo:
+        try:
+            video = await panda.obter_video(aula.panda_video_id)
+            ext = panda.external_id(video)
+            if ext:
+                aula.panda_external_id = ext
+                embed_id = ext
+        except panda.PandaIndisponivel:
+            pass
+    embed_id = embed_id or aula.panda_video_id
+
     # Registra a aula assistida (alimenta o gráfico diário da visão geral).
     db.add(Evento(
         aluno_id=aluno.id,
@@ -107,7 +122,7 @@ async def obter_aula(
         id=aula.id,
         titulo=aula.titulo,
         modulo_id=aula.modulo_id,
-        panda_video_id=aula.panda_video_id,
+        panda_video_id=embed_id,
         duracao_segundos=aula.duracao_segundos,
         materiais=[
             MaterialResumo(id=m.id, nome=m.nome, url_pdf=m.url_pdf)

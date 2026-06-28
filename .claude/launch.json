@@ -1,19 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "frontend",
-        "run",
-        "start",
-        "--",
-        "-p",
-        "3000"
-      ],
-      "port": 3000
-    }
+    { "name": "frontend", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix","frontend","run","start","--","-p","3000"], "port": 3000 },
+    { "name": "frontend-dev", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix","frontend","run","dev"], "autoPort": true }
   ]
 }

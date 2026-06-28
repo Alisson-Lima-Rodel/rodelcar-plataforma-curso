@@ -264,7 +264,9 @@ export function Dashboard() {
                 key={m.id}
                 className="track"
                 onClick={() =>
-                  goCurso(complete ? "certificate" : "player", m.curso.slug)
+                  m.status !== "ativo"
+                    ? router.push(lmsHref("courses"))
+                    : goCurso(complete ? "certificate" : "player", m.curso.slug)
                 }
               >
                 <span

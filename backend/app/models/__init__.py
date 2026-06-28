@@ -291,6 +291,10 @@ class Aula(Base):
     modulo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("modulos.id"))
     titulo: Mapped[str] = mapped_column(String(200))
     panda_video_id: Mapped[str | None] = mapped_column(String(120))
+    # Id do EMBED (video_external_id do Panda) — vai no ?v= do player. DIFERE do
+    # panda_video_id (id da REST API, usado em sync/retenção). Sem ele, o player
+    # embeda o id errado e mostra falha. Preenchido no sync/lazy a partir da API.
+    panda_external_id: Mapped[str | None] = mapped_column(String(120))
     duracao_segundos: Mapped[int] = mapped_column(Integer, default=0)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     # Aula liberada como amostra (preview) na página de venda, sem compra. O vídeo

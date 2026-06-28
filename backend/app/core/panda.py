@@ -199,6 +199,15 @@ def duracao_segundos(video: dict) -> int | None:
     return int(v) if isinstance(v, (int, float)) else None
 
 
+def external_id(video: dict) -> str | None:
+    """`video_external_id` — o id que o EMBED usa no `?v=` (difere do id da API).
+
+    O player só toca com este id; o id da API (`id`) serve às chamadas REST.
+    """
+    v = video.get("video_external_id")
+    return str(v) if v else None
+
+
 def thumbnail_url(video: dict) -> str | None:
     return video.get("thumbnail") or None
 

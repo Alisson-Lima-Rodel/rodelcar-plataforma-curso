@@ -180,7 +180,8 @@ async def aulas_preview(
         AulaPreview(
             id=a.id,
             titulo=a.titulo,
-            panda_video_id=a.panda_video_id,
+            # Embed usa o video_external_id (?v=); cai no id da API se não sincronizado.
+            panda_video_id=a.panda_external_id or a.panda_video_id,
             player_token=token,
             drm_group_id=grupo,
         )

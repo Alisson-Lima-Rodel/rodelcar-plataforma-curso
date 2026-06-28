@@ -273,6 +273,7 @@ export interface PlayerCurso {
   status: string;
   progresso_percentual: number;
   concluido: boolean;
+  cert_bloqueio: string | null;
   certificado: { codigo: string; emitido_em: string } | null;
   modulos: PlayerModulo[];
 }

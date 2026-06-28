@@ -113,6 +113,17 @@ export function Login() {
     }
   }, [temCompra, modoConfirmar, status, aluno]);
 
+  // Fallback anti-travamento: se a auth ficar presa em "loading" (rede lenta),
+  // após 8s mostra o formulário em vez de spinner infinito (o aluno loga normal).
+  useEffect(() => {
+    if (!temCompra || modoConfirmar !== null) return;
+    const t = setTimeout(
+      () => setModoConfirmar((v) => (v === null ? false : v)),
+      8000,
+    );
+    return () => clearTimeout(t);
+  }, [temCompra, modoConfirmar]);
+
   /** Pós-login do aluno: retoma a compra pendente (redireciona p/ a Stripe) ou
    * segue para o painel. */
   const concluirEntrada = async () => {

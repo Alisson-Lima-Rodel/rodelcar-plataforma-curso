@@ -624,6 +624,28 @@ export function Player() {
             </div>
           )}
 
+          {/* aviso quando o certificado está bloqueado por algo não-óbvio
+              (ex.: aula sem duração cadastrada) — em vez de só "não concluído" */}
+          {!data.concluido && data.cert_bloqueio && (
+            <div
+              className="flex center gap-3"
+              style={{
+                margin: "18px 0",
+                padding: "14px 18px",
+                borderRadius: 12,
+                background: "rgba(245,158,11,0.1)",
+                border: "1px solid rgba(245,158,11,0.4)",
+              }}
+            >
+              <Icon
+                name="clock"
+                size={20}
+                style={{ color: "var(--warning)", flexShrink: 0 }}
+              />
+              <span style={{ fontSize: "0.92rem" }}>{data.cert_bloqueio}</span>
+            </div>
+          )}
+
           {/* tabs */}
           <div className="tabs-bar" style={{ marginTop: 24 }}>
             {tabs.map((t) => (

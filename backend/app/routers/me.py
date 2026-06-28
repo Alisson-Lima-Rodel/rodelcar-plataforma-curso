@@ -628,6 +628,21 @@ async def player_curso(
         and quizzes_ok
     )
 
+    # Bloqueio "não óbvio" do certificado: aluno fez tudo, mas há aula sem duração
+    # cadastrada (oversight do admin) — a UI mostra um aviso claro em vez de só
+    # "não concluído". Progresso normal (assistir/quiz) NÃO gera mensagem.
+    cert_bloqueio = None
+    if (
+        matricula.status == StatusMatricula.ativo
+        and total > 0
+        and not concluido
+        and tem_aula_sem_duracao
+    ):
+        cert_bloqueio = (
+            "Uma aula está sem duração cadastrada — o certificado só libera após "
+            "esse ajuste. Fale com o suporte."
+        )
+
     cert = (
         await db.execute(
             select(Certificado).where(Certificado.matricula_id == matricula.id)
@@ -641,6 +656,7 @@ async def player_curso(
         status=matricula.status,
         progresso_percentual=pct_curso,
         concluido=concluido,
+        cert_bloqueio=cert_bloqueio,
         certificado=(
             CertificadoResumo(codigo=cert.codigo_verificacao, emitido_em=cert.emitido_em)
             if cert

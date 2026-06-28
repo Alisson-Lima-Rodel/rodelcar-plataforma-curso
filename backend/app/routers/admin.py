@@ -44,6 +44,7 @@ from app.core.stripe_coupons import (
 )
 from app.models import (
     Admin,
+    AdminRefreshToken,
     Alternativa,
     Aluno,
     Aula,
@@ -155,6 +156,53 @@ def _err(status: int, code: str, message: str) -> HTTPException:
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+async def _emitir_admin_tokens(
+    admin_id: str, token_version: int, db: AsyncSession
+) -> AdminTokenResponse:
+    """Emite access+refresh do admin e persiste o refresh (jti) p/ rotação/revogação
+    — STATEFUL, mesma regra do aluno (_emitir_tokens em auth.py)."""
+    access = create_admin_token(admin_id, token_version)
+    refresh_token, jti = create_admin_refresh_token(admin_id)
+    db.add(
+        AdminRefreshToken(
+            admin_id=uuid.UUID(admin_id),
+            jti=uuid.UUID(jti),
+            expira_em=datetime.now(timezone.utc)
+            + timedelta(days=settings.JWT_ADMIN_REFRESH_EXPIRE_DAYS),
+        )
+    )
+    await db.commit()
+    return AdminTokenResponse(
+        access_token=access,
+        refresh_token=refresh_token,
+        expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
+    )
+
+
+async def _revogar_familia_admin(
+    db: AsyncSession, admin_uuid: uuid.UUID, agora: datetime
+) -> None:
+    """Reuso/roubo de refresh: revoga TODA a família do admin e incrementa
+    token_version (mata também os access vivos). Commita. Espelha o aluno."""
+    await db.execute(
+        update(AdminRefreshToken)
+        .where(
+            AdminRefreshToken.admin_id == admin_uuid,
+            AdminRefreshToken.revogado.is_(False),
+        )
+        .values(revogado=True, revogado_em=agora)
+    )
+    await db.execute(
+        update(Admin).where(Admin.id == admin_uuid)
+        .values(token_version=Admin.token_version + 1)
+    )
+    await db.commit()
+
+
 @router.post("/auth/login", response_model=AdminTokenResponse)
 @limiter.limit(auth_limit)
 async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
@@ -166,12 +214,7 @@ async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSessio
     if not admin.ativo or not verify_password(body.senha, admin.senha_hash):
         raise _err(401, "CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos.")
     admin.ultimo_acesso = datetime.now(timezone.utc)
-    await db.commit()
-    return AdminTokenResponse(
-        access_token=create_admin_token(str(admin.id), admin.token_version),
-        refresh_token=create_admin_refresh_token(str(admin.id), admin.token_version),
-        expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
-    )
+    return await _emitir_admin_tokens(str(admin.id), admin.token_version, db)
 
 
 @router.post("/auth/refresh", response_model=AdminTokenResponse)
@@ -179,26 +222,54 @@ async def admin_login(request: Request, body: AdminLoginRequest, db: AsyncSessio
 async def admin_refresh(
     request: Request, body: AdminRefreshRequest, db: AsyncSession = Depends(get_db)
 ):
-    """Renova o access do painel a partir do refresh (sessão dura mais que os 30
-    min do access; sem isso, os menus passavam a falhar "depois de um tempo").
-    Inválido/expirado/revogado (token_version) → 401, e o front manda re-logar."""
-    # Conversões dentro do try: sub ausente (KeyError) ou não-UUID (ValueError)
-    # viram 401 limpo, não 500 (espelha o fluxo do aluno em auth.py).
+    """Renova o access a partir do refresh STATEFUL (jti) — mesma regra segura do
+    aluno: rotação com compare-and-swap + detecção de reuso (revoga a família e
+    bumpa token_version). Inválido/expirado/reutilizado → 401 e re-login."""
     try:
         payload = decode_token(body.refresh_token)
-        admin_id = uuid.UUID(payload["sub"])
+        if payload.get("type") != "admin_refresh":
+            raise jwt.InvalidTokenError("not admin refresh token")
+        admin_uuid = uuid.UUID(payload["sub"])
+        jti = uuid.UUID(payload["jti"])
     except (jwt.PyJWTError, ValueError, KeyError):
         raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
-    if payload.get("type") != "admin_refresh":
+
+    rt = (
+        await db.execute(select(AdminRefreshToken).where(AdminRefreshToken.jti == jti))
+    ).scalar_one_or_none()
+    agora = datetime.now(timezone.utc)
+
+    # jti desconhecido (forjado) ou de outro admin → recusa.
+    if rt is None or rt.admin_id != admin_uuid:
         raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
-    admin = await db.get(Admin, admin_id)
-    if admin is None or not admin.ativo or payload.get("tv") != admin.token_version:
+    # Reuso de token já rotacionado = roubo → revoga a família inteira.
+    if rt.revogado:
+        await _revogar_familia_admin(db, admin_uuid, agora)
         raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
-    return AdminTokenResponse(
-        access_token=create_admin_token(str(admin.id), admin.token_version),
-        refresh_token=create_admin_refresh_token(str(admin.id), admin.token_version),
-        expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
+    if _aware(rt.expira_em) < agora:
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+
+    admin = await db.get(Admin, admin_uuid)
+    if admin is None or not admin.ativo:
+        await db.execute(
+            update(AdminRefreshToken)
+            .where(AdminRefreshToken.jti == jti, AdminRefreshToken.revogado.is_(False))
+            .values(revogado=True, revogado_em=agora)
+        )
+        await db.commit()
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+
+    # Rotação atômica (compare-and-swap): revoga o atual SÓ se ainda vivo;
+    # rowcount=0 ⇒ corrida/reuso → wipe da família.
+    res = await db.execute(
+        update(AdminRefreshToken)
+        .where(AdminRefreshToken.jti == jti, AdminRefreshToken.revogado.is_(False))
+        .values(revogado=True, revogado_em=agora)
     )
+    if res.rowcount == 0:
+        await _revogar_familia_admin(db, admin_uuid, agora)
+        raise _err(401, "TOKEN_INVALIDO", "Sessão expirada. Faça login novamente.")
+    return await _emitir_admin_tokens(str(admin_uuid), admin.token_version, db)
 
 
 @router.get("/auth/me", response_model=AdminMe)
@@ -210,8 +281,11 @@ async def admin_me(admin: Admin = Depends(get_current_admin)):
 async def admin_logout(
     admin: Admin = Depends(get_current_admin), db: AsyncSession = Depends(get_db)
 ):
-    """Logout do painel: incrementa token_version e invalida os access tokens vivos
-    deste admin (o admin não usa refresh; esta é a forma de revogar a sessão)."""
+    """Logout do painel = sair de todos os aparelhos: apaga a família de refresh do
+    admin e incrementa token_version (mata os access vivos na hora). Espelha o aluno."""
+    await db.execute(
+        delete(AdminRefreshToken).where(AdminRefreshToken.admin_id == admin.id)
+    )
     admin.token_version += 1
     await db.commit()
     return Response(status_code=204)
@@ -287,7 +361,38 @@ async def listar_cursos(db: AsyncSession = Depends(get_db)):
     rows = (
         await db.execute(select(Curso).order_by(Curso.ordem, Curso.titulo))
     ).scalars().all()
-    return [_curso_admin(c, *(await _curso_counts(db, c.id))) for c in rows]
+    # Contagens AGREGADAS em 2 queries (evita N+1: era 3 queries por curso).
+    mod_counts = dict(
+        (
+            await db.execute(
+                select(Modulo.curso_id, func.count(Modulo.id)).group_by(
+                    Modulo.curso_id
+                )
+            )
+        ).all()
+    )
+    aula_rows = (
+        await db.execute(
+            select(
+                Modulo.curso_id,
+                func.count(Aula.id),
+                func.coalesce(func.sum(Aula.duracao_segundos), 0),
+            )
+            .join(Aula, Aula.modulo_id == Modulo.id)
+            .group_by(Modulo.curso_id)
+        )
+    ).all()
+    aula_counts = {r[0]: r[1] for r in aula_rows}
+    dur_sums = {r[0]: r[2] for r in aula_rows}
+    return [
+        _curso_admin(
+            c,
+            mod_counts.get(c.id, 0),
+            aula_counts.get(c.id, 0),
+            dur_sums.get(c.id, 0),
+        )
+        for c in rows
+    ]
 
 
 @cursos.post("", response_model=CursoAdmin, status_code=201)

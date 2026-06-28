@@ -196,6 +196,26 @@ class RefreshToken(Base):
     criado_em: Mapped[datetime] = _created_at()
 
 
+class AdminRefreshToken(Base):
+    """Refresh tokens do painel admin — STATEFUL, espelha RefreshToken do aluno.
+
+    Mesma regra segura: rotação no refresh e detecção de reuso. Apresentar um
+    token já revogado indica reuso/roubo → revoga toda a família do admin e
+    incrementa `Admin.token_version` (mata também os access vivos).
+    """
+    __tablename__ = "admin_refresh_tokens"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    admin_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("admins.id", ondelete="CASCADE"), index=True
+    )
+    jti: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, index=True)
+    expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revogado: Mapped[bool] = mapped_column(Boolean, default=False)
+    revogado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = _created_at()
+
+
 class PasswordReset(Base):
     """Token de redefinição de senha do aluno (single-use, gerado pelo admin).
 

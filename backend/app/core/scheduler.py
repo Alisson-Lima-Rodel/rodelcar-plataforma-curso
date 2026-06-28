@@ -15,6 +15,7 @@ from app.models import (
     Lead,
     Matricula,
     Notificacao,
+    AdminRefreshToken,
     RefreshToken,
     StatusLead,
     StatusMatricula,
@@ -220,8 +221,20 @@ async def limpar_refresh_tokens(db) -> int:
             )
         )
     )
+    # Mesma limpeza para os refresh STATEFUL do admin (espelha o aluno).
+    result_admin = await db.execute(
+        delete(AdminRefreshToken).where(
+            or_(
+                AdminRefreshToken.expira_em < now,
+                and_(
+                    AdminRefreshToken.revogado.is_(True),
+                    AdminRefreshToken.revogado_em < corte_revogados,
+                ),
+            )
+        )
+    )
     await db.commit()
-    return result.rowcount or 0
+    return (result.rowcount or 0) + (result_admin.rowcount or 0)
 
 
 # ── Expurgo de leads finalizados (LGPD) ───────────────────────────────────────

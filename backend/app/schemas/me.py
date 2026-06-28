@@ -129,5 +129,9 @@ class PlayerCursoResponse(BaseModel):
     status: StatusMatricula
     progresso_percentual: float
     concluido: bool
+    # Motivo de bloqueio do certificado quando o gate ainda impede mas não é só
+    # "falta assistir/quiz" (ex.: aula sem duração cadastrada — oversight do admin).
+    # Texto p/ a UI; None = sem bloqueio especial.
+    cert_bloqueio: str | None = None
     certificado: CertificadoResumo | None = None
     modulos: list[PlayerModulo]

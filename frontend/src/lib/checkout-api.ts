@@ -89,25 +89,46 @@ export function limparCompraPendente() {
 }
 
 /** Executa a intenção: curso grátis matricula e vai pro player; pago cria a
- *  sessão na Stripe e redireciona. Reusa o mesmo fluxo de resume pós-login. */
+ *  sessão na Stripe e redireciona. Reusa o mesmo fluxo de resume pós-login.
+ *
+ *  Se o aluno JÁ tem acesso ao curso (JA_MATRICULADO), não há o que comprar:
+ *  limpa a intenção (não deixa "presa" vazando para o login) e leva direto ao
+ *  curso que já é dele — é o "você já tem acesso" na prática. */
 export async function executarCompra(intent: CompraIntent): Promise<void> {
-  if (intent.tipo === "gratis") {
-    await matricularGratis(intent.slug);
+  const irParaCurso = (slug: string) => {
     limparCompraPendente();
-    window.location.assign(`/curso?slug=${encodeURIComponent(intent.slug)}`);
-    return;
+    window.location.assign(`/curso?slug=${encodeURIComponent(slug)}`);
+  };
+  try {
+    if (intent.tipo === "gratis") {
+      await matricularGratis(intent.slug);
+      irParaCurso(intent.slug);
+      return;
+    }
+    const sessao =
+      intent.tipo === "curso"
+        ? await comprarCurso(intent.slug)
+        : await assinarPlano(intent.planoId);
+    limparCompraPendente();
+    window.location.assign(sessao.checkout_url);
+  } catch (e) {
+    if (
+      e instanceof ApiError &&
+      e.code === "JA_MATRICULADO" &&
+      intent.tipo !== "plano"
+    ) {
+      irParaCurso(intent.slug);
+      return;
+    }
+    throw e;
   }
-  const sessao =
-    intent.tipo === "curso"
-      ? await comprarCurso(intent.slug)
-      : await assinarPlano(intent.planoId);
-  limparCompraPendente();
-  window.location.assign(sessao.checkout_url);
 }
 
 /** Mensagem amigável para erros de checkout (envelope padrão do contrato). */
 export function mensagemErroCompra(e: unknown): string {
   if (e instanceof ApiError) {
+    if (e.code === "JA_MATRICULADO")
+      return "Você já tem acesso a este curso — ele está na sua área, em 'Meus cursos'.";
     if (e.code === "PRECO_NAO_CONFIGURADO" || e.code === "PLANO_NAO_ENCONTRADO")
       return "Este item está temporariamente indisponível para compra online.";
     if (e.code === "PIX_INDISPONIVEL")

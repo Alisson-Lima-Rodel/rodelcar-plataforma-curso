@@ -83,15 +83,19 @@ export function Login() {
   // Compra iniciada no portal sem login: avisa e retoma após entrar/cadastrar.
   // Link de indicação (?ref=): já abre no cadastro e guarda o código.
   useEffect(() => {
-    if (lerCompraPendente()) {
+    const params = new URLSearchParams(window.location.search);
+    // Só entra no modo "compra" quando a tela foi aberta PELO fluxo de compra
+    // (?compra=1). Sem isso, uma intenção antiga presa no sessionStorage
+    // sequestrava um login normal (ficava preso em "concluir compra" sem relação
+    // com a compra).
+    if (params.get("compra") === "1" && lerCompraPendente()) {
       setTemCompra(true);
       setNotice("Entre ou crie sua conta para concluir a compra.");
     }
-    const params = new URLSearchParams(window.location.search);
     if (params.get("sessao") === "expirada") {
       setNotice("Sua sessão expirou. Entre novamente para continuar.");
     }
-    const r = new URLSearchParams(window.location.search).get("ref");
+    const r = params.get("ref");
     if (r) {
       setRef(r);
       setMode("signup");
@@ -112,7 +116,10 @@ export function Login() {
   /** Pós-login do aluno: retoma a compra pendente (redireciona p/ a Stripe) ou
    * segue para o painel. */
   const concluirEntrada = async () => {
-    const intent = lerCompraPendente();
+    // Só retoma a compra se a tela está no fluxo de compra (temCompra, ligado por
+    // ?compra=1). Sem isso, um login NORMAL com intenção velha no sessionStorage
+    // empurraria o aluno para a Stripe sem ele ter pedido.
+    const intent = temCompra ? lerCompraPendente() : null;
     if (intent) {
       try {
         await executarCompra(intent); // window.location → Stripe (sucesso sai daqui)

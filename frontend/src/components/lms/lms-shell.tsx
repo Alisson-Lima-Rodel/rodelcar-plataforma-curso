@@ -45,7 +45,11 @@ export function LmsShell({ children }: { children: ReactNode }) {
 
   if (status !== "authed" || !aluno) {
     return (
+      // suppressHydrationWarning: tela de "carregando" determinística; se uma
+      // extensão do navegador injetar um nó aqui antes da hidratação, não dispara
+      // o falso "hydration failed" (só de dev).
       <div
+        suppressHydrationWarning
         style={{
           minHeight: "100vh",
           display: "grid",

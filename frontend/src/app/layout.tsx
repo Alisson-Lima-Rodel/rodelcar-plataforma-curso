@@ -73,7 +73,10 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${archivo.variable} ${hanken.variable} ${jetbrains.variable}`}
     >
-      <body>
+      {/* suppressHydrationWarning: extensões do navegador (Grammarly, tradutor,
+          gerenciadores de senha) injetam nós/atributos no body antes da hidratação
+          e disparam "hydration failed" só em dev — isto evita o falso positivo. */}
+      <body suppressHydrationWarning>
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
         </QueryProvider>

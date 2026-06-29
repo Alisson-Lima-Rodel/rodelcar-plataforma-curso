@@ -42,7 +42,7 @@ export function Header() {
           aria-label="RödelCar — início"
           style={{ display: "flex", alignItems: "center" }}
         >
-          <Logo size="md" tagline={false} />
+          <Logo size="md" tagline={true} />
         </Link>
         <nav
           className="portal-nav flex center gap-6"

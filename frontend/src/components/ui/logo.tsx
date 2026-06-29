@@ -24,17 +24,28 @@ export function Logo({ size = "md", tagline = true }: LogoProps) {
         style={{
           position: "relative",
           display: "inline-block",
-          fontFamily: "var(--font-display)",
+          fontFamily: "var(--font-logo)",
           fontWeight: 900,
           fontStyle: "italic",
           fontSize: W,
-          letterSpacing: "-0.045em",
+          letterSpacing: "-0.085em",
+          textTransform: "uppercase",
           whiteSpace: "nowrap",
           textShadow: "0 1px 0 rgba(0,0,0,0.45)",
         }}
       >
-        <span style={{ color: "var(--text)" }}>Rodel</span>
-        <span style={{ color: "var(--primary)" }}>Car</span>
+        {/* Caixa alta com iniciais R/C maiores (hierarquia do logo da oficina).
+            margin negativo "aninha" as letras menores sob as grandes. O texto no
+            DOM segue "RodelCar" (case misto) p/ leitura/seleção; o caixa-alta é
+            só visual via textTransform. */}
+        <span style={{ color: "var(--text)" }}>
+          <span style={{ fontSize: "1.42em", marginRight: "-0.04em" }}>R</span>
+          odel
+        </span>
+        <span style={{ color: "var(--primary)" }}>
+          <span style={{ fontSize: "1.42em", marginRight: "-0.04em" }}>C</span>
+          ar
+        </span>
         <span
           style={{
             position: "absolute",

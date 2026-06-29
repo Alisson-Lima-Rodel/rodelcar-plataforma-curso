@@ -1,5 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import {
+  Archivo,
+  Hanken_Grotesk,
+  JetBrains_Mono,
+  Saira,
+} from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
@@ -9,6 +14,16 @@ const archivo = Archivo({
   subsets: ["latin"],
   weight: ["500", "600", "700", "800", "900"],
   variable: "--font-display",
+  display: "swap",
+});
+
+// Fonte EXCLUSIVA do wordmark RödelCar (logo). Itálica pesada, ar automotivo —
+// escopo restrito a --font-logo p/ não tocar nos títulos do site (--font-display).
+const saira = Saira({
+  subsets: ["latin"],
+  weight: ["900"],
+  style: ["italic"],
+  variable: "--font-logo",
   display: "swap",
 });
 
@@ -71,7 +86,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${archivo.variable} ${hanken.variable} ${jetbrains.variable}`}
+      className={`${archivo.variable} ${saira.variable} ${hanken.variable} ${jetbrains.variable}`}
     >
       {/* suppressHydrationWarning: extensões do navegador (Grammarly, tradutor,
           gerenciadores de senha) injetam nós/atributos no body antes da hidratação
